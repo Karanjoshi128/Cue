@@ -1,0 +1,168 @@
+// Cue — Prisma schema
+// Multi-client social media scheduler (LinkedIn + Instagram MVP)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Team / auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      Role     @default(MANAGER)
+  createdAt DateTime @default(now())
+
+  posts    Post[]
+  comments Comment[]
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+}
+
+// ---------------------------------------------------------------------------
+// Clients (workspaces) + connected social accounts
+// ---------------------------------------------------------------------------
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  logoUrl   String?
+  color     String?  @default("#2A6FF2")
+  createdAt DateTime @default(now())
+
+  accounts SocialAccount[]
+  posts    Post[]
+}
+
+model SocialAccount {
+  id           String   @id @default(cuid())
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId     String
+  platform     Platform
+  displayName  String
+  externalId   String // LinkedIn org URN / IG business account id
+  accessToken  String // encrypted at rest
+  refreshToken String? // encrypted at rest
+  tokenExpires DateTime?
+  scopes       String?
+  createdAt    DateTime @default(now())
+
+  targets PostTarget[]
+
+  @@unique([clientId, platform, externalId])
+}
+
+enum Platform {
+  LINKEDIN
+  INSTAGRAM
+}
+
+// ---------------------------------------------------------------------------
+// Posts + per-account publish targets + media
+// ---------------------------------------------------------------------------
+
+model Post {
+  id          String     @id @default(cuid())
+  client      Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId    String
+  author      User       @relation(fields: [authorId], references: [id])
+  authorId    String
+  body        String
+  scheduledAt DateTime?
+  status      PostStatus @default(DRAFT)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  media    MediaAsset[]
+  targets  PostTarget[]
+  comments Comment[]
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  PARTIAL
+  FAILED
+}
+
+model PostTarget {
+  id             String        @id @default(cuid())
+  post           Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId         String
+  account        SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId      String
+  platform       Platform
+  status         TargetStatus  @default(SCHEDULED)
+  bodyOverride   String?
+  publishedAt    DateTime?
+  externalPostId String?
+  permalink      String?
+  error          String?
+  attempts       Int           @default(0)
+}
+
+enum TargetStatus {
+  SCHEDULED
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+model MediaAsset {
+  id         String    @id @default(cuid())
+  post       Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId     String
+  type       MediaType
+  url        String // public Cloudflare R2 URL
+  storageKey String // R2 object key (deleted on cleanup)
+  createdAt  DateTime  @default(now())
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId    String
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Permanent lightweight history — survives the 7-day purge (no FK to Post)
+// ---------------------------------------------------------------------------
+
+model PostHistory {
+  id             String   @id @default(cuid())
+  clientId       String
+  clientName     String
+  platform       Platform
+  externalPostId String
+  permalink      String?
+  publishedAt    DateTime
+  // compact metrics only (optional, for future analytics)
+  likes          Int?
+  comments       Int?
+  reach          Int?
+  clicks         Int?
+  lastSyncedAt   DateTime?
+}

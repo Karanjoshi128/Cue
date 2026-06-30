@@ -1,0 +1,19 @@
+name: keepalive-and-refresh
+
+# Every 5 days: keeps Supabase warm (beats the 7-day inactivity pause)
+# and refreshes social tokens nearing expiry.
+on:
+  schedule:
+    - cron: "0 6 */5 * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep Supabase warm + refresh tokens
+        run: |
+          curl -fsS -X POST "$URL" -H "Authorization: Bearer $SECRET"
+        env:
+          URL: ${{ secrets.KEEPALIVE_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}

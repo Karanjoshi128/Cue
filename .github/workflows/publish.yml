@@ -1,0 +1,21 @@
+name: publish-due-posts
+
+# Fires the publishing engine every 5 minutes.
+# GitHub cron is best-effort (may drift a few minutes) — fine for social posts.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  fire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger publish endpoint
+        run: |
+          curl -fsS -X POST "$URL" \
+            -H "Authorization: Bearer $SECRET" \
+            -H "Content-Type: application/json"
+        env:
+          URL: ${{ secrets.PUBLISH_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}

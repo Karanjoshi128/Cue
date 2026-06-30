@@ -1,0 +1,19 @@
+name: cleanup-old-data
+
+# Daily 7-day retention purge: deletes posts + their R2 media older than 7 days.
+# Never touches PostHistory (permanent lightweight records).
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete data older than 7 days
+        run: |
+          curl -fsS -X POST "$URL" -H "Authorization: Bearer $SECRET"
+        env:
+          URL: ${{ secrets.CLEANUP_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}

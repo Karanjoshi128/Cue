@@ -42,10 +42,11 @@ export const instagramAdapter: PlatformAdapter = {
     }
     const { id: creationId } = (await containerRes.json()) as { id: string };
 
-    // 2. Publish container (poll briefly for video processing)
-    if (media.type === "VIDEO") {
-      await waitForContainer(creationId, accessToken);
-    }
+    // 2. Wait for the container to be FINISHED before publishing. Required for
+    //    video, but images can also race ahead (IG fetches the remote image
+    //    asynchronously) and return code 9007 "media is not ready" — so poll
+    //    for both. waitForContainer returns as soon as status is FINISHED.
+    await waitForContainer(creationId, accessToken);
 
     const publishParams = new URLSearchParams({
       creation_id: creationId,

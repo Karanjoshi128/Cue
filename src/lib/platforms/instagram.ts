@@ -1,6 +1,10 @@
 import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+// Instagram API with Instagram Login issues tokens scoped to graph.instagram.com,
+// NOT graph.facebook.com. Using the Facebook host yields a code-190
+// "Cannot parse access token" error. The IG user id and content-publishing
+// endpoints (/media, /media_publish) live under this host.
+const GRAPH = "https://graph.instagram.com/v21.0";
 
 /**
  * Publishes to Instagram via the Graph API content-publishing flow.

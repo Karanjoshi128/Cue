@@ -79,8 +79,9 @@ async function refreshToken(
   }
 
   // Instagram: long-lived token refresh (extends another ~60 days).
+  // Instagram Login tokens refresh on graph.instagram.com, not graph.facebook.com.
   const res = await fetch(
-    `https://graph.facebook.com/v21.0/refresh_access_token?grant_type=ig_refresh_token&access_token=${refreshToken}`,
+    `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${refreshToken}`,
   );
   if (!res.ok) return null;
   const data = (await res.json()) as {

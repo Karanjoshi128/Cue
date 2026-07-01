@@ -1,13 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Menu, Plus } from "lucide-react";
 import { navItems } from "@/components/nav-items";
-import { LogoMark } from "@/components/brand/logo";
+import { Logo } from "@/components/brand/logo";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,15 +34,78 @@ function titleFor(pathname: string): string {
   return match?.label ?? "Cue";
 }
 
+/** Slide-out navigation for < md screens (the sidebar is hidden there). */
+function MobileNav({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            aria-label="Open menu"
+          />
+        }
+      >
+        <Menu className="size-5" />
+      </SheetTrigger>
+      <SheetContent side="left" className="w-64 p-0" showCloseButton={false}>
+        <div className="flex h-16 items-center px-5">
+          <Link href="/" onClick={() => setOpen(false)}>
+            <Logo />
+          </Link>
+        </div>
+
+        <div className="px-3">
+          <Button
+            render={<Link href="/composer" />}
+            className="w-full justify-start gap-2"
+            onClick={() => setOpen(false)}
+          >
+            <Plus className="size-4" />
+            New post
+          </Button>
+        </div>
+
+        <nav className="mt-4 flex flex-col gap-1 px-3">
+          {navItems.map((item) => {
+            const active =
+              item.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                )}
+              >
+                <item.icon className="size-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function AppTopbar({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
 
   return (
     <header className="bg-background/80 border-border sticky top-0 z-10 flex h-16 items-center justify-between border-b px-5 backdrop-blur">
       <div className="flex items-center gap-2">
-        <span className="md:hidden">
-          <LogoMark size={24} />
-        </span>
+        <MobileNav pathname={pathname} />
         <h1 className="text-lg font-semibold">{titleFor(pathname)}</h1>
       </div>
 

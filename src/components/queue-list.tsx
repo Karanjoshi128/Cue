@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
@@ -14,7 +15,7 @@ import {
   StatusBadge,
 } from "@/components/post-bits";
 import { cn } from "@/lib/utils";
-import { ExternalLink, RotateCw, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, RotateCw, Trash2 } from "lucide-react";
 
 interface TargetLite {
   id: string;
@@ -143,6 +144,18 @@ export function QueueList({ posts }: { posts: PostLite[] }) {
                         </span>
                       ))}
                       <div className="ml-auto flex gap-1">
+                        {(post.status === "DRAFT" ||
+                          post.status === "SCHEDULED") && (
+                          <Button
+                            render={
+                              <Link href={`/composer?edit=${post.id}`} />
+                            }
+                            size="sm"
+                            variant="ghost"
+                          >
+                            <Pencil className="size-4" /> Edit
+                          </Button>
+                        )}
                         {(post.status === "FAILED" ||
                           post.status === "PARTIAL") && (
                           <Button
@@ -159,6 +172,7 @@ export function QueueList({ posts }: { posts: PostLite[] }) {
                           variant="ghost"
                           disabled={pending}
                           onClick={() => onDelete(post.id)}
+                          aria-label="Delete post"
                         >
                           <Trash2 className="size-4" />
                         </Button>

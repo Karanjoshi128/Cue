@@ -4,10 +4,11 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import type { Platform } from "@prisma/client";
-import { savePost } from "@/lib/actions";
+import { savePost, updatePost } from "@/lib/actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,24 +38,66 @@ interface ClientLite {
 }
 type MediaItem = { type: "IMAGE" | "VIDEO"; url: string; storageKey: string };
 
-const LIMIT = 3000;
+export interface ComposerInitial {
+  id: string;
+  clientId: string;
+  body: string;
+  accountIds: string[];
+  scheduledAt: string; // datetime-local string, or ""
+  media: MediaItem[];
+}
 
-export function Composer({ clients }: { clients: ClientLite[] }) {
+// Per-platform caption limits — the effective cap is the smallest of the
+// platforms the post targets.
+const PLATFORM_LIMITS: Record<Platform, number> = {
+  LINKEDIN: 3000,
+  INSTAGRAM: 2200,
+};
+const HARD_LIMIT = 3000;
+
+export function Composer({
+  clients,
+  initial,
+}: {
+  clients: ClientLite[];
+  initial?: ComposerInitial;
+}) {
   const router = useRouter();
+  const editing = Boolean(initial);
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [body, setBody] = useState("");
-  const [scheduledAt, setScheduledAt] = useState("");
-  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [clientId, setClientId] = useState(
+    initial?.clientId ?? clients[0]?.id ?? "",
+  );
+  const [selected, setSelected] = useState<string[]>(initial?.accountIds ?? []);
+  const [body, setBody] = useState(initial?.body ?? "");
+  const [scheduledAt, setScheduledAt] = useState(initial?.scheduledAt ?? "");
+  const [media, setMedia] = useState<MediaItem[]>(initial?.media ?? []);
   const [uploading, setUploading] = useState(false);
 
   const client = useMemo(
     () => clients.find((c) => c.id === clientId),
     [clients, clientId],
   );
+
+  const selectedPlatforms = useMemo(() => {
+    const set = new Set<Platform>();
+    client?.accounts.forEach((a) => {
+      if (selected.includes(a.id)) set.add(a.platform);
+    });
+    return set;
+  }, [client, selected]);
+
+  const igSelected = selectedPlatforms.has("INSTAGRAM");
+  const limit = useMemo(() => {
+    const limits = [...selectedPlatforms].map((p) => PLATFORM_LIMITS[p]);
+    return limits.length ? Math.min(...limits) : HARD_LIMIT;
+  }, [selectedPlatforms]);
+  const overLimit = body.length > limit;
+
+  // Prevent scheduling in the past.
+  const minDateTime = format(new Date(), "yyyy-MM-dd'T'HH:mm");
 
   function toggleAccount(id: string) {
     setSelected((s) =>
@@ -82,28 +125,44 @@ export function Composer({ clients }: { clients: ClientLite[] }) {
     if (!clientId) return toast.error("Pick a client");
     if (selected.length === 0) return toast.error("Select at least one account");
     if (!body.trim()) return toast.error("Write something first");
+    if (overLimit) {
+      const p = igSelected ? "Instagram" : "LinkedIn";
+      return toast.error(`Caption is over the ${p} limit of ${limit} characters`);
+    }
+    // Instagram requires media to publish — block before it fails at publish time.
+    if (igSelected && media.length === 0 && action !== "draft") {
+      return toast.error("Instagram posts need at least one image or video");
+    }
     if (action === "schedule" && !scheduledAt)
       return toast.error("Pick a date and time");
 
+    const payload = {
+      clientId,
+      body,
+      accountIds: selected,
+      action,
+      scheduledAt:
+        action === "schedule" ? new Date(scheduledAt).toISOString() : null,
+      media,
+    };
+
     startTransition(async () => {
       try {
-        await savePost({
-          clientId,
-          body,
-          accountIds: selected,
-          action,
-          scheduledAt:
-            action === "schedule"
-              ? new Date(scheduledAt).toISOString()
-              : null,
-          media,
-        });
+        if (editing && initial) {
+          await updatePost(initial.id, payload);
+        } else {
+          await savePost(payload);
+        }
         toast.success(
           action === "now"
             ? "Publishing…"
             : action === "schedule"
-              ? "Scheduled!"
-              : "Saved as draft",
+              ? editing
+                ? "Rescheduled!"
+                : "Scheduled!"
+              : editing
+                ? "Draft updated"
+                : "Saved as draft",
         );
         router.push(action === "draft" ? "/queue" : "/calendar");
       } catch (e) {
@@ -119,7 +178,7 @@ export function Composer({ clients }: { clients: ClientLite[] }) {
       {/* Editor */}
       <Card>
         <CardHeader>
-          <CardTitle>Create a post</CardTitle>
+          <CardTitle>{editing ? "Edit post" : "Create a post"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
@@ -183,12 +242,26 @@ export function Composer({ clients }: { clients: ClientLite[] }) {
             <Label>Content</Label>
             <Textarea
               value={body}
-              onChange={(e) => setBody(e.target.value.slice(0, LIMIT))}
+              onChange={(e) => setBody(e.target.value.slice(0, HARD_LIMIT))}
               placeholder="What do you want to share?"
               className="min-h-40 resize-none"
             />
-            <div className="text-muted-foreground text-right text-xs">
-              {body.length}/{LIMIT}
+            <div className="flex items-center justify-between text-xs">
+              {igSelected && media.length === 0 ? (
+                <span className="text-amber-600 dark:text-amber-400">
+                  Instagram needs an image or video
+                </span>
+              ) : (
+                <span />
+              )}
+              <span
+                className={cn(
+                  "text-muted-foreground",
+                  overLimit && "text-destructive font-medium",
+                )}
+              >
+                {body.length}/{limit}
+              </span>
             </div>
           </div>
 
@@ -213,6 +286,7 @@ export function Composer({ clients }: { clients: ClientLite[] }) {
                     type="button"
                     onClick={() => setMedia((arr) => arr.filter((_, j) => j !== i))}
                     className="bg-background absolute -right-2 -top-2 rounded-full border p-0.5 shadow"
+                    aria-label="Remove media"
                   >
                     <X className="size-3" />
                   </button>
@@ -253,6 +327,7 @@ export function Composer({ clients }: { clients: ClientLite[] }) {
             <Label>Schedule for</Label>
             <Input
               type="datetime-local"
+              min={minDateTime}
               value={scheduledAt}
               onChange={(e) => setScheduledAt(e.target.value)}
             />
@@ -260,7 +335,8 @@ export function Composer({ clients }: { clients: ClientLite[] }) {
 
           <div className="flex flex-wrap gap-2 pt-2">
             <Button onClick={() => submit("schedule")} disabled={busy}>
-              <CalendarClock className="size-4" /> Schedule
+              <CalendarClock className="size-4" />{" "}
+              {editing ? "Reschedule" : "Schedule"}
             </Button>
             <Button
               variant="secondary"

@@ -1,9 +1,15 @@
-import { getClients } from "@/lib/data";
-import { Composer } from "@/components/composer";
+import { format } from "date-fns";
+import { getClients, getPost } from "@/lib/data";
+import { Composer, type ComposerInitial } from "@/components/composer";
 
 export const dynamic = "force-dynamic";
 
-export default async function ComposerPage() {
+export default async function ComposerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
+  const { edit } = await searchParams;
   const clients = await getClients();
   const plain = clients.map((c) => ({
     id: c.id,
@@ -15,5 +21,28 @@ export default async function ComposerPage() {
       displayName: a.displayName,
     })),
   }));
-  return <Composer clients={plain} />;
+
+  let initial: ComposerInitial | undefined;
+  if (edit) {
+    const post = await getPost(edit);
+    // Only drafts/scheduled posts are editable; ignore anything else.
+    if (post && (post.status === "DRAFT" || post.status === "SCHEDULED")) {
+      initial = {
+        id: post.id,
+        clientId: post.clientId,
+        body: post.body,
+        accountIds: post.targets.map((t) => t.accountId),
+        scheduledAt: post.scheduledAt
+          ? format(post.scheduledAt, "yyyy-MM-dd'T'HH:mm")
+          : "",
+        media: post.media.map((m) => ({
+          type: m.type,
+          url: m.url,
+          storageKey: m.storageKey,
+        })),
+      };
+    }
+  }
+
+  return <Composer clients={plain} initial={initial} />;
 }

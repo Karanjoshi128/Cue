@@ -11,7 +11,6 @@ import {
   isSameDay,
 } from "date-fns";
 import { getCalendarPosts } from "@/lib/data";
-import { ClientDot } from "@/components/post-bits";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
@@ -90,16 +89,21 @@ export default async function CalendarPage({
                 {format(day, "d")}
               </div>
               <div className="space-y-1">
-                {dayPosts.slice(0, 3).map((p) => (
-                  <div
-                    key={p.id}
-                    className="bg-accent flex items-center gap-1 rounded px-1.5 py-1 text-xs"
-                    title={p.body}
-                  >
-                    <ClientDot color={p.client.color} />
-                    <span className="truncate">{p.body}</span>
-                  </div>
-                ))}
+                {dayPosts.slice(0, 3).map((p) => {
+                  const editable =
+                    p.status === "DRAFT" || p.status === "SCHEDULED";
+                  return (
+                    <Link
+                      key={p.id}
+                      href={editable ? `/composer?edit=${p.id}` : "/queue"}
+                      className="bg-accent hover:bg-accent/70 flex items-center gap-1 rounded border-l-2 px-1.5 py-1 text-xs transition-colors"
+                      style={{ borderLeftColor: p.client.color ?? "#2A6FF2" }}
+                      title={p.body}
+                    >
+                      <span className="truncate">{p.body}</span>
+                    </Link>
+                  );
+                })}
                 {dayPosts.length > 3 && (
                   <div className="text-muted-foreground px-1 text-[10px]">
                     +{dayPosts.length - 3} more

@@ -10,6 +10,13 @@ import { deletePost, retryPost } from "@/lib/actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   ClientDot,
   PlatformIcon,
   StatusBadge,
@@ -34,11 +41,27 @@ interface PostLite {
   targets: TargetLite[];
 }
 
-const FILTERS = ["ALL", "DRAFT", "SCHEDULED", "PUBLISHED", "FAILED"] as const;
+const FILTERS = [
+  "ALL",
+  "DRAFT",
+  "SCHEDULED",
+  "PUBLISHING",
+  "PUBLISHED",
+  "PARTIAL",
+  "FAILED",
+] as const;
+type Filter = (typeof FILTERS)[number];
 
-export function QueueList({ posts }: { posts: PostLite[] }) {
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("ALL");
+export function QueueList({
+  posts,
+  initialFilter = "ALL",
+}: {
+  posts: PostLite[];
+  initialFilter?: Filter;
+}) {
+  const [filter, setFilter] = useState<Filter>(initialFilter);
   const [pending, startTransition] = useTransition();
+  const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const shown =
     filter === "ALL" ? posts : posts.filter((p) => p.status === filter);
@@ -53,11 +76,14 @@ export function QueueList({ posts }: { posts: PostLite[] }) {
       }
     });
   }
-  function onDelete(id: string) {
+  function onDelete() {
+    if (!confirmId) return;
+    const id = confirmId;
     startTransition(async () => {
       try {
         await deletePost(id);
         toast.success("Deleted");
+        setConfirmId(null);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Delete failed");
       }
@@ -171,7 +197,7 @@ export function QueueList({ posts }: { posts: PostLite[] }) {
                           size="sm"
                           variant="ghost"
                           disabled={pending}
-                          onClick={() => onDelete(post.id)}
+                          onClick={() => setConfirmId(post.id)}
                           aria-label="Delete post"
                         >
                           <Trash2 className="size-4" />
@@ -191,6 +217,29 @@ export function QueueList({ posts }: { posts: PostLite[] }) {
           </AnimatePresence>
         </ul>
       )}
+
+      <Dialog
+        open={Boolean(confirmId)}
+        onOpenChange={(o) => !o && setConfirmId(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this post?</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground text-sm">
+            This can&apos;t be undone. Already-published posts stay live on the
+            platform.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmId(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={onDelete} disabled={pending}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

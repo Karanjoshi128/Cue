@@ -3,7 +3,28 @@ import { QueueList } from "@/components/queue-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function QueuePage() {
+const FILTERS = [
+  "ALL",
+  "DRAFT",
+  "SCHEDULED",
+  "PUBLISHING",
+  "PUBLISHED",
+  "PARTIAL",
+  "FAILED",
+] as const;
+type Filter = (typeof FILTERS)[number];
+
+export default async function QueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const { status } = await searchParams;
+  const upper = status?.toUpperCase();
+  const initialFilter: Filter = FILTERS.includes(upper as Filter)
+    ? (upper as Filter)
+    : "ALL";
+
   const posts = await getPosts();
   const plain = posts.map((p) => ({
     id: p.id,
@@ -20,5 +41,5 @@ export default async function QueuePage() {
       permalink: t.permalink,
     })),
   }));
-  return <QueueList posts={plain} />;
+  return <QueueList posts={plain} initialFilter={initialFilter} />;
 }

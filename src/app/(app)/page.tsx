@@ -18,27 +18,46 @@ export default async function DashboardPage() {
     await getDashboardStats();
 
   const stats = [
-    { label: "Clients", value: clients, icon: Users },
-    { label: "Scheduled", value: scheduled, icon: CalendarClock },
-    { label: "Published", value: published, icon: Send },
-    { label: "Failed", value: failed, icon: AlertTriangle },
+    { label: "Clients", value: clients, icon: Users, href: "/clients" },
+    {
+      label: "Scheduled",
+      value: scheduled,
+      icon: CalendarClock,
+      href: "/queue?status=SCHEDULED",
+    },
+    {
+      label: "Published",
+      value: published,
+      icon: Send,
+      href: "/queue?status=PUBLISHED",
+    },
+    {
+      label: "Failed",
+      value: failed,
+      icon: AlertTriangle,
+      href: "/queue?status=FAILED",
+    },
   ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
-          <Card key={s.label}>
-            <CardContent className="flex items-center gap-4 py-5">
-              <div className="bg-accent text-muted-foreground rounded-lg p-2.5">
-                <s.icon className="size-5" />
-              </div>
-              <div>
-                <div className="text-2xl font-semibold">{s.value}</div>
-                <div className="text-muted-foreground text-sm">{s.label}</div>
-              </div>
-            </CardContent>
-          </Card>
+          <Link key={s.label} href={s.href} className="group">
+            <Card className="transition-colors group-hover:border-primary/40">
+              <CardContent className="flex items-center gap-4 py-5">
+                <div className="bg-accent text-muted-foreground rounded-lg p-2.5">
+                  <s.icon className="size-5" />
+                </div>
+                <div>
+                  <div className="text-2xl font-semibold">{s.value}</div>
+                  <div className="text-muted-foreground text-sm">
+                    {s.label}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 

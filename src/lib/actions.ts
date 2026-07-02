@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/auth";
+import { requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
 
 // ---------------------------------------------------------------------------
@@ -16,6 +16,72 @@ export async function updateProfile(input: z.infer<typeof profileSchema>) {
   const user = await requireUser();
   const data = profileSchema.parse(input);
   await prisma.user.update({ where: { id: user.id }, data });
+  revalidatePath("/settings");
+}
+
+// ---------------------------------------------------------------------------
+// Team (admin only)
+// ---------------------------------------------------------------------------
+
+const inviteSchema = z.object({
+  email: z.string().email().max(120),
+  role: z.enum(["ADMIN", "MANAGER"]),
+});
+
+export async function inviteMember(input: z.infer<typeof inviteSchema>) {
+  await requireAdmin();
+  const data = inviteSchema.parse(input);
+  const email = data.email.toLowerCase();
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) throw new Error("That email is already on the team.");
+
+  // Pre-create the member row so their role is set when they first sign in
+  // with this email (auth.ts returns the existing row on sign-in).
+  await prisma.user.create({
+    data: { email, name: email.split("@")[0], role: data.role },
+  });
+  revalidatePath("/settings");
+}
+
+export async function updateMemberRole(
+  id: string,
+  role: "ADMIN" | "MANAGER",
+) {
+  const me = await requireAdmin();
+  if (id === me.id && role !== "ADMIN") {
+    throw new Error("You can't remove your own admin access.");
+  }
+  if (role === "MANAGER") {
+    const admins = await prisma.user.count({ where: { role: "ADMIN" } });
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (target?.role === "ADMIN" && admins <= 1) {
+      throw new Error("Keep at least one admin on the team.");
+    }
+  }
+  await prisma.user.update({ where: { id }, data: { role } });
+  revalidatePath("/settings");
+}
+
+export async function removeMember(id: string) {
+  const me = await requireAdmin();
+  if (id === me.id) throw new Error("You can't remove yourself.");
+
+  const target = await prisma.user.findUnique({
+    where: { id },
+    include: { _count: { select: { posts: true } } },
+  });
+  if (!target) throw new Error("Member not found.");
+  if (target.role === "ADMIN") {
+    const admins = await prisma.user.count({ where: { role: "ADMIN" } });
+    if (admins <= 1) throw new Error("Keep at least one admin on the team.");
+  }
+  if (target._count.posts > 0) {
+    throw new Error(
+      "This member has authored posts — reassign or delete them first.",
+    );
+  }
+  await prisma.user.delete({ where: { id } });
   revalidatePath("/settings");
 }
 

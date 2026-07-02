@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
 import { getUsers } from "@/lib/data";
 import { ProfileForm } from "@/components/profile-form";
+import { TeamManager } from "@/components/team-manager";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -54,27 +55,17 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>Team</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="divide-border divide-y">
-            {users.map((u) => (
-              <div
-                key={u.id}
-                className="flex items-center justify-between py-2 text-sm"
-              >
-                <div>
-                  <div className="font-medium">{u.name ?? u.email}</div>
-                  <div className="text-muted-foreground text-xs">{u.email}</div>
-                </div>
-                <span className="text-muted-foreground capitalize">
-                  {u.role.toLowerCase()}
-                </span>
-              </div>
-            ))}
-          </div>
-          <p className="text-muted-foreground text-xs">
-            New teammates join by signing in with their email — the first user
-            is the admin, everyone after is a manager.
-          </p>
+        <CardContent>
+          <TeamManager
+            members={users.map((u) => ({
+              id: u.id,
+              name: u.name,
+              email: u.email,
+              role: u.role,
+            }))}
+            currentUserId={user?.id ?? ""}
+            isAdmin={user?.role === "ADMIN"}
+          />
         </CardContent>
       </Card>
 

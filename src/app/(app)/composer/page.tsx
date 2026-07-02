@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 export default async function ComposerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; date?: string }>;
 }) {
-  const { edit } = await searchParams;
+  const { edit, date } = await searchParams;
   const clients = await getClients();
   const plain = clients.map((c) => ({
     id: c.id,
@@ -44,5 +44,11 @@ export default async function ComposerPage({
     }
   }
 
-  return <Composer clients={plain} initial={initial} />;
+  // A date passed from the calendar prefills the schedule field (09:00 local).
+  const prefillDate =
+    date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T09:00` : undefined;
+
+  return (
+    <Composer clients={plain} initial={initial} prefillDate={prefillDate} />
+  );
 }

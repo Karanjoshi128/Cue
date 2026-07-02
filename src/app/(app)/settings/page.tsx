@@ -1,5 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
+import { getUsers } from "@/lib/data";
+import { ProfileForm } from "@/components/profile-form";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +24,7 @@ function Status({ ok, label }: { ok: boolean; label: string }) {
 }
 
 export default async function SettingsPage() {
-  const user = await getCurrentUser();
+  const [user, users] = await Promise.all([getCurrentUser(), getUsers()]);
 
   const integrations = [
     { label: "Supabase (database + auth)", ok: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL) },
@@ -39,19 +41,40 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>Account</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-1 text-sm">
-          <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Name</span>
-            <span>{user?.name ?? "—"}</span>
+        <CardContent>
+          <ProfileForm
+            name={user?.name ?? ""}
+            email={user?.email ?? "—"}
+            role={user?.role ?? "MANAGER"}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Team</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="divide-border divide-y">
+            {users.map((u) => (
+              <div
+                key={u.id}
+                className="flex items-center justify-between py-2 text-sm"
+              >
+                <div>
+                  <div className="font-medium">{u.name ?? u.email}</div>
+                  <div className="text-muted-foreground text-xs">{u.email}</div>
+                </div>
+                <span className="text-muted-foreground capitalize">
+                  {u.role.toLowerCase()}
+                </span>
+              </div>
+            ))}
           </div>
-          <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Email</span>
-            <span>{user?.email ?? "—"}</span>
-          </div>
-          <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Role</span>
-            <span className="capitalize">{user?.role.toLowerCase() ?? "—"}</span>
-          </div>
+          <p className="text-muted-foreground text-xs">
+            New teammates join by signing in with their email — the first user
+            is the admin, everyone after is a manager.
+          </p>
         </CardContent>
       </Card>
 

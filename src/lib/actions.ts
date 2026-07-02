@@ -7,6 +7,19 @@ import { requireUser } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
 
 // ---------------------------------------------------------------------------
+// Profile
+// ---------------------------------------------------------------------------
+
+const profileSchema = z.object({ name: z.string().min(1).max(80) });
+
+export async function updateProfile(input: z.infer<typeof profileSchema>) {
+  const user = await requireUser();
+  const data = profileSchema.parse(input);
+  await prisma.user.update({ where: { id: user.id }, data });
+  revalidatePath("/settings");
+}
+
+// ---------------------------------------------------------------------------
 // Clients
 // ---------------------------------------------------------------------------
 

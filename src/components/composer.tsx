@@ -21,7 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PlatformIcon, ClientDot } from "@/components/post-bits";
+import { PlatformIcon } from "@/components/post-bits";
+import { PostPreview } from "@/components/post-preview";
 import { cn } from "@/lib/utils";
 import { ImagePlus, Loader2, X, Send, CalendarClock, Save } from "lucide-react";
 
@@ -58,9 +59,11 @@ const HARD_LIMIT = 3000;
 export function Composer({
   clients,
   initial,
+  prefillDate,
 }: {
   clients: ClientLite[];
   initial?: ComposerInitial;
+  prefillDate?: string;
 }) {
   const router = useRouter();
   const editing = Boolean(initial);
@@ -72,7 +75,9 @@ export function Composer({
   );
   const [selected, setSelected] = useState<string[]>(initial?.accountIds ?? []);
   const [body, setBody] = useState(initial?.body ?? "");
-  const [scheduledAt, setScheduledAt] = useState(initial?.scheduledAt ?? "");
+  const [scheduledAt, setScheduledAt] = useState(
+    initial?.scheduledAt ?? prefillDate ?? "",
+  );
   const [media, setMedia] = useState<MediaItem[]>(initial?.media ?? []);
   const [uploading, setUploading] = useState(false);
 
@@ -359,41 +364,14 @@ export function Composer({
       {/* Preview */}
       <div className="space-y-3">
         <Label className="text-muted-foreground">Preview</Label>
-        <motion.div
-          layout
-          className="bg-card rounded-xl border p-4 shadow-sm"
-        >
-          <div className="mb-3 flex items-center gap-2">
-            <ClientDot color={client?.color} />
-            <span className="text-sm font-semibold">
-              {client?.name ?? "Client"}
-            </span>
-          </div>
-          {media[0]?.type === "IMAGE" && (
-            <Image
-              src={media[0].url}
-              alt=""
-              width={320}
-              height={200}
-              className="mb-3 max-h-56 w-full rounded-lg object-cover"
-            />
-          )}
-          <p className="text-sm whitespace-pre-wrap">
-            {body || (
-              <span className="text-muted-foreground">
-                Your post preview shows up here.
-              </span>
-            )}
-          </p>
-          {selected.length > 0 && client && (
-            <div className="text-muted-foreground mt-3 flex gap-1.5 border-t pt-3">
-              {client.accounts
-                .filter((a) => selected.includes(a.id))
-                .map((a) => (
-                  <PlatformIcon key={a.id} platform={a.platform} />
-                ))}
-            </div>
-          )}
+        <motion.div layout>
+          <PostPreview
+            platforms={[...selectedPlatforms]}
+            name={client?.name ?? "Client"}
+            color={client?.color}
+            body={body}
+            imageUrl={media[0]?.type === "IMAGE" ? media[0].url : undefined}
+          />
         </motion.div>
       </div>
     </div>

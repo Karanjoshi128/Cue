@@ -40,6 +40,7 @@ export default async function CalendarPage({
             render={<Link href={`/calendar?m=${offset - 1}`} />}
             variant="ghost"
             size="icon"
+            aria-label="Previous month"
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -50,6 +51,7 @@ export default async function CalendarPage({
             render={<Link href={`/calendar?m=${offset + 1}`} />}
             variant="ghost"
             size="icon"
+            aria-label="Next month"
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -75,18 +77,27 @@ export default async function CalendarPage({
           return (
             <div
               key={day.toISOString()}
-              className={`bg-background min-h-28 p-1.5 ${
+              className={`group bg-background relative min-h-28 p-1.5 ${
                 isSameMonth(day, base) ? "" : "opacity-40"
               }`}
             >
-              <div
-                className={`mb-1 text-right text-xs ${
-                  isSameDay(day, new Date())
-                    ? "text-primary font-bold"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {format(day, "d")}
+              <div className="mb-1 flex items-center justify-between">
+                <Link
+                  href={`/composer?date=${format(day, "yyyy-MM-dd")}`}
+                  aria-label={`Schedule a post on ${format(day, "MMMM d")}`}
+                  className="text-muted-foreground hover:text-primary opacity-0 transition group-hover:opacity-100"
+                >
+                  <Plus className="size-3.5" />
+                </Link>
+                <span
+                  className={`text-xs ${
+                    isSameDay(day, new Date())
+                      ? "text-primary font-bold"
+                      : "text-muted-foreground"
+                  }`}
+                >
+                  {format(day, "d")}
+                </span>
               </div>
               <div className="space-y-1">
                 {dayPosts.slice(0, 3).map((p) => {
@@ -100,6 +111,11 @@ export default async function CalendarPage({
                       style={{ borderLeftColor: p.client.color ?? "#2A6FF2" }}
                       title={p.body}
                     >
+                      {p.scheduledAt && (
+                        <span className="text-muted-foreground shrink-0 tabular-nums">
+                          {format(p.scheduledAt, "h:mm a")}
+                        </span>
+                      )}
                       <span className="truncate">{p.body}</span>
                     </Link>
                   );

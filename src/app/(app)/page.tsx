@@ -14,8 +14,21 @@ import { Users, CalendarClock, Send, AlertTriangle, Plus } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const { clients, scheduled, published, failed, upcoming } =
+  const { clients, scheduled, published, failed, expiring, upcoming } =
     await getDashboardStats();
+
+  const alerts = [
+    failed > 0 && {
+      href: "/queue?status=FAILED",
+      text: `${failed} post ${failed === 1 ? "target" : "targets"} failed to publish`,
+      cta: "Review",
+    },
+    expiring > 0 && {
+      href: "/clients",
+      text: `${expiring} connected ${expiring === 1 ? "account is" : "accounts are"} expiring soon`,
+      cta: "Reconnect",
+    },
+  ].filter(Boolean) as { href: string; text: string; cta: string }[];
 
   const stats = [
     { label: "Clients", value: clients, icon: Users, href: "/clients" },
@@ -41,6 +54,22 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
+      {alerts.length > 0 && (
+        <div className="space-y-2">
+          {alerts.map((a) => (
+            <Link
+              key={a.href}
+              href={a.href}
+              className="border-amber-300/60 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200 flex items-center gap-3 rounded-lg border px-4 py-2.5 text-sm transition-colors"
+            >
+              <AlertTriangle className="size-4 shrink-0" />
+              <span className="flex-1">{a.text}</span>
+              <span className="font-medium">{a.cta} →</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
           <Link key={s.label} href={s.href} className="group">

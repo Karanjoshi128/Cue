@@ -51,19 +51,24 @@ export async function getPost(id: string) {
 }
 
 export async function getDashboardStats() {
-  const [clients, scheduled, published, failed, upcoming] = await Promise.all([
-    prisma.client.count(),
-    prisma.post.count({ where: { status: "SCHEDULED" } }),
-    prisma.postHistory.count(),
-    prisma.postTarget.count({ where: { status: "FAILED" } }),
-    prisma.post.findMany({
-      where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } },
-      orderBy: { scheduledAt: "asc" },
-      take: 8,
-      include: { client: true, targets: true },
-    }),
-  ]);
-  return { clients, scheduled, published, failed, upcoming };
+  const soon = new Date(Date.now() + 7 * 86_400_000);
+  const [clients, scheduled, published, failed, expiring, upcoming] =
+    await Promise.all([
+      prisma.client.count(),
+      prisma.post.count({ where: { status: "SCHEDULED" } }),
+      prisma.postHistory.count(),
+      prisma.postTarget.count({ where: { status: "FAILED" } }),
+      prisma.socialAccount.count({
+        where: { tokenExpires: { not: null, lte: soon } },
+      }),
+      prisma.post.findMany({
+        where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } },
+        orderBy: { scheduledAt: "asc" },
+        take: 8,
+        include: { client: true, targets: true },
+      }),
+    ]);
+  return { clients, scheduled, published, failed, expiring, upcoming };
 }
 
 export async function getCalendarPosts(from: Date, to: Date) {

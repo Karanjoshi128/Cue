@@ -8,6 +8,7 @@ import { navItems } from "@/components/nav-items";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Avatar,
   AvatarFallback,
@@ -109,27 +110,30 @@ export function AppTopbar({ userEmail }: { userEmail: string }) {
         <h1 className="text-lg font-semibold">{titleFor(pathname)}</h1>
       </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger className="outline-none">
-          <Avatar className="size-9">
-            <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-              {userEmail.slice(0, 2).toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel className="truncate font-normal">
-            {userEmail}
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem render={<Link href="/settings" />}>
-            Settings
-          </DropdownMenuItem>
-          <DropdownMenuItem render={<Link href="/logout" />}>
-            Sign out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center gap-1">
+        <ThemeToggle />
+        <DropdownMenu>
+          <DropdownMenuTrigger className="outline-none">
+            <Avatar className="size-9">
+              <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                {userEmail.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="truncate font-normal">
+              {userEmail}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem render={<Link href="/settings" />}>
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<Link href="/logout" />}>
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   );
 }

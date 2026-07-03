@@ -35,6 +35,10 @@ export async function getPosts(filter?: {
       client: true,
       media: true,
       targets: { include: { account: true } },
+      comments: {
+        include: { author: true },
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
 }

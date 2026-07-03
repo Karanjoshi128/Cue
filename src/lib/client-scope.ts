@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
-
-export const SCOPE_COOKIE = "cue_client";
+import { SCOPE_COOKIE } from "@/lib/scope";
 
 /**
  * The client the app is currently scoped to (via the topbar switcher), or

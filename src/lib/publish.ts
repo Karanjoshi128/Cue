@@ -19,7 +19,9 @@ export async function publishDueTargets(now = new Date()): Promise<{
     where: {
       status: "SCHEDULED",
       attempts: { lt: MAX_ATTEMPTS },
-      post: { scheduledAt: { lte: now } },
+      // Only publish posts that are scheduled AND approved. Posts in review
+      // (PENDING / CHANGES_REQUESTED) are held back until approved.
+      post: { scheduledAt: { lte: now }, approval: "APPROVED" },
     },
     include: {
       post: { include: { media: true, client: true } },

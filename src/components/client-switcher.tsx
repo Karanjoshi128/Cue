@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SCOPE_COOKIE } from "@/lib/client-scope";
+import { SCOPE_COOKIE } from "@/lib/scope";
 
 interface ClientOption {
   id: string;

@@ -74,16 +74,17 @@ enum Platform {
 // ---------------------------------------------------------------------------
 
 model Post {
-  id          String     @id @default(cuid())
-  client      Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id          String         @id @default(cuid())
+  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId    String
-  author      User       @relation(fields: [authorId], references: [id])
+  author      User           @relation(fields: [authorId], references: [id])
   authorId    String
   body        String
   scheduledAt DateTime?
-  status      PostStatus @default(DRAFT)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  status      PostStatus     @default(DRAFT)
+  approval    ApprovalStatus @default(APPROVED)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   media    MediaAsset[]
   targets  PostTarget[]
@@ -97,6 +98,14 @@ enum PostStatus {
   PUBLISHED
   PARTIAL
   FAILED
+}
+
+// Client/internal approval state. Defaults to APPROVED so posts publish
+// unless someone explicitly puts them into review.
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
 }
 
 model PostTarget {

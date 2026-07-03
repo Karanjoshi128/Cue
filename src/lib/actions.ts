@@ -284,6 +284,42 @@ export async function deletePost(id: string) {
   revalidatePath("/calendar");
 }
 
+// ---------------------------------------------------------------------------
+// Approval + comments
+// ---------------------------------------------------------------------------
+
+export async function setApproval(
+  postId: string,
+  approval: "PENDING" | "APPROVED" | "CHANGES_REQUESTED",
+) {
+  await requireUser();
+  await prisma.post.update({ where: { id: postId }, data: { approval } });
+  revalidatePath("/queue");
+}
+
+const commentSchema = z.string().trim().min(1).max(2000);
+
+export async function addComment(postId: string, body: string) {
+  const user = await requireUser();
+  const text = commentSchema.parse(body);
+  await prisma.comment.create({
+    data: { postId, authorId: user.id, body: text },
+  });
+  revalidatePath("/queue");
+}
+
+export async function deleteComment(id: string) {
+  const user = await requireUser();
+  const comment = await prisma.comment.findUnique({ where: { id } });
+  if (!comment) return;
+  // Authors can delete their own comments; admins can delete any.
+  if (comment.authorId !== user.id && user.role !== "ADMIN") {
+    throw new Error("You can only delete your own comments.");
+  }
+  await prisma.comment.delete({ where: { id } });
+  revalidatePath("/queue");
+}
+
 export async function retryPost(id: string) {
   await requireUser();
   await prisma.postTarget.updateMany({

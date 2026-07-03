@@ -1,5 +1,6 @@
 import { getPosts } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
+import { getCurrentUser } from "@/lib/auth";
 import { QueueList } from "@/components/queue-list";
 
 export const dynamic = "force-dynamic";
@@ -27,11 +28,15 @@ export default async function QueuePage({
     : "ALL";
 
   const clientId = await getScopeClientId();
-  const posts = await getPosts({ clientId });
+  const [posts, user] = await Promise.all([
+    getPosts({ clientId }),
+    getCurrentUser(),
+  ]);
   const plain = posts.map((p) => ({
     id: p.id,
     body: p.body,
     status: p.status,
+    approval: p.approval,
     scheduledAt: p.scheduledAt?.toISOString() ?? null,
     clientName: p.client.name,
     clientColor: p.client.color,
@@ -42,6 +47,19 @@ export default async function QueuePage({
       error: t.error,
       permalink: t.permalink,
     })),
+    comments: p.comments.map((c) => ({
+      id: c.id,
+      body: c.body,
+      authorName: c.author.name ?? c.author.email,
+      authorId: c.authorId,
+      createdAt: c.createdAt.toISOString(),
+    })),
   }));
-  return <QueueList posts={plain} initialFilter={initialFilter} />;
+  return (
+    <QueueList
+      posts={plain}
+      initialFilter={initialFilter}
+      currentUserId={user?.id ?? ""}
+    />
+  );
 }

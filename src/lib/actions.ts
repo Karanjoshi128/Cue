@@ -137,8 +137,31 @@ const postSchema = z.object({
   media: z
     .array(z.object({ type: z.enum(["IMAGE", "VIDEO"]), url: z.string(), storageKey: z.string() }))
     .optional(),
+  // Per-account caption overrides; anything not listed uses `body`.
+  overrides: z
+    .array(z.object({ accountId: z.string(), body: z.string().max(3000) }))
+    .optional(),
   action: z.enum(["draft", "schedule", "now"]),
 });
+
+/** Builds the per-target rows, applying a caption override where one differs. */
+function buildTargets(
+  accounts: { id: string; platform: "LINKEDIN" | "INSTAGRAM" }[],
+  data: z.infer<typeof postSchema>,
+) {
+  const overrides = new Map(
+    (data.overrides ?? []).map((o) => [o.accountId, o.body.trim()]),
+  );
+  return accounts.map((a) => {
+    const ov = overrides.get(a.id);
+    return {
+      accountId: a.id,
+      platform: a.platform,
+      status: "SCHEDULED" as const,
+      bodyOverride: ov && ov !== data.body.trim() ? ov : null,
+    };
+  });
+}
 
 export async function savePost(input: z.infer<typeof postSchema>) {
   const user = await requireUser();
@@ -173,13 +196,7 @@ export async function savePost(input: z.infer<typeof postSchema>) {
       media: data.media?.length
         ? { create: data.media.map((m) => ({ type: m.type, url: m.url, storageKey: m.storageKey })) }
         : undefined,
-      targets: {
-        create: accounts.map((a) => ({
-          accountId: a.id,
-          platform: a.platform,
-          status: data.action === "draft" ? "SCHEDULED" : "SCHEDULED",
-        })),
-      },
+      targets: { create: buildTargets(accounts, data) },
     },
   });
 
@@ -246,13 +263,7 @@ export async function updatePost(
               })),
             }
           : undefined,
-        targets: {
-          create: accounts.map((a) => ({
-            accountId: a.id,
-            platform: a.platform,
-            status: "SCHEDULED",
-          })),
-        },
+        targets: { create: buildTargets(accounts, data) },
       },
     }),
   ]);

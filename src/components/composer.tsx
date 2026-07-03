@@ -21,8 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { PlatformIcon } from "@/components/post-bits";
-import { PostPreview } from "@/components/post-preview";
+import { LinkedInPreview, InstagramPreview } from "@/components/post-preview";
 import { cn } from "@/lib/utils";
 import { ImagePlus, Loader2, X, Send, CalendarClock, Save } from "lucide-react";
 
@@ -46,6 +47,7 @@ export interface ComposerInitial {
   accountIds: string[];
   scheduledAt: string; // datetime-local string, or ""
   media: MediaItem[];
+  overrides: Record<string, string>; // accountId -> caption override
 }
 
 // Per-platform caption limits — the effective cap is the smallest of the
@@ -82,19 +84,31 @@ export function Composer({
   );
   const [media, setMedia] = useState<MediaItem[]>(initial?.media ?? []);
   const [uploading, setUploading] = useState(false);
+  const [overrides, setOverrides] = useState<Record<string, string>>(
+    initial?.overrides ?? {},
+  );
+  const [perPlatform, setPerPlatform] = useState(
+    Boolean(initial && Object.keys(initial.overrides).length > 0),
+  );
 
   const client = useMemo(
     () => clients.find((c) => c.id === clientId),
     [clients, clientId],
   );
 
+  const selectedAccounts = useMemo(
+    () => client?.accounts.filter((a) => selected.includes(a.id)) ?? [],
+    [client, selected],
+  );
+
   const selectedPlatforms = useMemo(() => {
     const set = new Set<Platform>();
-    client?.accounts.forEach((a) => {
-      if (selected.includes(a.id)) set.add(a.platform);
-    });
+    selectedAccounts.forEach((a) => set.add(a.platform));
     return set;
-  }, [client, selected]);
+  }, [selectedAccounts]);
+
+  const bodyFor = (accountId: string) =>
+    perPlatform ? (overrides[accountId] ?? body) : body;
 
   const igSelected = selectedPlatforms.has("INSTAGRAM");
   const limit = useMemo(() => {
@@ -132,9 +146,16 @@ export function Composer({
     if (!clientId) return toast.error("Pick a client");
     if (selected.length === 0) return toast.error("Select at least one account");
     if (!body.trim()) return toast.error("Write something first");
-    if (overLimit) {
-      const p = igSelected ? "Instagram" : "LinkedIn";
-      return toast.error(`Caption is over the ${p} limit of ${limit} characters`);
+    // Validate each account's effective caption against its platform limit.
+    for (const a of selectedAccounts) {
+      const b = bodyFor(a.id).trim();
+      if (!b) return toast.error(`Write a caption for ${a.displayName}`);
+      const lim = PLATFORM_LIMITS[a.platform];
+      if (b.length > lim) {
+        return toast.error(
+          `${a.displayName}: caption is over the ${lim}-character limit`,
+        );
+      }
     }
     // Instagram requires media to publish — block before it fails at publish time.
     if (igSelected && media.length === 0 && action !== "draft") {
@@ -151,6 +172,11 @@ export function Composer({
       scheduledAt:
         action === "schedule" ? new Date(scheduledAt).toISOString() : null,
       media,
+      overrides: perPlatform
+        ? selected
+            .filter((id) => overrides[id] !== undefined)
+            .map((id) => ({ accountId: id, body: overrides[id] }))
+        : undefined,
     };
 
     startTransition(async () => {
@@ -272,6 +298,48 @@ export function Composer({
             </div>
           </div>
 
+          {selectedPlatforms.size > 1 && (
+            <div className="flex items-center justify-between">
+              <Label className="cursor-pointer text-sm">
+                Customize caption per platform
+              </Label>
+              <Switch checked={perPlatform} onCheckedChange={setPerPlatform} />
+            </div>
+          )}
+
+          {perPlatform &&
+            selectedAccounts.map((a) => {
+              const val = overrides[a.id] ?? body;
+              const lim = PLATFORM_LIMITS[a.platform];
+              const over = val.length > lim;
+              return (
+                <div key={a.id} className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <PlatformIcon platform={a.platform} />
+                    {a.displayName}
+                  </div>
+                  <Textarea
+                    value={val}
+                    onChange={(e) =>
+                      setOverrides((o) => ({
+                        ...o,
+                        [a.id]: e.target.value.slice(0, HARD_LIMIT),
+                      }))
+                    }
+                    className="min-h-28 resize-none"
+                  />
+                  <div
+                    className={cn(
+                      "text-right text-xs text-muted-foreground",
+                      over && "text-destructive font-medium",
+                    )}
+                  >
+                    {val.length}/{lim}
+                  </div>
+                </div>
+              );
+            })}
+
           {media.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {media.map((m, i) => (
@@ -366,14 +434,35 @@ export function Composer({
       {/* Preview */}
       <div className="space-y-3">
         <Label className="text-muted-foreground">Preview</Label>
-        <motion.div layout>
-          <PostPreview
-            platforms={[...selectedPlatforms]}
-            name={client?.name ?? "Client"}
-            color={client?.color}
-            body={body}
-            imageUrl={media[0]?.type === "IMAGE" ? media[0].url : undefined}
-          />
+        <motion.div layout className="space-y-3">
+          {selectedPlatforms.size === 0 ? (
+            <LinkedInPreview
+              name={client?.name ?? "Client"}
+              color={client?.color}
+              body={body}
+              imageUrl={media[0]?.type === "IMAGE" ? media[0].url : undefined}
+            />
+          ) : (
+            [...selectedPlatforms].map((platform) => {
+              const acct = selectedAccounts.find(
+                (a) => a.platform === platform,
+              );
+              const b = acct ? bodyFor(acct.id) : body;
+              const img =
+                media[0]?.type === "IMAGE" ? media[0].url : undefined;
+              const props = {
+                name: client?.name ?? "Client",
+                color: client?.color,
+                body: b,
+                imageUrl: img,
+              };
+              return platform === "LINKEDIN" ? (
+                <LinkedInPreview key={platform} {...props} />
+              ) : (
+                <InstagramPreview key={platform} {...props} />
+              );
+            })
+          )}
         </motion.div>
       </div>
     </div>

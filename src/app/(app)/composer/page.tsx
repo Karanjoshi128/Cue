@@ -44,6 +44,11 @@ export default async function ComposerPage({
           url: m.url,
           storageKey: m.storageKey,
         })),
+        overrides: Object.fromEntries(
+          post.targets
+            .filter((t) => t.bodyOverride)
+            .map((t) => [t.accountId, t.bodyOverride as string]),
+        ),
       };
     }
   }

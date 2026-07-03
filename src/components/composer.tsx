@@ -60,10 +60,12 @@ export function Composer({
   clients,
   initial,
   prefillDate,
+  defaultClientId,
 }: {
   clients: ClientLite[];
   initial?: ComposerInitial;
   prefillDate?: string;
+  defaultClientId?: string;
 }) {
   const router = useRouter();
   const editing = Boolean(initial);
@@ -71,7 +73,7 @@ export function Composer({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [clientId, setClientId] = useState(
-    initial?.clientId ?? clients[0]?.id ?? "",
+    initial?.clientId ?? defaultClientId ?? clients[0]?.id ?? "",
   );
   const [selected, setSelected] = useState<string[]>(initial?.accountIds ?? []);
   const [body, setBody] = useState(initial?.body ?? "");

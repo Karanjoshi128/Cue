@@ -8,14 +8,16 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getDashboardStats } from "@/lib/data";
+import { getScopeClientId } from "@/lib/client-scope";
 import { ClientDot, StatusBadge } from "@/components/post-bits";
 import { Users, CalendarClock, Send, AlertTriangle, Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const clientId = await getScopeClientId();
   const { clients, scheduled, published, failed, expiring, upcoming } =
-    await getDashboardStats();
+    await getDashboardStats(clientId);
 
   const alerts = [
     failed > 0 && {

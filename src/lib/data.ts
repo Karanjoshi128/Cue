@@ -50,19 +50,22 @@ export async function getPost(id: string) {
   });
 }
 
-export async function getDashboardStats() {
+export async function getDashboardStats(clientId?: string) {
   const soon = new Date(Date.now() + 7 * 86_400_000);
+  const scope = clientId ? { clientId } : {};
   const [clients, scheduled, published, failed, expiring, upcoming] =
     await Promise.all([
-      prisma.client.count(),
-      prisma.post.count({ where: { status: "SCHEDULED" } }),
-      prisma.postHistory.count(),
-      prisma.postTarget.count({ where: { status: "FAILED" } }),
+      clientId ? 1 : prisma.client.count(),
+      prisma.post.count({ where: { status: "SCHEDULED", ...scope } }),
+      prisma.postHistory.count({ where: scope }),
+      prisma.postTarget.count({
+        where: { status: "FAILED", ...(clientId ? { post: { clientId } } : {}) },
+      }),
       prisma.socialAccount.count({
-        where: { tokenExpires: { not: null, lte: soon } },
+        where: { tokenExpires: { not: null, lte: soon }, ...scope },
       }),
       prisma.post.findMany({
-        where: { status: "SCHEDULED", scheduledAt: { gte: new Date() } },
+        where: { status: "SCHEDULED", scheduledAt: { gte: new Date() }, ...scope },
         orderBy: { scheduledAt: "asc" },
         take: 8,
         include: { client: true, targets: true },
@@ -71,9 +74,16 @@ export async function getDashboardStats() {
   return { clients, scheduled, published, failed, expiring, upcoming };
 }
 
-export async function getCalendarPosts(from: Date, to: Date) {
+export async function getCalendarPosts(
+  from: Date,
+  to: Date,
+  clientId?: string,
+) {
   return prisma.post.findMany({
-    where: { scheduledAt: { gte: from, lte: to } },
+    where: {
+      scheduledAt: { gte: from, lte: to },
+      ...(clientId ? { clientId } : {}),
+    },
     orderBy: { scheduledAt: "asc" },
     include: { client: true, targets: true },
   });

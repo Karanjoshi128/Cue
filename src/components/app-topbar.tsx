@@ -9,6 +9,7 @@ import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ClientSwitcher } from "@/components/client-switcher";
 import {
   Avatar,
   AvatarFallback,
@@ -100,14 +101,36 @@ function MobileNav({ pathname }: { pathname: string }) {
   );
 }
 
-export function AppTopbar({ userEmail }: { userEmail: string }) {
+interface ClientOption {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+export function AppTopbar({
+  userEmail,
+  clients,
+  scopeClientId,
+}: {
+  userEmail: string;
+  clients: ClientOption[];
+  scopeClientId?: string;
+}) {
   const pathname = usePathname();
 
   return (
     <header className="bg-background/80 border-border sticky top-0 z-10 flex h-16 items-center justify-between border-b px-5 backdrop-blur">
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <MobileNav pathname={pathname} />
-        <h1 className="text-lg font-semibold">{titleFor(pathname)}</h1>
+        <h1 className="hidden text-lg font-semibold sm:block">
+          {titleFor(pathname)}
+        </h1>
+        {clients.length > 0 && (
+          <>
+            <span className="text-border hidden sm:block">/</span>
+            <ClientSwitcher clients={clients} current={scopeClientId} />
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-1">

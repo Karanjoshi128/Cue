@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { getClients, getPost } from "@/lib/data";
+import { getScopeClientId } from "@/lib/client-scope";
 import { Composer, type ComposerInitial } from "@/components/composer";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,10 @@ export default async function ComposerPage({
   searchParams: Promise<{ edit?: string; date?: string }>;
 }) {
   const { edit, date } = await searchParams;
-  const clients = await getClients();
+  const [clients, scopeClientId] = await Promise.all([
+    getClients(),
+    getScopeClientId(),
+  ]);
   const plain = clients.map((c) => ({
     id: c.id,
     name: c.name,
@@ -49,6 +53,11 @@ export default async function ComposerPage({
     date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T09:00` : undefined;
 
   return (
-    <Composer clients={plain} initial={initial} prefillDate={prefillDate} />
+    <Composer
+      clients={plain}
+      initial={initial}
+      prefillDate={prefillDate}
+      defaultClientId={scopeClientId}
+    />
   );
 }

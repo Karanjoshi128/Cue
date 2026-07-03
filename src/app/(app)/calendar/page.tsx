@@ -13,6 +13,7 @@ import {
   isSameDay,
 } from "date-fns";
 import { getCalendarPosts } from "@/lib/data";
+import { getScopeClientId } from "@/lib/client-scope";
 import { ClientDot, StatusBadge } from "@/components/post-bits";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -146,6 +147,7 @@ export default async function CalendarPage({
   const { view: viewParam, m, w } = await searchParams;
   const view: View =
     viewParam === "week" || viewParam === "list" ? viewParam : "month";
+  const clientId = await getScopeClientId();
 
   // ---- Month view ----
   if (view === "month") {
@@ -154,7 +156,7 @@ export default async function CalendarPage({
     const gridStart = startOfWeek(startOfMonth(base));
     const gridEnd = endOfWeek(endOfMonth(base));
     const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-    const posts = await getCalendarPosts(gridStart, gridEnd);
+    const posts = await getCalendarPosts(gridStart, gridEnd, clientId);
 
     return (
       <Shell view="month" title={format(base, "MMMM yyyy")} offset={offset}>
@@ -170,7 +172,7 @@ export default async function CalendarPage({
     const gridStart = startOfWeek(base);
     const gridEnd = endOfWeek(base);
     const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-    const posts = await getCalendarPosts(gridStart, gridEnd);
+    const posts = await getCalendarPosts(gridStart, gridEnd, clientId);
 
     return (
       <Shell
@@ -186,7 +188,7 @@ export default async function CalendarPage({
   // ---- List view ----
   const from = startOfDay(new Date());
   const to = addMonths(from, 6);
-  const posts = await getCalendarPosts(from, to);
+  const posts = await getCalendarPosts(from, to, clientId);
   const byDay = new Map<string, CalPost[]>();
   for (const p of posts) {
     if (!p.scheduledAt) continue;

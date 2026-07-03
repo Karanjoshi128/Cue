@@ -1,4 +1,5 @@
 import { getPosts } from "@/lib/data";
+import { getScopeClientId } from "@/lib/client-scope";
 import { QueueList } from "@/components/queue-list";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,8 @@ export default async function QueuePage({
     ? (upper as Filter)
     : "ALL";
 
-  const posts = await getPosts();
+  const clientId = await getScopeClientId();
+  const posts = await getPosts({ clientId });
   const plain = posts.map((p) => ({
     id: p.id,
     body: p.body,

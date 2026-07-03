@@ -2,42 +2,22 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Production-safe seed: no sample clients or demo posts. It only bootstraps a
+// single ADMIN on a brand-new, empty database so local dev (which auto-logs in
+// as the first user when Supabase isn't configured) has someone to sign in as.
+// On any database that already has users, this is a no-op.
 async function main() {
-  const admin = await prisma.user.upsert({
-    where: { email: "manager@cue.app" },
-    update: {},
-    create: { email: "manager@cue.app", name: "Social Manager", role: "ADMIN" },
+  const userCount = await prisma.user.count();
+  if (userCount > 0) {
+    console.log(`Seed skipped — ${userCount} user(s) already exist.`);
+    return;
+  }
+
+  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@cue.app";
+  await prisma.user.create({
+    data: { email, name: "Admin", role: "ADMIN" },
   });
-
-  const clients = [
-    { name: "Northwind Coffee", color: "#2A6FF2" },
-    { name: "Lumen Fitness", color: "#10B981" },
-    { name: "Atlas Realty", color: "#F59E0B" },
-  ];
-
-  for (const c of clients) {
-    const existing = await prisma.client.findFirst({ where: { name: c.name } });
-    if (!existing) {
-      await prisma.client.create({ data: c });
-    }
-  }
-
-  const first = await prisma.client.findFirst({ orderBy: { createdAt: "asc" } });
-  if (first) {
-    const hasPost = await prisma.post.findFirst({ where: { clientId: first.id } });
-    if (!hasPost) {
-      await prisma.post.create({
-        data: {
-          clientId: first.id,
-          authorId: admin.id,
-          body: "Fresh roast just dropped. ☕ Tag a friend who needs a Monday boost!",
-          status: "DRAFT",
-        },
-      });
-    }
-  }
-
-  console.log("Seed complete:", { admin: admin.email, clients: clients.length });
+  console.log(`Seed complete: created bootstrap admin ${email}`);
 }
 
 main()

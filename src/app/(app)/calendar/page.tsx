@@ -31,11 +31,11 @@ function PostChip({ p }: { p: CalPost }) {
     <Link
       href={editable ? `/composer?edit=${p.id}` : "/queue"}
       className="bg-accent hover:bg-accent/70 flex items-center gap-1 rounded border-l-2 px-1.5 py-1 text-xs transition-colors"
-      style={{ borderLeftColor: p.client.color ?? "#2A6FF2" }}
+      style={{ borderLeftColor: p.client.color ?? "var(--primary)" }}
       title={p.body}
     >
       {p.scheduledAt && (
-        <span className="text-muted-foreground shrink-0 tabular-nums">
+        <span className="text-muted-foreground hidden shrink-0 tabular-nums sm:inline">
           {format(p.scheduledAt, "h:mm a")}
         </span>
       )}
@@ -73,7 +73,7 @@ function DayCell({
         <Link
           href={`/composer?date=${format(day, "yyyy-MM-dd")}`}
           aria-label={`Schedule a post on ${format(day, "MMMM d")}`}
-          className="text-muted-foreground hover:text-primary opacity-0 transition group-hover:opacity-100"
+          className="text-muted-foreground hover:text-primary opacity-100 transition focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
         >
           <Plus className="size-3.5" />
         </Link>
@@ -116,25 +116,27 @@ function Grid({
   minH: string;
 }) {
   return (
-    <div className="bg-border grid grid-cols-7 gap-px overflow-hidden rounded-lg border">
-      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-        <div
-          key={d}
-          className="bg-muted text-muted-foreground py-2 text-center text-xs font-medium"
-        >
-          {d}
-        </div>
-      ))}
-      {days.map((day) => (
-        <DayCell
-          key={day.toISOString()}
-          day={day}
-          posts={posts}
-          base={base}
-          maxVisible={maxVisible}
-          minH={minH}
-        />
-      ))}
+    <div className="overflow-x-auto">
+      <div className="bg-border grid min-w-160 grid-cols-7 gap-px overflow-hidden rounded-lg border">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div
+            key={d}
+            className="bg-muted text-muted-foreground py-2 text-center text-xs font-medium"
+          >
+            {d}
+          </div>
+        ))}
+        {days.map((day) => (
+          <DayCell
+            key={day.toISOString()}
+            day={day}
+            posts={posts}
+            base={base}
+            maxVisible={maxVisible}
+            minH={minH}
+          />
+        ))}
+      </div>
     </div>
   );
 }

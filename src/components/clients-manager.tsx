@@ -225,7 +225,7 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                             <button
                               type="button"
                               aria-label={`Disconnect ${a.displayName}`}
-                              className="text-muted-foreground hover:text-destructive"
+                              className="text-muted-foreground hover:text-destructive -m-1 p-1"
                               onClick={() =>
                                 setConfirm({
                                   title: `Disconnect ${a.displayName}?`,
@@ -284,6 +284,7 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
               <Label>Color</Label>
               <input
                 type="color"
+                aria-label="Client color"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 className="h-9 w-16 rounded border"

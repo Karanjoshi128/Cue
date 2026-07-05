@@ -45,6 +45,7 @@ export function LoginForm() {
     <div className="space-y-3">
       <Input
         type="email"
+        aria-label="Email address"
         placeholder="you@agency.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}

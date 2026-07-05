@@ -119,7 +119,7 @@ export function AppTopbar({
   const pathname = usePathname();
 
   return (
-    <header className="bg-background/80 border-border sticky top-0 z-10 flex h-16 items-center justify-between border-b px-5 backdrop-blur">
+    <header className="bg-background/80 border-border sticky top-0 z-10 flex h-16 items-center justify-between border-b px-5 backdrop-blur md:px-8">
       <div className="flex min-w-0 items-center gap-2">
         <MobileNav pathname={pathname} />
         <h1 className="hidden text-lg font-semibold sm:block">
@@ -136,7 +136,7 @@ export function AppTopbar({
       <div className="flex items-center gap-1">
         <ThemeToggle />
         <DropdownMenu>
-          <DropdownMenuTrigger className="outline-none">
+          <DropdownMenuTrigger className="outline-none" aria-label="Account menu">
             <Avatar className="size-9">
               <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                 {userEmail.slice(0, 2).toUpperCase()}

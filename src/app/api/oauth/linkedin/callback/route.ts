@@ -43,7 +43,13 @@ export async function GET(req: NextRequest) {
   const meRes = await fetch("https://api.linkedin.com/v2/userinfo", {
     headers: { Authorization: `Bearer ${token.access_token}` },
   });
+  if (!meRes.ok) {
+    return NextResponse.redirect(new URL("/clients?error=linkedin_profile", req.url));
+  }
   const me = (await meRes.json()) as { sub: string; name?: string };
+  if (!me.sub) {
+    return NextResponse.redirect(new URL("/clients?error=linkedin_profile", req.url));
+  }
 
   await prisma.socialAccount.upsert({
     where: {

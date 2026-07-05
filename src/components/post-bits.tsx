@@ -44,7 +44,7 @@ export function ClientDot({ color }: { color?: string | null }) {
   return (
     <span
       className="inline-block size-2.5 shrink-0 rounded-full"
-      style={{ backgroundColor: color ?? "#2A6FF2" }}
+      style={{ backgroundColor: color ?? "var(--primary)" }}
     />
   );
 }

@@ -19,6 +19,7 @@ import {
   retryPost,
   setApproval,
 } from "@/lib/actions";
+import { POST_FILTERS, type PostFilter } from "@/lib/post-filters";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,16 +74,8 @@ interface PostLite {
   comments: CommentLite[];
 }
 
-const FILTERS = [
-  "ALL",
-  "DRAFT",
-  "SCHEDULED",
-  "PUBLISHING",
-  "PUBLISHED",
-  "PARTIAL",
-  "FAILED",
-] as const;
-type Filter = (typeof FILTERS)[number];
+const FILTERS = POST_FILTERS;
+type Filter = PostFilter;
 
 const approvalMeta: Record<
   ApprovalStatus,
@@ -200,6 +193,7 @@ export function QueueList({
           <button
             key={f}
             onClick={() => setFilter(f)}
+            aria-pressed={filter === f}
             className={cn(
               "rounded-full px-3 py-1 text-sm capitalize transition-colors",
               filter === f
@@ -264,7 +258,9 @@ export function QueueList({
                       </div>
                     </div>
 
-                    <p className="text-sm whitespace-pre-wrap">{post.body}</p>
+                    <p className="text-sm wrap-break-word whitespace-pre-wrap">
+                      {post.body}
+                    </p>
 
                     <div className="flex flex-wrap items-center gap-3 pt-1">
                       {post.targets.map((t) => (
@@ -374,6 +370,8 @@ export function QueueList({
                         size="sm"
                         variant="ghost"
                         className="ml-auto"
+                        aria-label="Toggle comments"
+                        aria-expanded={openComments.has(post.id)}
                         onClick={() => toggleComments(post.id)}
                       >
                         <MessageSquare className="size-4" />
@@ -404,14 +402,14 @@ export function QueueList({
                                   <button
                                     type="button"
                                     aria-label="Delete comment"
-                                    className="text-muted-foreground hover:text-destructive ml-auto"
+                                    className="text-muted-foreground hover:text-destructive -m-1 ml-auto p-1"
                                     onClick={() => onDeleteComment(c.id)}
                                   >
                                     <X className="size-3.5" />
                                   </button>
                                 )}
                               </div>
-                              <p className="text-muted-foreground whitespace-pre-wrap">
+                              <p className="text-muted-foreground wrap-break-word whitespace-pre-wrap">
                                 {c.body}
                               </p>
                             </div>
@@ -420,6 +418,7 @@ export function QueueList({
                         <div className="flex gap-2">
                           <Input
                             value={drafts[post.id] ?? ""}
+                            aria-label="Add a note"
                             onChange={(e) =>
                               setDrafts((d) => ({
                                 ...d,

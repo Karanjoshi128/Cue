@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  // Standard next-themes hydration guard: the resolved theme is only known on
+  // the client, so we render a stable icon until mounted.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   const isDark = resolvedTheme === "dark";

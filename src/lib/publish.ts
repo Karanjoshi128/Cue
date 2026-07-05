@@ -44,9 +44,13 @@ export async function publishDueTargets(now = new Date()): Promise<{
     where: {
       status: "SCHEDULED",
       attempts: { lt: MAX_ATTEMPTS },
-      // Only publish posts that are scheduled AND approved. Posts in review
-      // (PENDING / CHANGES_REQUESTED) are held back until approved.
-      post: { scheduledAt: { lte: now }, approval: "APPROVED" },
+      // Only publish posts that are due, approved, and not a lingering draft.
+      // Posts in review (PENDING / CHANGES_REQUESTED) are held back.
+      post: {
+        scheduledAt: { lte: now },
+        approval: "APPROVED",
+        status: { in: ["SCHEDULED", "PUBLISHING"] },
+      },
     },
     include: {
       post: { include: { media: true, client: true } },
@@ -150,13 +154,26 @@ async function rollUpPostStatus(postId: string): Promise<void> {
 
 /** Publish a single post immediately ("Post now"). */
 export async function publishPostNow(postId: string): Promise<void> {
+  // Never bypass the approval gate — otherwise the post flips to PUBLISHING but
+  // publishDueTargets skips it, leaving it stuck with no recovery in the UI.
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { approval: true },
+  });
+  if (post && post.approval !== "APPROVED") {
+    throw new Error(
+      "This post is awaiting approval — approve it before publishing.",
+    );
+  }
+
   await prisma.post.update({
     where: { id: postId },
     data: { status: "PUBLISHING", scheduledAt: new Date() },
   });
+  // Reset attempts so previously-FAILED targets actually re-enter the due set.
   await prisma.postTarget.updateMany({
     where: { postId, status: { in: ["SCHEDULED", "FAILED"] } },
-    data: { status: "SCHEDULED" },
+    data: { status: "SCHEDULED", attempts: 0, error: null },
   });
   await publishDueTargets(new Date(Date.now() + 1000));
 }

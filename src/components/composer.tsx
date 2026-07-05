@@ -397,6 +397,8 @@ export function Composer({
                 key={t.key}
                 type="button"
                 onClick={() => changeType(t.key)}
+                aria-label={t.label}
+                aria-pressed={contentType === t.key}
                 className={cn(
                   "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 font-medium transition-colors",
                   contentType === t.key
@@ -422,6 +424,7 @@ export function Composer({
                       key={a.id}
                       type="button"
                       disabled={disabled}
+                      aria-pressed={on}
                       onClick={() => !disabled && toggleAccount(a.id)}
                       title={disabled ? "LinkedIn only" : undefined}
                       className={cn(
@@ -432,8 +435,8 @@ export function Composer({
                           : "border-border text-muted-foreground hover:bg-accent",
                       )}
                     >
-                      <PlatformIcon platform={a.platform} />
-                      {a.displayName}
+                      <PlatformIcon platform={a.platform} className="shrink-0" />
+                      <span className="max-w-40 truncate">{a.displayName}</span>
                     </button>
                   );
                 })}
@@ -484,10 +487,14 @@ export function Composer({
 
           {contentType === "media" && selectedPlatforms.size > 1 && (
             <div className="flex items-center justify-between">
-              <Label className="cursor-pointer text-sm">
+              <Label htmlFor="per-platform-switch" className="cursor-pointer text-sm">
                 Customize caption per platform
               </Label>
-              <Switch checked={perPlatform} onCheckedChange={setPerPlatform} />
+              <Switch
+                id="per-platform-switch"
+                checked={perPlatform}
+                onCheckedChange={setPerPlatform}
+              />
             </div>
           )}
 

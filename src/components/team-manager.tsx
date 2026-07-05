@@ -80,6 +80,7 @@ export function TeamManager({
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             type="email"
+            aria-label="Teammate email address"
             placeholder="teammate@agency.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}

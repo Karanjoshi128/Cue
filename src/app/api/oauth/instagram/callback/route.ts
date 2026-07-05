@@ -37,6 +37,9 @@ export async function GET(req: NextRequest) {
   const longRes = await fetch(
     `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${process.env.META_APP_SECRET}&access_token=${short.access_token}`,
   );
+  if (!longRes.ok) {
+    return NextResponse.redirect(new URL("/clients?error=instagram_token", req.url));
+  }
   const long = (await longRes.json()) as {
     access_token: string;
     expires_in: number;
@@ -46,6 +49,9 @@ export async function GET(req: NextRequest) {
   const meRes = await fetch(
     `https://graph.instagram.com/me?fields=user_id,username&access_token=${long.access_token}`,
   );
+  if (!meRes.ok) {
+    return NextResponse.redirect(new URL("/clients?error=instagram_profile", req.url));
+  }
   const me = (await meRes.json()) as { user_id: string; username: string };
 
   await prisma.socialAccount.upsert({

@@ -35,7 +35,7 @@ export function ClientSwitcher({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="hover:bg-accent flex items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none">
+      <DropdownMenuTrigger className="hover:bg-accent flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none">
         {active ? (
           <ClientDot color={active.color} />
         ) : (

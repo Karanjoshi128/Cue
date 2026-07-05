@@ -1,20 +1,10 @@
 import { getPosts } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
 import { getCurrentUser } from "@/lib/auth";
+import { POST_FILTERS, type PostFilter } from "@/lib/post-filters";
 import { QueueList } from "@/components/queue-list";
 
 export const dynamic = "force-dynamic";
-
-const FILTERS = [
-  "ALL",
-  "DRAFT",
-  "SCHEDULED",
-  "PUBLISHING",
-  "PUBLISHED",
-  "PARTIAL",
-  "FAILED",
-] as const;
-type Filter = (typeof FILTERS)[number];
 
 export default async function QueuePage({
   searchParams,
@@ -23,8 +13,8 @@ export default async function QueuePage({
 }) {
   const { status } = await searchParams;
   const upper = status?.toUpperCase();
-  const initialFilter: Filter = FILTERS.includes(upper as Filter)
-    ? (upper as Filter)
+  const initialFilter: PostFilter = POST_FILTERS.includes(upper as PostFilter)
+    ? (upper as PostFilter)
     : "ALL";
 
   const clientId = await getScopeClientId();

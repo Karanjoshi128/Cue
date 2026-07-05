@@ -207,7 +207,7 @@ function Avatar({
         "grid shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
         size,
       )}
-      style={{ backgroundColor: color ?? "#2A6FF2" }}
+      style={{ backgroundColor: color ?? "var(--primary)" }}
     >
       {name.slice(0, 2).toUpperCase()}
     </span>
@@ -249,7 +249,7 @@ function PostText({
   const shown = expanded || !isLong ? text : text.slice(0, limit).trimEnd();
 
   return (
-    <span className="whitespace-pre-wrap">
+    <span className="wrap-break-word whitespace-pre-wrap">
       {usernamePrefix && (
         <span className="font-semibold">{usernamePrefix} </span>
       )}

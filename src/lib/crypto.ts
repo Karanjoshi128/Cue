@@ -23,7 +23,11 @@ export function encrypt(plain: string): string {
 }
 
 export function decrypt(payload: string): string {
-  const [ivB64, tagB64, dataB64] = payload.split(".");
+  const parts = payload.split(".");
+  if (parts.length !== 3 || parts.some((p) => !p)) {
+    throw new Error("Malformed encrypted token");
+  }
+  const [ivB64, tagB64, dataB64] = parts;
   const decipher = crypto.createDecipheriv(
     "aes-256-gcm",
     getKey(),

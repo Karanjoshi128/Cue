@@ -164,6 +164,9 @@ const postSchema = z.object({
     .array(z.object({ accountId: z.string(), body: z.string().max(3000) }))
     .optional(),
   action: z.enum(["draft", "schedule", "now"]),
+}).refine((d) => d.action !== "schedule" || Boolean(d.scheduledAt), {
+  message: "A scheduled post needs a date and time.",
+  path: ["scheduledAt"],
 });
 
 /** Builds the per-target rows, applying a caption override where one differs. */

@@ -22,8 +22,14 @@ export async function POST(req: NextRequest) {
 
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
 
+  // Only purge terminal posts — never drafts, posts awaiting publish, or
+  // future-scheduled posts (whose createdAt can be old while scheduledAt is
+  // still ahead). PostHistory already preserves the permanent record.
   const stale = await prisma.post.findMany({
-    where: { createdAt: { lt: cutoff } },
+    where: {
+      createdAt: { lt: cutoff },
+      status: { in: ["PUBLISHED", "PARTIAL", "FAILED"] },
+    },
     select: { id: true, media: { select: { storageKey: true } } },
   });
 

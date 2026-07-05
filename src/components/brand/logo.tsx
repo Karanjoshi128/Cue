@@ -8,6 +8,9 @@ export function Logo({ className }: { className?: string }) {
       width={120}
       height={40}
       priority
+      // Let both axes scale from the aspect ratio so a height class (e.g. h-10)
+      // doesn't trip Next's "modified one dimension" warning.
+      style={{ width: "auto", height: "auto" }}
       className={className}
     />
   );

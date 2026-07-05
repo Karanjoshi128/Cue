@@ -98,6 +98,7 @@ export async function publishDueTargets(now = new Date()): Promise<{
 
       await prisma.postHistory.create({
         data: {
+          workspaceId: target.post.client.workspaceId,
           clientId: target.post.clientId,
           clientName: target.post.client.name,
           platform: target.platform,

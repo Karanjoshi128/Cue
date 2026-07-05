@@ -14,10 +14,13 @@ async function main() {
   }
 
   const email = process.env.SEED_ADMIN_EMAIL ?? "admin@cue.app";
-  await prisma.user.create({
-    data: { email, name: "Admin", role: "ADMIN" },
+  await prisma.workspace.create({
+    data: {
+      name: "My workspace",
+      users: { create: { email, name: "Admin", role: "ADMIN" } },
+    },
   });
-  console.log(`Seed complete: created bootstrap admin ${email}`);
+  console.log(`Seed complete: created bootstrap admin ${email} + workspace`);
 }
 
 main()

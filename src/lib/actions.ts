@@ -1,11 +1,48 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireUser, requireAdmin } from "@/lib/auth";
+import { getAuth, requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
+
+// ---------------------------------------------------------------------------
+// Workspace
+// ---------------------------------------------------------------------------
+
+const workspaceNameSchema = z.string().trim().min(1).max(60);
+
+/**
+ * Onboarding: the signed-in email creates its own workspace and becomes its
+ * admin. Only reachable when getAuth() reported needsOnboarding (no member row
+ * yet); an already-onboarded user is bounced to the dashboard.
+ */
+export async function createWorkspace(name: string) {
+  const { user, email } = await getAuth();
+  if (user) redirect("/");
+  if (!email) throw new Error("UNAUTHENTICATED");
+  const wsName = workspaceNameSchema.parse(name);
+
+  await prisma.workspace.create({
+    data: {
+      name: wsName,
+      users: { create: { email, name: email.split("@")[0], role: "ADMIN" } },
+    },
+  });
+  redirect("/");
+}
+
+export async function renameWorkspace(name: string) {
+  const admin = await requireAdmin();
+  const wsName = workspaceNameSchema.parse(name);
+  await prisma.workspace.update({
+    where: { id: admin.workspaceId },
+    data: { name: wsName },
+  });
+  revalidatePath("/settings");
+}
 
 // ---------------------------------------------------------------------------
 // Profile
@@ -21,7 +58,7 @@ export async function updateProfile(input: z.infer<typeof profileSchema>) {
 }
 
 // ---------------------------------------------------------------------------
-// Team (admin only)
+// Team (admin only) - all scoped to the admin's workspace
 // ---------------------------------------------------------------------------
 
 const inviteSchema = z.object({
@@ -30,17 +67,24 @@ const inviteSchema = z.object({
 });
 
 export async function inviteMember(input: z.infer<typeof inviteSchema>) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const data = inviteSchema.parse(input);
   const email = data.email.toLowerCase();
 
+  // Email is globally unique - a person can belong to one workspace.
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new Error("That email is already on the team.");
+  if (existing) throw new Error("That email already has an account.");
 
-  // Pre-create the member row so their role is set when they first sign in
-  // with this email (auth.ts returns the existing row on sign-in).
+  // Pre-create the member row in THIS workspace so their role + tenant are set
+  // when they first sign in (auth.ts returns the existing row on sign-in, so
+  // they skip onboarding and land straight in this workspace).
   await prisma.user.create({
-    data: { email, name: email.split("@")[0], role: data.role },
+    data: {
+      email,
+      name: email.split("@")[0],
+      role: data.role,
+      workspaceId: admin.workspaceId,
+    },
   });
   revalidatePath("/settings");
 }
@@ -50,12 +94,15 @@ export async function updateMemberRole(id: string, role: "ADMIN" | "MANAGER") {
   if (id === me.id && role !== "ADMIN") {
     throw new Error("You can't remove your own admin access.");
   }
-  if (role === "MANAGER") {
-    const admins = await prisma.user.count({ where: { role: "ADMIN" } });
-    const target = await prisma.user.findUnique({ where: { id } });
-    if (target?.role === "ADMIN" && admins <= 1) {
-      throw new Error("Keep at least one admin on the team.");
-    }
+  const target = await prisma.user.findFirst({
+    where: { id, workspaceId: me.workspaceId },
+  });
+  if (!target) throw new Error("Member not found.");
+  if (role === "MANAGER" && target.role === "ADMIN") {
+    const admins = await prisma.user.count({
+      where: { role: "ADMIN", workspaceId: me.workspaceId },
+    });
+    if (admins <= 1) throw new Error("Keep at least one admin on the team.");
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/settings");
@@ -65,13 +112,15 @@ export async function removeMember(id: string) {
   const me = await requireAdmin();
   if (id === me.id) throw new Error("You can't remove yourself.");
 
-  const target = await prisma.user.findUnique({
-    where: { id },
+  const target = await prisma.user.findFirst({
+    where: { id, workspaceId: me.workspaceId },
     include: { _count: { select: { posts: true } } },
   });
   if (!target) throw new Error("Member not found.");
   if (target.role === "ADMIN") {
-    const admins = await prisma.user.count({ where: { role: "ADMIN" } });
+    const admins = await prisma.user.count({
+      where: { role: "ADMIN", workspaceId: me.workspaceId },
+    });
     if (admins <= 1) throw new Error("Keep at least one admin on the team.");
   }
   if (target._count.posts > 0) {
@@ -84,7 +133,7 @@ export async function removeMember(id: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Clients
+// Clients - all scoped to the caller's workspace
 // ---------------------------------------------------------------------------
 
 const clientSchema = z.object({
@@ -93,9 +142,11 @@ const clientSchema = z.object({
 });
 
 export async function createClient(input: z.infer<typeof clientSchema>) {
-  await requireUser();
+  const user = await requireUser();
   const data = clientSchema.parse(input);
-  const client = await prisma.client.create({ data });
+  const client = await prisma.client.create({
+    data: { ...data, workspaceId: user.workspaceId },
+  });
   revalidatePath("/clients");
   return client;
 }
@@ -104,21 +155,36 @@ export async function updateClient(
   id: string,
   input: z.infer<typeof clientSchema>,
 ) {
-  await requireUser();
+  const user = await requireUser();
   const data = clientSchema.parse(input);
+  const owned = await prisma.client.findFirst({
+    where: { id, workspaceId: user.workspaceId },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Client not found.");
   const client = await prisma.client.update({ where: { id }, data });
   revalidatePath("/clients");
   return client;
 }
 
 export async function deleteClient(id: string) {
-  await requireUser();
+  const user = await requireUser();
+  const owned = await prisma.client.findFirst({
+    where: { id, workspaceId: user.workspaceId },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Client not found.");
   await prisma.client.delete({ where: { id } });
   revalidatePath("/clients");
 }
 
 export async function disconnectAccount(accountId: string) {
-  await requireUser();
+  const user = await requireUser();
+  const owned = await prisma.socialAccount.findFirst({
+    where: { id: accountId, client: { workspaceId: user.workspaceId } },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Account not found.");
   await prisma.socialAccount.delete({ where: { id: accountId } });
   revalidatePath("/clients");
 }
@@ -191,8 +257,14 @@ export async function savePost(input: z.infer<typeof postSchema>) {
   const user = await requireUser();
   const data = postSchema.parse(input);
 
+  // Accounts are matched within the caller's workspace, so a client/account id
+  // from another tenant simply yields nothing → the guard below rejects it.
   const accounts = await prisma.socialAccount.findMany({
-    where: { id: { in: data.accountIds }, clientId: data.clientId },
+    where: {
+      id: { in: data.accountIds },
+      clientId: data.clientId,
+      client: { workspaceId: user.workspaceId },
+    },
   });
   if (accounts.length === 0) {
     throw new Error("Select at least one connected account for this client.");
@@ -247,10 +319,12 @@ export async function updatePost(
   id: string,
   input: z.infer<typeof postSchema>,
 ) {
-  await requireUser();
+  const user = await requireUser();
   const data = postSchema.parse(input);
 
-  const existing = await prisma.post.findUnique({ where: { id } });
+  const existing = await prisma.post.findFirst({
+    where: { id, client: { workspaceId: user.workspaceId } },
+  });
   if (!existing) throw new Error("Post not found.");
   // Only drafts and not-yet-published scheduled posts can be edited.
   if (existing.status !== "DRAFT" && existing.status !== "SCHEDULED") {
@@ -258,7 +332,11 @@ export async function updatePost(
   }
 
   const accounts = await prisma.socialAccount.findMany({
-    where: { id: { in: data.accountIds }, clientId: data.clientId },
+    where: {
+      id: { in: data.accountIds },
+      clientId: data.clientId,
+      client: { workspaceId: user.workspaceId },
+    },
   });
   if (accounts.length === 0) {
     throw new Error("Select at least one connected account for this client.");
@@ -315,7 +393,12 @@ export async function updatePost(
 }
 
 export async function deletePost(id: string) {
-  await requireUser();
+  const user = await requireUser();
+  const owned = await prisma.post.findFirst({
+    where: { id, client: { workspaceId: user.workspaceId } },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Post not found.");
   await prisma.post.delete({ where: { id } });
   revalidatePath("/queue");
   revalidatePath("/calendar");
@@ -329,8 +412,12 @@ export async function setApproval(
   postId: string,
   approval: "PENDING" | "APPROVED" | "CHANGES_REQUESTED",
 ) {
-  await requireUser();
-  await prisma.post.update({ where: { id: postId }, data: { approval } });
+  const user = await requireUser();
+  // updateMany with a workspace guard = no cross-tenant writes.
+  await prisma.post.updateMany({
+    where: { id: postId, client: { workspaceId: user.workspaceId } },
+    data: { approval },
+  });
   revalidatePath("/queue");
 }
 
@@ -339,6 +426,11 @@ const commentSchema = z.string().trim().min(1).max(2000);
 export async function addComment(postId: string, body: string) {
   const user = await requireUser();
   const text = commentSchema.parse(body);
+  const owned = await prisma.post.findFirst({
+    where: { id: postId, client: { workspaceId: user.workspaceId } },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Post not found.");
   await prisma.comment.create({
     data: { postId, authorId: user.id, body: text },
   });
@@ -347,9 +439,11 @@ export async function addComment(postId: string, body: string) {
 
 export async function deleteComment(id: string) {
   const user = await requireUser();
-  const comment = await prisma.comment.findUnique({ where: { id } });
+  const comment = await prisma.comment.findFirst({
+    where: { id, post: { client: { workspaceId: user.workspaceId } } },
+  });
   if (!comment) return;
-  // Authors can delete their own comments; admins can delete any.
+  // Authors can delete their own comments; admins can delete any (in-workspace).
   if (comment.authorId !== user.id && user.role !== "ADMIN") {
     throw new Error("You can only delete your own comments.");
   }
@@ -358,7 +452,12 @@ export async function deleteComment(id: string) {
 }
 
 export async function retryPost(id: string) {
-  await requireUser();
+  const user = await requireUser();
+  const owned = await prisma.post.findFirst({
+    where: { id, client: { workspaceId: user.workspaceId } },
+    select: { id: true },
+  });
+  if (!owned) throw new Error("Post not found.");
   await prisma.postTarget.updateMany({
     where: { postId: id, status: "FAILED" },
     data: { status: "SCHEDULED", attempts: 0, error: null },

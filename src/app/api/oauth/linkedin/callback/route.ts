@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuth } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,19 @@ export async function GET(req: NextRequest) {
   const { clientId } = JSON.parse(
     Buffer.from(state, "base64url").toString("utf8"),
   ) as { clientId: string };
+
+  // Defense-in-depth: `state` is unsigned, so re-verify workspace ownership.
+  const { user } = await getAuth();
+  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  const owned = await prisma.client.findFirst({
+    where: { id: clientId, workspaceId: user.workspaceId },
+    select: { id: true },
+  });
+  if (!owned) {
+    return NextResponse.redirect(
+      new URL("/clients?error=not_your_client", req.url),
+    );
+  }
 
   const redirectUri = `${process.env.APP_URL ?? req.nextUrl.origin}/api/oauth/linkedin/callback`;
 

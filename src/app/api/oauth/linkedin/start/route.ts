@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getAuth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +9,18 @@ export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get("clientId");
   if (!clientId) {
     return NextResponse.json({ error: "Missing clientId" }, { status: 400 });
+  }
+  // Only a member may connect an account to a client in their own workspace.
+  const { user } = await getAuth();
+  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  const owned = await prisma.client.findFirst({
+    where: { id: clientId, workspaceId: user.workspaceId },
+    select: { id: true },
+  });
+  if (!owned) {
+    return NextResponse.redirect(
+      new URL("/clients?error=not_your_client", req.url),
+    );
   }
   if (!process.env.LINKEDIN_CLIENT_ID) {
     return NextResponse.redirect(

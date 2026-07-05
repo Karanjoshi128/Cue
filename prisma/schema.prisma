@@ -12,6 +12,19 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
+// Workspaces (tenants) - every user + client belongs to exactly one
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  users   User[]
+  clients Client[]
+}
+
+// ---------------------------------------------------------------------------
 // Team / auth
 // ---------------------------------------------------------------------------
 
@@ -21,6 +34,9 @@ model User {
   name      String?
   role      Role     @default(MANAGER)
   createdAt DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
 
   posts    Post[]
   comments Comment[]
@@ -41,6 +57,9 @@ model Client {
   logoUrl   String?
   color     String?  @default("#2A6FF2")
   createdAt DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
 
   accounts SocialAccount[]
   posts    Post[]
@@ -167,6 +186,8 @@ model Comment {
 
 model PostHistory {
   id             String    @id @default(cuid())
+  // Denormalized tenant id (PostHistory has no FK to Client - it outlives it).
+  workspaceId    String
   clientId       String
   clientName     String
   platform       Platform

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
-import { NoAccess } from "@/components/no-access";
 import { getAuth } from "@/lib/auth";
 import { getClients } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
@@ -11,13 +10,11 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, email } = await getAuth();
+  const { user, needsOnboarding } = await getAuth();
 
   if (!user) {
-    // Signed in but not a workspace member → show the no-access screen.
-    if (email) return <NoAccess email={email} />;
-    // Not signed in → send to login.
-    redirect("/login");
+    // Authenticated but no workspace yet → onboarding; otherwise → login.
+    redirect(needsOnboarding ? "/onboarding" : "/login");
   }
 
   const [clients, scopeClientId] = await Promise.all([

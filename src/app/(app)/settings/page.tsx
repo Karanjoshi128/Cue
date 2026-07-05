@@ -1,22 +1,29 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
-import { getUsers } from "@/lib/data";
+import { getUsers, getWorkspace } from "@/lib/data";
 import { ProfileForm } from "@/components/profile-form";
+import { WorkspaceForm } from "@/components/workspace-form";
 import { TeamManager } from "@/components/team-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [user, users] = await Promise.all([getCurrentUser(), getUsers()]);
+  const [user, users, workspace] = await Promise.all([
+    getCurrentUser(),
+    getUsers(),
+    getWorkspace(),
+  ]);
+  const isAdmin = user?.role === "ADMIN";
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
         <h2 className="text-xl font-semibold">Settings</h2>
         <p className="text-muted-foreground text-sm">
-          Manage your account and team.
+          Manage your account, workspace, and team.
         </p>
       </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Account</CardTitle>
@@ -27,6 +34,15 @@ export default async function SettingsPage() {
             email={user?.email ?? "-"}
             role={user?.role ?? "MANAGER"}
           />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Workspace</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <WorkspaceForm name={workspace?.name ?? "-"} isAdmin={isAdmin} />
         </CardContent>
       </Card>
 
@@ -43,7 +59,7 @@ export default async function SettingsPage() {
               role: u.role,
             }))}
             currentUserId={user?.id ?? ""}
-            isAdmin={user?.role === "ADMIN"}
+            isAdmin={isAdmin}
           />
         </CardContent>
       </Card>

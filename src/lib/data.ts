@@ -1,11 +1,27 @@
 import { prisma } from "@/lib/prisma";
+import { requireWorkspaceId } from "@/lib/auth";
+
+// Every function here self-scopes to the caller's workspace via
+// requireWorkspaceId(), so a page can never accidentally read another tenant's
+// data. Posts / accounts are reached through their Client's workspaceId.
+
+export async function getWorkspace() {
+  const workspaceId = await requireWorkspaceId();
+  return prisma.workspace.findUnique({ where: { id: workspaceId } });
+}
 
 export async function getUsers() {
-  return prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  const workspaceId = await requireWorkspaceId();
+  return prisma.user.findMany({
+    where: { workspaceId },
+    orderBy: { createdAt: "asc" },
+  });
 }
 
 export async function getClients() {
+  const workspaceId = await requireWorkspaceId();
   return prisma.client.findMany({
+    where: { workspaceId },
     orderBy: { name: "asc" },
     include: {
       accounts: true,
@@ -15,8 +31,9 @@ export async function getClients() {
 }
 
 export async function getClient(id: string) {
-  return prisma.client.findUnique({
-    where: { id },
+  const workspaceId = await requireWorkspaceId();
+  return prisma.client.findFirst({
+    where: { id, workspaceId },
     include: { accounts: true },
   });
 }
@@ -25,8 +42,10 @@ export async function getPosts(filter?: {
   clientId?: string;
   status?: string;
 }) {
+  const workspaceId = await requireWorkspaceId();
   return prisma.post.findMany({
     where: {
+      client: { workspaceId },
       ...(filter?.clientId ? { clientId: filter.clientId } : {}),
       ...(filter?.status ? { status: filter.status as never } : {}),
     },
@@ -44,8 +63,9 @@ export async function getPosts(filter?: {
 }
 
 export async function getPost(id: string) {
-  return prisma.post.findUnique({
-    where: { id },
+  const workspaceId = await requireWorkspaceId();
+  return prisma.post.findFirst({
+    where: { id, client: { workspaceId } },
     include: {
       client: true,
       media: true,
@@ -55,9 +75,16 @@ export async function getPost(id: string) {
 }
 
 export async function getDashboardStats(clientId?: string) {
+  const workspaceId = await requireWorkspaceId();
   const now = new Date();
   const soon = new Date(Date.now() + 7 * 86_400_000);
-  const scope = clientId ? { clientId } : {};
+
+  // Post scope: always the workspace, optionally narrowed to one client.
+  const postScope = {
+    client: { workspaceId },
+    ...(clientId ? { clientId } : {}),
+  };
+
   const [
     clients,
     scheduled,
@@ -70,34 +97,43 @@ export async function getDashboardStats(clientId?: string) {
     clientRows,
     grouped,
   ] = await Promise.all([
-    clientId ? 1 : prisma.client.count(),
-    prisma.post.count({ where: { status: "SCHEDULED", ...scope } }),
-    prisma.postHistory.count({ where: scope }),
+    clientId ? 1 : prisma.client.count({ where: { workspaceId } }),
+    prisma.post.count({ where: { status: "SCHEDULED", ...postScope } }),
+    prisma.postHistory.count({
+      where: { workspaceId, ...(clientId ? { clientId } : {}) },
+    }),
     prisma.postTarget.count({
-      where: { status: "FAILED", ...(clientId ? { post: { clientId } } : {}) },
+      where: { status: "FAILED", post: postScope },
     }),
     prisma.socialAccount.count({
-      where: { tokenExpires: { not: null, lte: soon }, ...scope },
+      where: {
+        tokenExpires: { not: null, lte: soon },
+        client: { workspaceId },
+        ...(clientId ? { clientId } : {}),
+      },
     }),
-    prisma.post.count({ where: { status: "DRAFT", ...scope } }),
+    prisma.post.count({ where: { status: "DRAFT", ...postScope } }),
     prisma.post.count({
-      where: { approval: { in: ["PENDING", "CHANGES_REQUESTED"] }, ...scope },
+      where: {
+        approval: { in: ["PENDING", "CHANGES_REQUESTED"] },
+        ...postScope,
+      },
     }),
     prisma.post.findMany({
-      where: { status: "SCHEDULED", scheduledAt: { gte: now }, ...scope },
+      where: { status: "SCHEDULED", scheduledAt: { gte: now }, ...postScope },
       orderBy: { scheduledAt: "asc" },
       take: 6,
       include: { client: true, targets: true },
     }),
     prisma.client.findMany({
-      where: clientId ? { id: clientId } : {},
+      where: { workspaceId, ...(clientId ? { id: clientId } : {}) },
       select: { id: true, name: true, color: true },
       orderBy: { name: "asc" },
       take: 6,
     }),
     prisma.post.groupBy({
       by: ["clientId"],
-      where: { status: "SCHEDULED", ...scope },
+      where: { status: "SCHEDULED", ...postScope },
       _count: { _all: true },
     }),
   ]);
@@ -127,8 +163,10 @@ export async function getCalendarPosts(
   clientId?: string,
   platform?: "LINKEDIN" | "INSTAGRAM",
 ) {
+  const workspaceId = await requireWorkspaceId();
   return prisma.post.findMany({
     where: {
+      client: { workspaceId },
       scheduledAt: { gte: from, lte: to },
       ...(clientId ? { clientId } : {}),
       ...(platform ? { targets: { some: { platform } } } : {}),

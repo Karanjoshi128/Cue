@@ -218,6 +218,8 @@ export function Composer({
             <Label className="label-caps">Client</Label>
             <Select
               value={clientId}
+              // Maps value -> label so the trigger shows the client name, not the id.
+              items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
               onValueChange={(v) => {
                 setClientId((v as string) ?? "");
                 setSelected([]);

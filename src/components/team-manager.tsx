@@ -34,6 +34,9 @@ interface Member {
   role: Role;
 }
 
+// value -> label so the Select trigger shows "Manager"/"Admin", not the raw enum.
+const ROLE_LABELS: Record<Role, string> = { MANAGER: "Manager", ADMIN: "Admin" };
+
 export function TeamManager({
   members,
   currentUserId,
@@ -81,7 +84,11 @@ export function TeamManager({
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && invite()}
           />
-          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+          <Select
+            value={role}
+            items={ROLE_LABELS}
+            onValueChange={(v) => setRole(v as Role)}
+          >
             <SelectTrigger className="sm:w-36">
               <SelectValue />
             </SelectTrigger>
@@ -114,6 +121,7 @@ export function TeamManager({
             {isAdmin ? (
               <Select
                 value={u.role}
+                items={ROLE_LABELS}
                 onValueChange={(v) =>
                   run(
                     () => updateMemberRole(u.id, v as "ADMIN" | "MANAGER"),

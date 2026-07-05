@@ -215,7 +215,7 @@ export function Composer({
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label>Client</Label>
+            <Label className="label-caps">Client</Label>
             <Select
               value={clientId}
               onValueChange={(v) => {
@@ -237,7 +237,7 @@ export function Composer({
           </div>
 
           <div className="space-y-2">
-            <Label>Publish to</Label>
+            <Label className="label-caps">Publish to</Label>
             {client && client.accounts.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {client.accounts.map((a) => {
@@ -272,7 +272,7 @@ export function Composer({
           </div>
 
           <div className="space-y-2">
-            <Label>Content</Label>
+            <Label className="label-caps">Content</Label>
             <Textarea
               value={body}
               onChange={(e) => setBody(e.target.value.slice(0, HARD_LIMIT))}
@@ -399,7 +399,7 @@ export function Composer({
           </div>
 
           <div className="space-y-2">
-            <Label>Schedule for</Label>
+            <Label className="label-caps">Schedule for</Label>
             <Input
               type="datetime-local"
               min={minDateTime}
@@ -433,7 +433,7 @@ export function Composer({
 
       {/* Preview */}
       <div className="space-y-3">
-        <Label className="text-muted-foreground">Preview</Label>
+        <Label className="label-caps">Preview</Label>
         <motion.div layout className="space-y-3">
           {selectedPlatforms.size === 0 ? (
             <LinkedInPreview

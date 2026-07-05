@@ -33,24 +33,33 @@ export default async function DashboardPage() {
   ].filter(Boolean) as { href: string; text: string; cta: string }[];
 
   const stats = [
-    { label: "Clients", value: clients, icon: Users, href: "/clients" },
+    {
+      label: "Clients",
+      value: clients,
+      icon: Users,
+      href: "/clients",
+      tint: "bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300",
+    },
     {
       label: "Scheduled",
       value: scheduled,
       icon: CalendarClock,
       href: "/queue?status=SCHEDULED",
+      tint: "bg-blue-100 text-blue-600 dark:bg-blue-950/60 dark:text-blue-300",
     },
     {
       label: "Published",
       value: published,
       icon: Send,
       href: "/queue?status=PUBLISHED",
+      tint: "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300",
     },
     {
       label: "Failed",
       value: failed,
       icon: AlertTriangle,
       href: "/queue?status=FAILED",
+      tint: "bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-300",
     },
   ];
 
@@ -77,7 +86,7 @@ export default async function DashboardPage() {
           <Link key={s.label} href={s.href} className="group">
             <Card className="transition-colors group-hover:border-primary/40">
               <CardContent className="flex items-center gap-4 py-5">
-                <div className="bg-accent text-muted-foreground rounded-lg p-2.5">
+                <div className={`rounded-lg p-2.5 ${s.tint}`}>
                   <s.icon className="size-5" />
                 </div>
                 <div>

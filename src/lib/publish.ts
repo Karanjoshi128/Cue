@@ -2,8 +2,33 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getAdapter } from "@/lib/platforms";
 import type { Post, PostTarget } from "@prisma/client";
+import type { PublishArticle, PublishPoll } from "@/lib/platforms/types";
 
 const MAX_ATTEMPTS = 3;
+
+// The link/poll columns are JSON — normalize them into typed publish inputs.
+function linkToArticle(link: unknown): PublishArticle | undefined {
+  if (!link || typeof link !== "object") return undefined;
+  const l = link as { url?: string; title?: string; description?: string };
+  return l.url
+    ? { source: l.url, title: l.title, description: l.description }
+    : undefined;
+}
+function jsonToPoll(poll: unknown): PublishPoll | undefined {
+  if (!poll || typeof poll !== "object") return undefined;
+  const p = poll as {
+    question?: string;
+    options?: string[];
+    duration?: PublishPoll["duration"];
+  };
+  return p.question && p.options?.length
+    ? {
+        question: p.question,
+        options: p.options,
+        duration: p.duration ?? "THREE_DAYS",
+      }
+    : undefined;
+}
 
 /**
  * Core publishing engine. Finds due targets, publishes each, records results,
@@ -45,7 +70,13 @@ export async function publishDueTargets(now = new Date()): Promise<{
       const adapter = getAdapter(target.platform);
       const result = await adapter.publish({
         body: target.bodyOverride ?? target.post.body,
-        media: target.post.media.map((m) => ({ type: m.type, url: m.url })),
+        media: target.post.media.map((m) => ({
+          type: m.type,
+          url: m.url,
+          title: m.title ?? undefined,
+        })),
+        article: linkToArticle(target.post.link),
+        poll: jsonToPoll(target.post.poll),
         accessToken: decrypt(target.account.accessToken),
         externalId: target.account.externalId,
       });

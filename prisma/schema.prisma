@@ -83,6 +83,9 @@ model Post {
   scheduledAt DateTime?
   status      PostStatus     @default(DRAFT)
   approval    ApprovalStatus @default(APPROVED)
+  // LinkedIn-only content types (null = a normal text/media post):
+  link        Json? // { url, title, description } — link-preview post
+  poll        Json? // { question, options: string[], duration } — poll post
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -138,12 +141,14 @@ model MediaAsset {
   type       MediaType
   url        String // public Cloudflare R2 URL
   storageKey String // R2 object key (deleted on cleanup)
+  title      String? // display filename, used for DOCUMENT posts
   createdAt  DateTime  @default(now())
 }
 
 enum MediaType {
   IMAGE
   VIDEO
+  DOCUMENT
 }
 
 model Comment {

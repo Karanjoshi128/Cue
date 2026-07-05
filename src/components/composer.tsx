@@ -38,7 +38,12 @@ interface ClientLite {
   color: string | null;
   accounts: Account[];
 }
-type MediaItem = { type: "IMAGE" | "VIDEO"; url: string; storageKey: string };
+type MediaItem = {
+  type: "IMAGE" | "VIDEO" | "DOCUMENT";
+  url: string;
+  storageKey: string;
+  title?: string;
+};
 
 export interface ComposerInitial {
   id: string;

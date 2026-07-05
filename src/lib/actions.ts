@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
@@ -129,14 +130,35 @@ export async function disconnectAccount(accountId: string) {
 // Posts
 // ---------------------------------------------------------------------------
 
+// LinkedIn-only content types.
+const linkSchema = z.object({
+  url: z.string().url(),
+  title: z.string().max(200).optional(),
+  description: z.string().max(300).optional(),
+});
+const pollSchema = z.object({
+  question: z.string().min(1).max(140),
+  options: z.array(z.string().min(1).max(30)).min(2).max(4),
+  duration: z.enum(["ONE_DAY", "THREE_DAYS", "SEVEN_DAYS", "FOURTEEN_DAYS"]),
+});
+
 const postSchema = z.object({
   clientId: z.string().min(1),
   body: z.string().min(1).max(3000),
   accountIds: z.array(z.string()).min(1),
   scheduledAt: z.string().datetime().nullable().optional(),
   media: z
-    .array(z.object({ type: z.enum(["IMAGE", "VIDEO"]), url: z.string(), storageKey: z.string() }))
+    .array(
+      z.object({
+        type: z.enum(["IMAGE", "VIDEO", "DOCUMENT"]),
+        url: z.string(),
+        storageKey: z.string(),
+        title: z.string().optional(),
+      }),
+    )
     .optional(),
+  link: linkSchema.nullable().optional(),
+  poll: pollSchema.nullable().optional(),
   // Per-account caption overrides; anything not listed uses `body`.
   overrides: z
     .array(z.object({ accountId: z.string(), body: z.string().max(3000) }))
@@ -187,6 +209,8 @@ export async function savePost(input: z.infer<typeof postSchema>) {
       authorId: user.id,
       body: data.body,
       status,
+      link: data.link ?? undefined,
+      poll: data.poll ?? undefined,
       scheduledAt:
         data.action === "schedule" && data.scheduledAt
           ? new Date(data.scheduledAt)
@@ -194,7 +218,14 @@ export async function savePost(input: z.infer<typeof postSchema>) {
             ? new Date()
             : null,
       media: data.media?.length
-        ? { create: data.media.map((m) => ({ type: m.type, url: m.url, storageKey: m.storageKey })) }
+        ? {
+            create: data.media.map((m) => ({
+              type: m.type,
+              url: m.url,
+              storageKey: m.storageKey,
+              title: m.title,
+            })),
+          }
         : undefined,
       targets: { create: buildTargets(accounts, data) },
     },
@@ -248,6 +279,9 @@ export async function updatePost(
         clientId: data.clientId,
         body: data.body,
         status,
+        // Provided on every edit, so DbNull clears a removed link/poll.
+        link: data.link ?? Prisma.DbNull,
+        poll: data.poll ?? Prisma.DbNull,
         scheduledAt:
           data.action === "schedule" && data.scheduledAt
             ? new Date(data.scheduledAt)
@@ -260,6 +294,7 @@ export async function updatePost(
                 type: m.type,
                 url: m.url,
                 storageKey: m.storageKey,
+                title: m.title,
               })),
             }
           : undefined,

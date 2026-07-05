@@ -24,7 +24,20 @@ export async function POST(req: NextRequest) {
   const bytes = Buffer.from(await file.arrayBuffer());
 
   const url = await uploadToR2(key, bytes, file.type || "application/octet-stream");
-  const type = file.type.startsWith("video") ? "VIDEO" : "IMAGE";
+  const mime = file.type;
+  const isDoc =
+    mime === "application/pdf" ||
+    mime.includes("presentation") ||
+    mime.includes("msword") ||
+    mime.includes("officedocument") ||
+    /\.(pdf|ppt|pptx|doc|docx)$/i.test(file.name);
+  const type = isDoc ? "DOCUMENT" : mime.startsWith("video") ? "VIDEO" : "IMAGE";
 
-  return NextResponse.json({ url, storageKey: key, type });
+  return NextResponse.json({
+    url,
+    storageKey: key,
+    type,
+    // Original filename — LinkedIn requires a title for document posts.
+    title: isDoc ? file.name : undefined,
+  });
 }

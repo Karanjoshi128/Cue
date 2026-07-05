@@ -7,7 +7,9 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  FileText,
   Heart,
+  Link2,
   Maximize2,
   MessageCircle,
   MoreHorizontal,
@@ -24,11 +26,103 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
+interface PreviewLink {
+  url: string;
+  title?: string;
+  description?: string;
+}
+interface PreviewPoll {
+  question: string;
+  options: string[];
+  duration?: string;
+}
 interface PreviewProps {
   name: string;
   color?: string | null;
   body: string;
   images?: string[];
+  documentTitle?: string;
+  link?: PreviewLink;
+  poll?: PreviewPoll;
+}
+
+const DURATION_LABEL: Record<string, string> = {
+  ONE_DAY: "1 day left",
+  THREE_DAYS: "3 days left",
+  SEVEN_DAYS: "1 week left",
+  FOURTEEN_DAYS: "2 weeks left",
+};
+
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** LinkedIn "document" post — a swipeable carousel shown here as a doc tile. */
+function DocumentBlock({ title }: { title: string }) {
+  return (
+    <div className="bg-muted/40 flex items-center gap-3 border-y px-4 py-6">
+      <div className="bg-background grid size-12 shrink-0 place-items-center rounded border">
+        <FileText className="size-6 text-[#0a66c2]" />
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium">{title || "Document"}</div>
+        <div className="text-muted-foreground text-xs">
+          Document · swipe to view
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** LinkedIn link-preview card (thumbnail placeholder + title/description/domain). */
+function LinkBlock({ link }: { link: PreviewLink }) {
+  return (
+    <div className="border-y">
+      <div className="bg-muted text-muted-foreground grid aspect-[1.91/1] w-full place-items-center">
+        <Link2 className="size-8" />
+      </div>
+      <div className="bg-muted/40 space-y-0.5 px-4 py-2.5">
+        <div className="truncate text-sm font-semibold">
+          {link.title || domainOf(link.url) || "Link preview"}
+        </div>
+        {link.description && (
+          <div className="text-muted-foreground line-clamp-2 text-xs">
+            {link.description}
+          </div>
+        )}
+        <div className="text-muted-foreground text-xs">
+          {domainOf(link.url)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** LinkedIn poll — question + option bars + footer. */
+function PollBlock({ poll }: { poll: PreviewPoll }) {
+  const options = poll.options.length ? poll.options : ["", ""];
+  return (
+    <div className="space-y-2 px-3 pb-3">
+      <div className="text-sm font-semibold">
+        {poll.question || "Your poll question"}
+      </div>
+      {options.map((o, i) => (
+        <div
+          key={i}
+          className="rounded-full border border-[#0a66c2] py-1.5 text-center text-sm font-semibold text-[#0a66c2]"
+        >
+          {o || `Option ${i + 1}`}
+        </div>
+      ))}
+      <div className="text-muted-foreground text-xs">
+        0 votes · {poll.duration ? (DURATION_LABEL[poll.duration] ?? "") : ""}
+      </div>
+    </div>
+  );
 }
 
 /** Image carousel with LinkedIn/Instagram-style prev/next slider buttons. */
@@ -185,7 +279,15 @@ function ActionButton({
 }
 
 /** Approximates how a post looks in the LinkedIn feed. */
-export function LinkedInPreview({ name, color, body, images }: PreviewProps) {
+export function LinkedInPreview({
+  name,
+  color,
+  body,
+  images,
+  documentTitle,
+  link,
+  poll,
+}: PreviewProps) {
   return (
     <div className="bg-card overflow-hidden rounded-xl border">
       <div className="flex items-start gap-2 p-3">
@@ -207,7 +309,15 @@ export function LinkedInPreview({ name, color, body, images }: PreviewProps) {
         <PostText body={body} limit={200} moreLabel="see more" lessLabel="see less" />
       </p>
 
-      {images && images.length > 0 && <ImageCarousel images={images} />}
+      {poll ? (
+        <PollBlock poll={poll} />
+      ) : link ? (
+        <LinkBlock link={link} />
+      ) : documentTitle ? (
+        <DocumentBlock title={documentTitle} />
+      ) : images && images.length > 0 ? (
+        <ImageCarousel images={images} />
+      ) : null}
 
       <div className="text-muted-foreground flex items-center justify-around border-t px-1 py-0.5">
         <ActionButton

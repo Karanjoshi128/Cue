@@ -328,6 +328,20 @@ export function Composer({
     contentType === "media"
       ? media.filter((m) => m.type === "IMAGE").map((m) => m.url)
       : [];
+  const previewDoc =
+    contentType === "document" && doc ? (doc.title ?? "Document") : undefined;
+  const previewLink =
+    contentType === "link" && link.url.trim()
+      ? { url: link.url, title: link.title, description: link.description }
+      : undefined;
+  const previewPoll =
+    contentType === "poll"
+      ? {
+          question: poll.question,
+          options: poll.options,
+          duration: poll.duration,
+        }
+      : undefined;
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_360px]">
@@ -794,6 +808,9 @@ export function Composer({
               color={client?.color}
               body={body}
               images={previewImages}
+              documentTitle={previewDoc}
+              link={previewLink}
+              poll={previewPoll}
             />
           ) : (
             [...selectedPlatforms].map((platform) => {
@@ -809,6 +826,9 @@ export function Composer({
                   color={client?.color}
                   body={b}
                   images={previewImages}
+                  documentTitle={previewDoc}
+                  link={previewLink}
+                  poll={previewPoll}
                 />
               );
             })

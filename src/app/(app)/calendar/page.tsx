@@ -12,9 +12,11 @@ import {
   isSameMonth,
   isSameDay,
 } from "date-fns";
+import type { Platform } from "@prisma/client";
 import { getCalendarPosts } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
-import { ClientDot, StatusBadge } from "@/components/post-bits";
+import { ClientDot, PlatformIcon, StatusBadge } from "@/components/post-bits";
+import { LinkedinIcon, InstagramIcon } from "@/components/platform-icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
@@ -23,10 +25,12 @@ export const dynamic = "force-dynamic";
 
 type CalPost = Awaited<ReturnType<typeof getCalendarPosts>>[number];
 type View = "month" | "week" | "list";
+type PlatformFilter = "LINKEDIN" | "INSTAGRAM" | undefined;
 
 /** A single post chip inside a day cell. */
 function PostChip({ p }: { p: CalPost }) {
   const editable = p.status === "DRAFT" || p.status === "SCHEDULED";
+  const platforms = [...new Set(p.targets.map((t) => t.platform))] as Platform[];
   return (
     <Link
       href={editable ? `/composer?edit=${p.id}` : "/queue"}
@@ -34,6 +38,11 @@ function PostChip({ p }: { p: CalPost }) {
       style={{ borderLeftColor: p.client.color ?? "var(--primary)" }}
       title={p.body}
     >
+      <span className="text-muted-foreground flex shrink-0 items-center gap-0.5">
+        {platforms.map((pl) => (
+          <PlatformIcon key={pl} platform={pl} className="size-3" />
+        ))}
+      </span>
       {p.scheduledAt && (
         <span className="text-muted-foreground hidden shrink-0 tabular-nums sm:inline">
           {format(p.scheduledAt, "h:mm a")}
@@ -144,11 +153,20 @@ function Grid({
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string; m?: string; w?: string }>;
+  searchParams: Promise<{
+    view?: string;
+    m?: string;
+    w?: string;
+    platform?: string;
+  }>;
 }) {
-  const { view: viewParam, m, w } = await searchParams;
+  const { view: viewParam, m, w, platform: platformParam } = await searchParams;
   const view: View =
     viewParam === "week" || viewParam === "list" ? viewParam : "month";
+  const platform: PlatformFilter =
+    platformParam === "LINKEDIN" || platformParam === "INSTAGRAM"
+      ? platformParam
+      : undefined;
   const clientId = await getScopeClientId();
 
   // ---- Month view ----
@@ -158,10 +176,15 @@ export default async function CalendarPage({
     const gridStart = startOfWeek(startOfMonth(base));
     const gridEnd = endOfWeek(endOfMonth(base));
     const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-    const posts = await getCalendarPosts(gridStart, gridEnd, clientId);
+    const posts = await getCalendarPosts(gridStart, gridEnd, clientId, platform);
 
     return (
-      <Shell view="month" title={format(base, "MMMM yyyy")} offset={offset}>
+      <Shell
+        view="month"
+        title={format(base, "MMMM yyyy")}
+        offset={offset}
+        platform={platform}
+      >
         <Grid days={days} posts={posts} base={base} maxVisible={3} minH="min-h-28" />
       </Shell>
     );
@@ -174,13 +197,14 @@ export default async function CalendarPage({
     const gridStart = startOfWeek(base);
     const gridEnd = endOfWeek(base);
     const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-    const posts = await getCalendarPosts(gridStart, gridEnd, clientId);
+    const posts = await getCalendarPosts(gridStart, gridEnd, clientId, platform);
 
     return (
       <Shell
         view="week"
         title={`${format(gridStart, "MMM d")} – ${format(gridEnd, "MMM d, yyyy")}`}
         offset={offset}
+        platform={platform}
       >
         <Grid days={days} posts={posts} base={base} maxVisible={8} minH="min-h-64" />
       </Shell>
@@ -190,7 +214,7 @@ export default async function CalendarPage({
   // ---- List view ----
   const from = startOfDay(new Date());
   const to = addMonths(from, 6);
-  const posts = await getCalendarPosts(from, to, clientId);
+  const posts = await getCalendarPosts(from, to, clientId, platform);
   const byDay = new Map<string, CalPost[]>();
   for (const p of posts) {
     if (!p.scheduledAt) continue;
@@ -199,7 +223,7 @@ export default async function CalendarPage({
   }
 
   return (
-    <Shell view="list" title="Upcoming">
+    <Shell view="list" title="Upcoming" platform={platform}>
       {posts.length === 0 ? (
         <div className="text-muted-foreground rounded-lg border py-12 text-center text-sm">
           Nothing scheduled in the next 6 months.
@@ -250,33 +274,67 @@ function Shell({
   view,
   title,
   offset,
+  platform,
   children,
 }: {
   view: View;
   title: string;
   offset?: number;
+  platform?: PlatformFilter;
   children: React.ReactNode;
 }) {
   const offsetParam = view === "week" ? "w" : "m";
+  const platformQS = platform ? `&platform=${platform}` : "";
   const stepLink = (delta: number) =>
-    `/calendar?view=${view}&${offsetParam}=${(offset ?? 0) + delta}`;
+    `/calendar?view=${view}&${offsetParam}=${(offset ?? 0) + delta}${platformQS}`;
+  // Switch platform while keeping the current view + period.
+  const platformLink = (p: PlatformFilter) =>
+    `/calendar?view=${view}&${offsetParam}=${offset ?? 0}${p ? `&platform=${p}` : ""}`;
 
   const views: { key: View; label: string }[] = [
     { key: "month", label: "Month" },
     { key: "week", label: "Week" },
     { key: "list", label: "List" },
   ];
+  const platforms: { key: PlatformFilter; label: string; Icon?: typeof LinkedinIcon }[] = [
+    { key: undefined, label: "All" },
+    { key: "LINKEDIN", label: "LinkedIn", Icon: LinkedinIcon },
+    { key: "INSTAGRAM", label: "Instagram", Icon: InstagramIcon },
+  ];
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold">{title}</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Platform filter */}
+          <div className="bg-muted flex rounded-lg p-0.5">
+            {platforms.map((p) => {
+              const active = platform === p.key;
+              return (
+                <Link
+                  key={p.label}
+                  href={platformLink(p.key)}
+                  aria-label={p.label}
+                  aria-pressed={active}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                    active
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {p.Icon ? <p.Icon className="size-3.5" /> : p.label}
+                </Link>
+              );
+            })}
+          </div>
+
           <div className="bg-muted flex rounded-lg p-0.5">
             {views.map((v) => (
               <Link
                 key={v.key}
-                href={`/calendar?view=${v.key}`}
+                href={`/calendar?view=${v.key}${platformQS}`}
                 className={cn(
                   "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                   view === v.key
@@ -300,7 +358,7 @@ function Shell({
                 <ChevronLeft className="size-4" />
               </Button>
               <Button
-                render={<Link href={`/calendar?view=${view}`} />}
+                render={<Link href={`/calendar?view=${view}${platformQS}`} />}
                 variant="ghost"
                 size="sm"
               >

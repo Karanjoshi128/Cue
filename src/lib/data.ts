@@ -125,11 +125,13 @@ export async function getCalendarPosts(
   from: Date,
   to: Date,
   clientId?: string,
+  platform?: "LINKEDIN" | "INSTAGRAM",
 ) {
   return prisma.post.findMany({
     where: {
       scheduledAt: { gte: from, lte: to },
       ...(clientId ? { clientId } : {}),
+      ...(platform ? { targets: { some: { platform } } } : {}),
     },
     orderBy: { scheduledAt: "asc" },
     include: { client: true, targets: true },

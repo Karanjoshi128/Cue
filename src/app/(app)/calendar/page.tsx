@@ -79,9 +79,9 @@ function DayCell({
         </Link>
         <span
           className={cn(
-            "text-xs",
+            "grid size-5 place-items-center rounded-full text-xs",
             isSameDay(day, new Date())
-              ? "text-primary font-bold"
+              ? "bg-primary text-primary-foreground font-semibold"
               : "text-muted-foreground",
           )}
         >

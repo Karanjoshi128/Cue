@@ -226,6 +226,11 @@ export function QueueList({
               >
                 <Card>
                   <CardContent className="space-y-3 py-4">
+                    {post.targets.some((t) => t.error) && (
+                      <p className="text-destructive bg-destructive/10 border-destructive/15 -mx-6 -mt-4 mb-1 border-b px-6 py-2 text-xs">
+                        {post.targets.find((t) => t.error)?.error}
+                      </p>
+                    )}
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2">
                         <ClientDot color={post.clientColor} />
@@ -316,13 +321,7 @@ export function QueueList({
                       </div>
                     </div>
 
-                    {post.targets.some((t) => t.error) && (
-                      <p className="text-destructive bg-destructive/10 rounded-md px-2 py-1 text-xs">
-                        {post.targets.find((t) => t.error)?.error}
-                      </p>
-                    )}
-
-                    <div className="flex items-center gap-1 border-t pt-2">
+                    <div className="-mx-6 mt-1 flex flex-wrap items-center gap-1 border-t bg-muted/40 px-6 py-2.5">
                       {(post.status === "DRAFT" ||
                         post.status === "SCHEDULED") &&
                         (post.approval === "APPROVED" ? (
@@ -378,7 +377,7 @@ export function QueueList({
                     </div>
 
                     {openComments.has(post.id) && (
-                      <div className="space-y-3 border-t pt-3">
+                      <div className="-mx-6 -mt-3 space-y-3 border-t bg-muted/20 px-6 py-3">
                         {post.comments.length === 0 ? (
                           <p className="text-muted-foreground text-xs">
                             No comments yet.

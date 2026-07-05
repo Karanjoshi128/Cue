@@ -37,8 +37,6 @@ import { PlatformIcon, ClientDot } from "@/components/post-bits";
 import { LinkedinIcon, InstagramIcon } from "@/components/platform-icons";
 import {
   Plus,
-  CheckCircle2,
-  AlertTriangle,
   MoreVertical,
   Pencil,
   Trash2,
@@ -212,15 +210,14 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                               {a.displayName}
                             </span>
                             <span
-                              className={`ml-auto flex items-center gap-1 text-xs ${
-                                health.ok ? "text-mint" : "text-amber-600 dark:text-amber-400"
+                              className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${
+                                health.ok
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : health.label === "Expired"
+                                    ? "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300"
+                                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
                               }`}
                             >
-                              {health.ok ? (
-                                <CheckCircle2 className="size-4" />
-                              ) : (
-                                <AlertTriangle className="size-4" />
-                              )}
                               {health.label}
                             </span>
                             <button

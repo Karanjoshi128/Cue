@@ -201,16 +201,24 @@ export function Composer({
     );
   }
 
-  async function upload(file: File, as: "media" | "doc") {
+  async function uploadFiles(files: File[], as: "media" | "doc") {
+    if (files.length === 0) return;
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Upload failed");
-      const data = (await res.json()) as MediaItem;
-      if (as === "doc") setDoc(data);
-      else setMedia((m) => [...m, data]);
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        if (!res.ok) {
+          throw new Error((await res.json()).error ?? "Upload failed");
+        }
+        const data = (await res.json()) as MediaItem;
+        if (as === "doc") {
+          setDoc(data);
+          break; // one document per post
+        }
+        setMedia((m) => [...m, data]);
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -316,10 +324,10 @@ export function Composer({
   }
 
   const busy = pending || uploading;
-  const previewImg =
-    contentType === "media" && media[0]?.type === "IMAGE"
-      ? media[0].url
-      : undefined;
+  const previewImages =
+    contentType === "media"
+      ? media.filter((m) => m.type === "IMAGE").map((m) => m.url)
+      : [];
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_360px]">
@@ -526,10 +534,10 @@ export function Composer({
                   ref={fileRef}
                   type="file"
                   accept="image/*,video/*"
+                  multiple
                   hidden
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) upload(f, "media");
+                    uploadFiles(Array.from(e.target.files ?? []), "media");
                     e.target.value = "";
                   }}
                 />
@@ -583,8 +591,7 @@ export function Composer({
                     accept="application/pdf,.pdf,.ppt,.pptx,.doc,.docx"
                     hidden
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) upload(f, "doc");
+                      uploadFiles(Array.from(e.target.files ?? []), "doc");
                       e.target.value = "";
                     }}
                   />
@@ -786,7 +793,7 @@ export function Composer({
               name={client?.name ?? "Client"}
               color={client?.color}
               body={body}
-              imageUrl={previewImg}
+              images={previewImages}
             />
           ) : (
             [...selectedPlatforms].map((platform) => {
@@ -801,7 +808,7 @@ export function Composer({
                   name={client?.name ?? "Client"}
                   color={client?.color}
                   body={b}
-                  imageUrl={previewImg}
+                  images={previewImages}
                 />
               );
             })

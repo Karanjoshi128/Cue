@@ -5,6 +5,8 @@ import Image from "next/image";
 import type { Platform } from "@prisma/client";
 import {
   Bookmark,
+  ChevronLeft,
+  ChevronRight,
   Heart,
   Maximize2,
   MessageCircle,
@@ -26,7 +28,50 @@ interface PreviewProps {
   name: string;
   color?: string | null;
   body: string;
-  imageUrl?: string;
+  images?: string[];
+}
+
+/** Image carousel with LinkedIn/Instagram-style prev/next slider buttons. */
+function ImageCarousel({ images, square }: { images: string[]; square?: boolean }) {
+  const [i, setI] = useState(0);
+  const n = images.length;
+  const idx = Math.min(i, n - 1);
+  const go = (d: number) => setI((n + idx + d) % n);
+
+  return (
+    <div className="relative">
+      <Image
+        src={images[idx]}
+        alt=""
+        width={480}
+        height={square ? 480 : 300}
+        className={cn("w-full object-cover", square ? "aspect-square" : "max-h-96")}
+      />
+      {n > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Previous image"
+            onClick={() => go(-1)}
+            className="bg-background/90 text-foreground hover:bg-background absolute top-1/2 left-2 grid size-8 -translate-y-1/2 place-items-center rounded-full shadow-md transition-colors"
+          >
+            <ChevronLeft className="size-5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next image"
+            onClick={() => go(1)}
+            className="bg-background/90 text-foreground hover:bg-background absolute top-1/2 right-2 grid size-8 -translate-y-1/2 place-items-center rounded-full shadow-md transition-colors"
+          >
+            <ChevronRight className="size-5" />
+          </button>
+          <div className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
+            {idx + 1}/{n}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function Avatar({
@@ -140,7 +185,7 @@ function ActionButton({
 }
 
 /** Approximates how a post looks in the LinkedIn feed. */
-export function LinkedInPreview({ name, color, body, imageUrl }: PreviewProps) {
+export function LinkedInPreview({ name, color, body, images }: PreviewProps) {
   return (
     <div className="bg-card overflow-hidden rounded-xl border">
       <div className="flex items-start gap-2 p-3">
@@ -162,15 +207,7 @@ export function LinkedInPreview({ name, color, body, imageUrl }: PreviewProps) {
         <PostText body={body} limit={200} moreLabel="see more" lessLabel="see less" />
       </p>
 
-      {imageUrl && (
-        <Image
-          src={imageUrl}
-          alt=""
-          width={480}
-          height={300}
-          className="max-h-96 w-full object-cover"
-        />
-      )}
+      {images && images.length > 0 && <ImageCarousel images={images} />}
 
       <div className="text-muted-foreground flex items-center justify-around border-t px-1 py-0.5">
         <ActionButton
@@ -199,7 +236,7 @@ export function LinkedInPreview({ name, color, body, imageUrl }: PreviewProps) {
 }
 
 /** Approximates how a post looks in the Instagram feed. */
-export function InstagramPreview({ name, color, body, imageUrl }: PreviewProps) {
+export function InstagramPreview({ name, color, body, images }: PreviewProps) {
   const username = name.toLowerCase().replace(/\s+/g, "_");
   return (
     <div className="bg-card overflow-hidden rounded-xl border">
@@ -212,14 +249,8 @@ export function InstagramPreview({ name, color, body, imageUrl }: PreviewProps) 
         <MoreHorizontal className="text-foreground ml-auto size-5" />
       </div>
 
-      {imageUrl ? (
-        <Image
-          src={imageUrl}
-          alt=""
-          width={480}
-          height={480}
-          className="aspect-square w-full object-cover"
-        />
+      {images && images.length > 0 ? (
+        <ImageCarousel images={images} square />
       ) : (
         <div className="bg-muted text-muted-foreground grid aspect-square w-full place-items-center text-xs">
           Instagram needs an image

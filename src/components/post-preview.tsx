@@ -4,9 +4,11 @@ import { useState } from "react";
 import Image from "next/image";
 import type { Platform } from "@prisma/client";
 import {
+  Bookmark,
   Heart,
   Maximize2,
   MessageCircle,
+  MoreHorizontal,
   Repeat2,
   Send,
   ThumbsUp,
@@ -18,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 interface PreviewProps {
   name: string;
@@ -26,60 +29,170 @@ interface PreviewProps {
   imageUrl?: string;
 }
 
-function Avatar({ name, color }: { name: string; color?: string | null }) {
-  return (
+function Avatar({
+  name,
+  color,
+  ring,
+  size = "size-11",
+}: {
+  name: string;
+  color?: string | null;
+  ring?: boolean;
+  size?: string;
+}) {
+  const inner = (
     <span
-      className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+      className={cn(
+        "grid shrink-0 place-items-center rounded-full text-sm font-semibold text-white",
+        size,
+      )}
       style={{ backgroundColor: color ?? "#2A6FF2" }}
     >
       {name.slice(0, 2).toUpperCase()}
     </span>
   );
+  if (!ring) return inner;
+  return (
+    <span className="grid shrink-0 place-items-center rounded-full bg-linear-to-tr from-[#feda75] via-[#d62976] to-[#4f5bd5] p-0.5">
+      <span className="bg-card rounded-full p-0.5">{inner}</span>
+    </span>
+  );
 }
 
-const placeholder = (
-  <span className="text-muted-foreground">
-    Your post preview shows up here.
-  </span>
-);
+/** Truncates long copy with a see more / see less toggle, like the real feeds. */
+function PostText({
+  body,
+  limit,
+  moreLabel,
+  lessLabel,
+  usernamePrefix,
+}: {
+  body: string;
+  limit: number;
+  moreLabel: string;
+  lessLabel: string;
+  usernamePrefix?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const text = body.trim();
+
+  if (!text) {
+    return (
+      <span className="text-muted-foreground">
+        Your post preview shows up here.
+      </span>
+    );
+  }
+
+  const isLong = text.length > limit;
+  const shown = expanded || !isLong ? text : text.slice(0, limit).trimEnd();
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {usernamePrefix && (
+        <span className="font-semibold">{usernamePrefix} </span>
+      )}
+      {shown}
+      {isLong && !expanded && "… "}
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-muted-foreground font-medium hover:underline"
+        >
+          {expanded ? lessLabel : moreLabel}
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** A tappable action that fills its icon + color when active, like a Like button. */
+function ActionButton({
+  icon: Icon,
+  label,
+  activeClass,
+  iconSize = "size-5",
+}: {
+  icon: typeof ThumbsUp;
+  label?: string;
+  activeClass: string;
+  iconSize?: string;
+}) {
+  const [on, setOn] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => setOn((v) => !v)}
+      aria-pressed={on}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md transition-colors",
+        label ? "px-2 py-1.5 text-sm font-medium" : "p-1",
+        on
+          ? activeClass
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <Icon className={iconSize} fill={on ? "currentColor" : "none"} />
+      {label && <span>{label}</span>}
+    </button>
+  );
+}
 
 /** Approximates how a post looks in the LinkedIn feed. */
 export function LinkedInPreview({ name, color, body, imageUrl }: PreviewProps) {
   return (
-    <div className="bg-card overflow-hidden rounded-xl border shadow-sm">
-      <div className="flex items-center gap-2 p-3">
+    <div className="bg-card overflow-hidden rounded-xl border">
+      <div className="flex items-start gap-2 p-3">
         <Avatar name={name} color={color} />
-        <div className="min-w-0">
-          <div className="flex items-center gap-1 text-sm font-semibold">
-            {name}
-            <LinkedinIcon className="size-3.5 text-[#0a66c2]" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1 text-sm font-semibold leading-tight">
+            <span className="truncate">{name}</span>
+            <LinkedinIcon className="size-3.5 shrink-0 text-[#0a66c2]" />
+          </div>
+          <div className="text-muted-foreground truncate text-xs">
+            Social media
           </div>
           <div className="text-muted-foreground text-xs">Now · 🌐</div>
         </div>
+        <MoreHorizontal className="text-muted-foreground size-5 shrink-0" />
       </div>
-      <p className="px-3 pb-3 text-sm whitespace-pre-wrap">{body || placeholder}</p>
+
+      <p className="px-3 pb-3 text-sm">
+        <PostText body={body} limit={200} moreLabel="see more" lessLabel="see less" />
+      </p>
+
       {imageUrl && (
         <Image
           src={imageUrl}
           alt=""
-          width={360}
-          height={220}
-          className="max-h-60 w-full object-cover"
+          width={480}
+          height={300}
+          className="max-h-96 w-full object-cover"
         />
       )}
-      <div className="text-muted-foreground flex items-center justify-around border-t px-2 py-1.5 text-xs">
-        <span className="flex items-center gap-1">
-          <ThumbsUp className="size-4" /> Like
-        </span>
-        <span className="flex items-center gap-1">
-          <MessageCircle className="size-4" /> Comment
-        </span>
-        <span className="flex items-center gap-1">
-          <Repeat2 className="size-4" /> Repost
-        </span>
-        <span className="flex items-center gap-1">
-          <Send className="size-4" /> Send
-        </span>
+
+      <div className="text-muted-foreground flex items-center justify-around border-t px-1 py-0.5">
+        <ActionButton
+          icon={ThumbsUp}
+          label="Like"
+          activeClass="text-[#0a66c2] dark:text-[#5aa2ec]"
+        />
+        <ActionButton
+          icon={MessageCircle}
+          label="Comment"
+          activeClass="text-[#0a66c2] dark:text-[#5aa2ec]"
+        />
+        <ActionButton
+          icon={Repeat2}
+          label="Repost"
+          activeClass="text-emerald-600 dark:text-emerald-400"
+        />
+        <ActionButton
+          icon={Send}
+          label="Send"
+          activeClass="text-[#0a66c2] dark:text-[#5aa2ec]"
+        />
       </div>
     </div>
   );
@@ -87,21 +200,24 @@ export function LinkedInPreview({ name, color, body, imageUrl }: PreviewProps) {
 
 /** Approximates how a post looks in the Instagram feed. */
 export function InstagramPreview({ name, color, body, imageUrl }: PreviewProps) {
+  const username = name.toLowerCase().replace(/\s+/g, "_");
   return (
-    <div className="bg-card overflow-hidden rounded-xl border shadow-sm">
-      <div className="flex items-center gap-2 p-3">
-        <Avatar name={name} color={color} />
+    <div className="bg-card overflow-hidden rounded-xl border">
+      <div className="flex items-center gap-2.5 p-3">
+        <Avatar name={name} color={color} ring size="size-8" />
         <div className="flex items-center gap-1 text-sm font-semibold">
-          {name.toLowerCase().replace(/\s+/g, "_")}
+          {username}
           <InstagramIcon className="size-3.5 text-[#e1306c]" />
         </div>
+        <MoreHorizontal className="text-foreground ml-auto size-5" />
       </div>
+
       {imageUrl ? (
         <Image
           src={imageUrl}
           alt=""
-          width={360}
-          height={360}
+          width={480}
+          height={480}
           className="aspect-square w-full object-cover"
         />
       ) : (
@@ -109,16 +225,34 @@ export function InstagramPreview({ name, color, body, imageUrl }: PreviewProps) 
           Instagram needs an image
         </div>
       )}
-      <div className="flex items-center gap-4 px-3 pt-2.5 text-foreground">
-        <Heart className="size-5" />
-        <MessageCircle className="size-5" />
-        <Send className="size-5" />
+
+      <div className="text-foreground flex items-center gap-1 px-2 pt-2">
+        <ActionButton
+          icon={Heart}
+          activeClass="text-[#ed4956]"
+          iconSize="size-6"
+        />
+        <ActionButton
+          icon={MessageCircle}
+          activeClass="text-foreground"
+          iconSize="size-6"
+        />
+        <ActionButton icon={Send} activeClass="text-foreground" iconSize="size-6" />
+        <ActionButton
+          icon={Bookmark}
+          activeClass="text-foreground"
+          iconSize="size-6"
+        />
       </div>
-      <p className="px-3 pb-3 pt-2 text-sm">
-        <span className="font-semibold">
-          {name.toLowerCase().replace(/\s+/g, "_")}
-        </span>{" "}
-        <span className="whitespace-pre-wrap">{body || placeholder}</span>
+
+      <p className="px-3 pt-1 pb-3 text-sm">
+        <PostText
+          body={body}
+          limit={125}
+          moreLabel="more"
+          lessLabel="less"
+          usernamePrefix={username}
+        />
       </p>
     </div>
   );
@@ -126,7 +260,7 @@ export function InstagramPreview({ name, color, body, imageUrl }: PreviewProps) 
 
 /**
  * Renders a platform preview with a maximize button (top-right) that opens the
- * same preview larger in a modal, so it's readable outside the narrow rail.
+ * same preview larger in a scrollable modal.
  */
 export function ExpandablePreview({
   platform,
@@ -149,7 +283,7 @@ export function ExpandablePreview({
       <Preview {...props} />
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{label} preview</DialogTitle>
           </DialogHeader>

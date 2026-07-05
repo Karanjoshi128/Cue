@@ -50,6 +50,8 @@ export default async function ComposerPage({
             .filter((t) => t.bodyOverride)
             .map((t) => [t.accountId, t.bodyOverride as string]),
         ),
+        link: (post.link as ComposerInitial["link"]) ?? null,
+        poll: (post.poll as ComposerInitial["poll"]) ?? null,
       };
     }
   }

@@ -1,20 +1,22 @@
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
-import { getCurrentUser } from "@/lib/auth";
+import { NoAccess } from "@/components/no-access";
+import { getAuth } from "@/lib/auth";
 import { getClients } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
-import { isSupabaseConfigured } from "@/lib/supabase/server";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  const { user, email } = await getAuth();
 
-  // When auth is configured, an unauthenticated visitor is sent to login.
-  if (!user && isSupabaseConfigured()) {
+  if (!user) {
+    // Signed in but not a workspace member → show the no-access screen.
+    if (email) return <NoAccess email={email} />;
+    // Not signed in → send to login.
     redirect("/login");
   }
 
@@ -28,7 +30,7 @@ export default async function AppLayout({
       <AppSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppTopbar
-          userEmail={user?.email ?? "manager@cue.app"}
+          userEmail={user.email}
           clients={clients.map((c) => ({
             id: c.id,
             name: c.name,

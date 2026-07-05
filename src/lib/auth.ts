@@ -2,48 +2,60 @@ import { prisma } from "@/lib/prisma";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import type { User } from "@prisma/client";
 
+export interface AuthState {
+  /** The workspace member, if the signed-in email belongs to one. */
+  user: User | null;
+  /** The authenticated email — set even when the person is not (yet) a member. */
+  email: string | null;
+}
+
 /**
- * Returns the current team member.
+ * Resolves who is making the request.
  *
- * - When Supabase Auth is configured, reads the session and upserts a matching
- *   User row (internal team, so any authenticated email is a MANAGER by default;
- *   the first user becomes ADMIN).
- * - In local dev without Supabase env, falls back to the seeded default admin so
- *   the app is fully usable before credentials are wired.
+ * Access is membership-gated: anyone can authenticate with Supabase, but only
+ * emails that have been added to the workspace (invited, or the very first
+ * bootstrap admin) become a `User`. An authenticated-but-not-invited email
+ * gets `{ user: null, email }` so the app can show a "no access" screen rather
+ * than silently creating a member.
  */
-export async function getCurrentUser(): Promise<User | null> {
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user?.email) {
-      // Dev-only convenience: no Supabase session locally → use the seeded admin
-      // so the app is browsable without email magic-links. Never in production.
-      if (process.env.NODE_ENV !== "production") {
-        return prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
-      }
-      return null;
-    }
-
-    const existing = await prisma.user.findUnique({
-      where: { email: user.email },
-    });
-    if (existing) return existing;
-
-    const count = await prisma.user.count();
-    return prisma.user.create({
-      data: {
-        email: user.email,
-        name: user.user_metadata?.name ?? user.email.split("@")[0],
-        role: count === 0 ? "ADMIN" : "MANAGER",
-      },
-    });
+export async function getAuth(): Promise<AuthState> {
+  if (!isSupabaseConfigured()) {
+    // No auth provider configured (bare local bootstrap): fall back to the
+    // first user so the app is usable before Supabase is wired.
+    return {
+      user: await prisma.user.findFirst({ orderBy: { createdAt: "asc" } }),
+      email: null,
+    };
   }
 
-  // Dev fallback — first user in the DB (created by the seed).
-  return prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const email = user?.email ?? null;
+  if (!email) return { user: null, email: null };
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return { user: existing, email };
+
+  // Bootstrap: the very first person to sign in owns the workspace as ADMIN.
+  if ((await prisma.user.count()) === 0) {
+    const created = await prisma.user.create({
+      data: {
+        email,
+        name: user?.user_metadata?.name ?? email.split("@")[0],
+        role: "ADMIN",
+      },
+    });
+    return { user: created, email };
+  }
+
+  // Authenticated but not a member of the workspace → no access.
+  return { user: null, email };
+}
+
+export async function getCurrentUser(): Promise<User | null> {
+  return (await getAuth()).user;
 }
 
 export async function requireUser(): Promise<User> {

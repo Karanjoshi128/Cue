@@ -269,17 +269,26 @@ export function ExpandablePreview({
   const [open, setOpen] = useState(false);
   const Preview = platform === "INSTAGRAM" ? InstagramPreview : LinkedInPreview;
   const label = platform === "INSTAGRAM" ? "Instagram" : "LinkedIn";
+  const Icon = platform === "INSTAGRAM" ? InstagramIcon : LinkedinIcon;
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={`Expand ${label} preview`}
-        className="bg-background/70 text-muted-foreground hover:text-foreground absolute top-2 right-2 z-10 rounded-md border p-1 backdrop-blur transition-colors"
-      >
-        <Maximize2 className="size-3.5" />
-      </button>
+    <div className="space-y-1.5">
+      {/* Header row keeps the expand control off the card so it can't collide
+          with the mimicked "..." menu, and labels which network this is. */}
+      <div className="flex items-center justify-between px-0.5">
+        <span className="label-caps flex items-center gap-1.5">
+          <Icon className="size-3.5" />
+          {label}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={`Expand ${label} preview`}
+          className="text-muted-foreground hover:text-foreground hover:bg-muted rounded-md p-1 transition-colors"
+        >
+          <Maximize2 className="size-4" />
+        </button>
+      </div>
       <Preview {...props} />
 
       <Dialog open={open} onOpenChange={setOpen}>

@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
   title: {
-    default: "Cue — Social scheduling for every client",
+    default: "Cue - Social scheduling for every client",
     template: "%s · Cue",
   },
   description:

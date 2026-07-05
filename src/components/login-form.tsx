@@ -35,23 +35,35 @@ export function LoginForm() {
 
   if (sent) {
     return (
-      <p className="text-sm">
-        Check <strong>{email}</strong> for a magic sign-in link.
-      </p>
+      <div className="bg-muted/60 rounded-xl border p-4 text-center">
+        <p className="text-base">
+          Check <strong>{email}</strong> for a magic sign-in link.
+        </p>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <Input
-        type="email"
-        aria-label="Email address"
-        placeholder="you@agency.com"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && send()}
-      />
-      <Button onClick={send} disabled={loading} className="w-full">
+    <div className="space-y-4 text-left">
+      <div className="space-y-1.5">
+        <label htmlFor="email" className="label-caps">
+          Work email
+        </label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="you@agency.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && send()}
+          className="h-11 md:text-base"
+        />
+      </div>
+      <Button
+        onClick={send}
+        disabled={loading}
+        className="h-11 w-full text-base font-medium"
+      >
         {loading ? "Sending…" : "Send magic link"}
       </Button>
     </div>

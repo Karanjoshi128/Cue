@@ -36,7 +36,9 @@ export const instagramAdapter: PlatformAdapter = {
           method: "POST",
         });
         if (!r.ok) {
-          throw new Error(`IG carousel item failed (${r.status}): ${await r.text()}`);
+          throw new Error(
+            `IG carousel item failed (${r.status}): ${await r.text()}`,
+          );
         }
         childIds.push(((await r.json()) as { id: string }).id);
       }
@@ -53,7 +55,9 @@ export const instagramAdapter: PlatformAdapter = {
         { method: "POST" },
       );
       if (!parentRes.ok) {
-        throw new Error(`IG carousel failed (${parentRes.status}): ${await parentRes.text()}`);
+        throw new Error(
+          `IG carousel failed (${parentRes.status}): ${await parentRes.text()}`,
+        );
       }
       creationId = ((await parentRes.json()) as { id: string }).id;
     } else {
@@ -73,14 +77,16 @@ export const instagramAdapter: PlatformAdapter = {
         { method: "POST" },
       );
       if (!containerRes.ok) {
-        throw new Error(`IG container failed (${containerRes.status}): ${await containerRes.text()}`);
+        throw new Error(
+          `IG container failed (${containerRes.status}): ${await containerRes.text()}`,
+        );
       }
       creationId = ((await containerRes.json()) as { id: string }).id;
     }
 
     // Wait for the container to be FINISHED before publishing. Required for
     //    video, but images can also race ahead (IG fetches the remote image
-    //    asynchronously) and return code 9007 "media is not ready" — so poll
+    //    asynchronously) and return code 9007 "media is not ready" - so poll
     //    for both. waitForContainer returns as soon as status is FINISHED.
     await waitForContainer(creationId, accessToken);
 
@@ -93,7 +99,9 @@ export const instagramAdapter: PlatformAdapter = {
       { method: "POST" },
     );
     if (!publishRes.ok) {
-      throw new Error(`IG publish failed (${publishRes.status}): ${await publishRes.text()}`);
+      throw new Error(
+        `IG publish failed (${publishRes.status}): ${await publishRes.text()}`,
+      );
     }
     const { id: mediaId } = (await publishRes.json()) as { id: string };
 
@@ -104,7 +112,8 @@ export const instagramAdapter: PlatformAdapter = {
         `${GRAPH}/${mediaId}?fields=permalink&access_token=${accessToken}`,
       );
       if (permRes.ok) {
-        permalink = ((await permRes.json()) as { permalink?: string }).permalink;
+        permalink = ((await permRes.json()) as { permalink?: string })
+          .permalink;
       }
     } catch {
       // ignore

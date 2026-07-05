@@ -1,6 +1,6 @@
 import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
 
-// YYYYMM LinkedIn-Version header. 202506 is sunset — keep this current.
+// YYYYMM LinkedIn-Version header. 202506 is sunset - keep this current.
 const LINKEDIN_VERSION = "202606";
 const REST = "https://api.linkedin.com/rest";
 
@@ -38,7 +38,7 @@ export const linkedinAdapter: PlatformAdapter = {
         },
       };
     } else if (article) {
-      // LinkedIn does NOT scrape the URL — we pass title/description ourselves.
+      // LinkedIn does NOT scrape the URL - we pass title/description ourselves.
       content = {
         article: {
           source: article.source,
@@ -57,7 +57,12 @@ export const linkedinAdapter: PlatformAdapter = {
       );
       content = { multiImage: { images: urns.map((id) => ({ id })) } };
     } else if (images.length === 1) {
-      const id = await uploadAsset("images", externalId, accessToken, images[0].url);
+      const id = await uploadAsset(
+        "images",
+        externalId,
+        accessToken,
+        images[0].url,
+      );
       content = { media: { id } };
     }
 
@@ -81,7 +86,9 @@ export const linkedinAdapter: PlatformAdapter = {
       body: JSON.stringify(postBody),
     });
     if (!res.ok) {
-      throw new Error(`LinkedIn publish failed (${res.status}): ${await res.text()}`);
+      throw new Error(
+        `LinkedIn publish failed (${res.status}): ${await res.text()}`,
+      );
     }
 
     const postId =
@@ -140,7 +147,7 @@ async function uploadDocument(
 ): Promise<string> {
   const urn = await uploadAsset("documents", ownerUrn, accessToken, fileUrl);
 
-  // Documents process asynchronously — poll until AVAILABLE before posting.
+  // Documents process asynchronously - poll until AVAILABLE before posting.
   for (let i = 0; i < 12; i++) {
     const res = await fetch(`${REST}/documents/${encodeURIComponent(urn)}`, {
       headers: jsonHeaders(accessToken),

@@ -5,7 +5,7 @@ import type { User } from "@prisma/client";
 export interface AuthState {
   /** The workspace member, if the signed-in email belongs to one. */
   user: User | null;
-  /** The authenticated email — set even when the person is not (yet) a member. */
+  /** The authenticated email - set even when the person is not (yet) a member. */
   email: string | null;
 }
 

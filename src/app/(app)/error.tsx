@@ -24,7 +24,7 @@ export default function Error({
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Something went wrong</h2>
         <p className="text-muted-foreground text-sm">
-          This page hit an unexpected error. You can try again — if it keeps
+          This page hit an unexpected error. You can try again - if it keeps
           happening, the details are in the logs.
         </p>
       </div>

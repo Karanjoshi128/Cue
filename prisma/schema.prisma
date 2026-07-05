@@ -1,4 +1,4 @@
-// Cue — Prisma schema
+// Cue - Prisma schema
 // Multi-client social media scheduler (LinkedIn + Instagram MVP)
 
 generator client {
@@ -47,8 +47,8 @@ model Client {
 }
 
 model SocialAccount {
-  id           String   @id @default(cuid())
-  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id           String    @id @default(cuid())
+  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId     String
   platform     Platform
   displayName  String
@@ -57,7 +57,7 @@ model SocialAccount {
   refreshToken String? // encrypted at rest
   tokenExpires DateTime?
   scopes       String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   targets PostTarget[]
 
@@ -84,8 +84,8 @@ model Post {
   status      PostStatus     @default(DRAFT)
   approval    ApprovalStatus @default(APPROVED)
   // LinkedIn-only content types (null = a normal text/media post):
-  link        Json? // { url, title, description } — link-preview post
-  poll        Json? // { question, options: string[], duration } — poll post
+  link        Json? // { url, title, description } - link-preview post
+  poll        Json? // { question, options: string[], duration } - poll post
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -162,11 +162,11 @@ model Comment {
 }
 
 // ---------------------------------------------------------------------------
-// Permanent lightweight history — survives the 7-day purge (no FK to Post)
+// Permanent lightweight history - survives the 7-day purge (no FK to Post)
 // ---------------------------------------------------------------------------
 
 model PostHistory {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   clientId       String
   clientName     String
   platform       Platform

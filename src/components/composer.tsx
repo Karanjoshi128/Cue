@@ -73,7 +73,7 @@ export interface ComposerInitial {
   poll: PollData | null;
 }
 
-// Per-platform caption limits — the effective cap is the smallest of the
+// Per-platform caption limits - the effective cap is the smallest of the
 // platforms the post targets.
 const PLATFORM_LIMITS: Record<Platform, number> = {
   LINKEDIN: 3000,
@@ -113,7 +113,8 @@ export function Composer({
   const docRef = useRef<HTMLInputElement>(null);
 
   const initialDoc = initial?.media.find((m) => m.type === "DOCUMENT") ?? null;
-  const initialMedia = initial?.media.filter((m) => m.type !== "DOCUMENT") ?? [];
+  const initialMedia =
+    initial?.media.filter((m) => m.type !== "DOCUMENT") ?? [];
   const initialType: ContentType = initial?.poll
     ? "poll"
     : initial?.link
@@ -139,7 +140,11 @@ export function Composer({
     description: initial?.link?.description ?? "",
   });
   const [poll, setPoll] = useState<PollData>(
-    initial?.poll ?? { question: "", options: ["", ""], duration: "THREE_DAYS" },
+    initial?.poll ?? {
+      question: "",
+      options: ["", ""],
+      duration: "THREE_DAYS",
+    },
   );
   const [uploading, setUploading] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, string>>(
@@ -183,12 +188,11 @@ export function Composer({
   function changeType(t: ContentType) {
     setContentType(t);
     if (t !== "media") {
-      // Deselect Instagram — these content types are LinkedIn-only.
+      // Deselect Instagram - these content types are LinkedIn-only.
       setSelected((s) =>
         s.filter(
           (id) =>
-            client?.accounts.find((a) => a.id === id)?.platform !==
-            "INSTAGRAM",
+            client?.accounts.find((a) => a.id === id)?.platform !== "INSTAGRAM",
         ),
       );
       setPerPlatform(false);
@@ -232,7 +236,8 @@ export function Composer({
 
   function submit(action: "draft" | "schedule" | "now") {
     if (!clientId) return toast.error("Pick a client");
-    if (selected.length === 0) return toast.error("Select at least one account");
+    if (selected.length === 0)
+      return toast.error("Select at least one account");
     if (!body.trim()) return toast.error("Write something first");
 
     for (const a of selectedAccounts) {
@@ -439,7 +444,10 @@ export function Composer({
                           : "border-border text-muted-foreground hover:bg-accent",
                       )}
                     >
-                      <PlatformIcon platform={a.platform} className="shrink-0" />
+                      <PlatformIcon
+                        platform={a.platform}
+                        className="shrink-0"
+                      />
                       <span className="max-w-40 truncate">{a.displayName}</span>
                     </button>
                   );
@@ -491,7 +499,10 @@ export function Composer({
 
           {contentType === "media" && selectedPlatforms.size > 1 && (
             <div className="flex items-center justify-between">
-              <Label htmlFor="per-platform-switch" className="cursor-pointer text-sm">
+              <Label
+                htmlFor="per-platform-switch"
+                className="cursor-pointer text-sm"
+              >
                 Customize caption per platform
               </Label>
               <Switch
@@ -653,7 +664,7 @@ export function Composer({
                 </>
               )}
               <p className="text-muted-foreground text-xs">
-                PDF, PPT or DOC — LinkedIn renders it as a swipeable carousel.
+                PDF, PPT or DOC - LinkedIn renders it as a swipeable carousel.
               </p>
             </div>
           )}
@@ -666,7 +677,9 @@ export function Composer({
                 <Input
                   type="url"
                   value={link.url}
-                  onChange={(e) => setLink((l) => ({ ...l, url: e.target.value }))}
+                  onChange={(e) =>
+                    setLink((l) => ({ ...l, url: e.target.value }))
+                  }
                   placeholder="https://example.com/article"
                 />
               </div>
@@ -692,7 +705,7 @@ export function Composer({
                 />
               </div>
               <p className="text-muted-foreground text-xs">
-                LinkedIn won&apos;t fetch these automatically — set them to
+                LinkedIn won&apos;t fetch these automatically - set them to
                 control the preview card.
               </p>
             </div>

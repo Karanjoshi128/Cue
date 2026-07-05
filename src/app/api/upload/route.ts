@@ -23,7 +23,11 @@ export async function POST(req: NextRequest) {
   const key = `posts/${crypto.randomUUID()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
-  const url = await uploadToR2(key, bytes, file.type || "application/octet-stream");
+  const url = await uploadToR2(
+    key,
+    bytes,
+    file.type || "application/octet-stream",
+  );
   const mime = file.type;
   const isDoc =
     mime === "application/pdf" ||
@@ -31,13 +35,17 @@ export async function POST(req: NextRequest) {
     mime.includes("msword") ||
     mime.includes("officedocument") ||
     /\.(pdf|ppt|pptx|doc|docx)$/i.test(file.name);
-  const type = isDoc ? "DOCUMENT" : mime.startsWith("video") ? "VIDEO" : "IMAGE";
+  const type = isDoc
+    ? "DOCUMENT"
+    : mime.startsWith("video")
+      ? "VIDEO"
+      : "IMAGE";
 
   return NextResponse.json({
     url,
     storageKey: key,
     type,
-    // Original filename — LinkedIn requires a title for document posts.
+    // Original filename - LinkedIn requires a title for document posts.
     title: isDoc ? file.name : undefined,
   });
 }

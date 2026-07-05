@@ -6,7 +6,7 @@ import type { PublishArticle, PublishPoll } from "@/lib/platforms/types";
 
 const MAX_ATTEMPTS = 3;
 
-// The link/poll columns are JSON — normalize them into typed publish inputs.
+// The link/poll columns are JSON - normalize them into typed publish inputs.
 function linkToArticle(link: unknown): PublishArticle | undefined {
   if (!link || typeof link !== "object") return undefined;
   const l = link as { url?: string; title?: string; description?: string };
@@ -154,7 +154,7 @@ async function rollUpPostStatus(postId: string): Promise<void> {
 
 /** Publish a single post immediately ("Post now"). */
 export async function publishPostNow(postId: string): Promise<void> {
-  // Never bypass the approval gate — otherwise the post flips to PUBLISHING but
+  // Never bypass the approval gate - otherwise the post flips to PUBLISHING but
   // publishDueTargets skips it, leaving it stuck with no recovery in the UI.
   const post = await prisma.post.findUnique({
     where: { id: postId },
@@ -162,7 +162,7 @@ export async function publishPostNow(postId: string): Promise<void> {
   });
   if (post && post.approval !== "APPROVED") {
     throw new Error(
-      "This post is awaiting approval — approve it before publishing.",
+      "This post is awaiting approval - approve it before publishing.",
     );
   }
 

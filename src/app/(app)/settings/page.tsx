@@ -24,7 +24,7 @@ export default async function SettingsPage() {
         <CardContent>
           <ProfileForm
             name={user?.name ?? ""}
-            email={user?.email ?? "—"}
+            email={user?.email ?? "-"}
             role={user?.role ?? "MANAGER"}
           />
         </CardContent>

@@ -20,17 +20,17 @@ export function AppSidebar() {
         </Link>
       </div>
 
-      <div className="px-3">
+      <div className="mt-3 px-3">
         <Button
           render={<Link href="/composer" />}
-          className="w-full justify-start gap-2"
+          className="h-10 w-full justify-start gap-2 px-3 text-sm"
         >
           <Plus className="size-4" />
           New post
         </Button>
       </div>
 
-      <nav className="mt-4 flex flex-1 flex-col gap-1 px-3">
+      <nav className="mt-5 flex flex-1 flex-col gap-1 px-3">
         {navItems.map((item) => {
           const active =
             item.href === "/"

@@ -45,10 +45,7 @@ export async function inviteMember(input: z.infer<typeof inviteSchema>) {
   revalidatePath("/settings");
 }
 
-export async function updateMemberRole(
-  id: string,
-  role: "ADMIN" | "MANAGER",
-) {
+export async function updateMemberRole(id: string, role: "ADMIN" | "MANAGER") {
   const me = await requireAdmin();
   if (id === me.id && role !== "ADMIN") {
     throw new Error("You can't remove your own admin access.");
@@ -79,7 +76,7 @@ export async function removeMember(id: string) {
   }
   if (target._count.posts > 0) {
     throw new Error(
-      "This member has authored posts — reassign or delete them first.",
+      "This member has authored posts - reassign or delete them first.",
     );
   }
   await prisma.user.delete({ where: { id } });
@@ -142,32 +139,34 @@ const pollSchema = z.object({
   duration: z.enum(["ONE_DAY", "THREE_DAYS", "SEVEN_DAYS", "FOURTEEN_DAYS"]),
 });
 
-const postSchema = z.object({
-  clientId: z.string().min(1),
-  body: z.string().min(1).max(3000),
-  accountIds: z.array(z.string()).min(1),
-  scheduledAt: z.string().datetime().nullable().optional(),
-  media: z
-    .array(
-      z.object({
-        type: z.enum(["IMAGE", "VIDEO", "DOCUMENT"]),
-        url: z.string(),
-        storageKey: z.string(),
-        title: z.string().optional(),
-      }),
-    )
-    .optional(),
-  link: linkSchema.nullable().optional(),
-  poll: pollSchema.nullable().optional(),
-  // Per-account caption overrides; anything not listed uses `body`.
-  overrides: z
-    .array(z.object({ accountId: z.string(), body: z.string().max(3000) }))
-    .optional(),
-  action: z.enum(["draft", "schedule", "now"]),
-}).refine((d) => d.action !== "schedule" || Boolean(d.scheduledAt), {
-  message: "A scheduled post needs a date and time.",
-  path: ["scheduledAt"],
-});
+const postSchema = z
+  .object({
+    clientId: z.string().min(1),
+    body: z.string().min(1).max(3000),
+    accountIds: z.array(z.string()).min(1),
+    scheduledAt: z.string().datetime().nullable().optional(),
+    media: z
+      .array(
+        z.object({
+          type: z.enum(["IMAGE", "VIDEO", "DOCUMENT"]),
+          url: z.string(),
+          storageKey: z.string(),
+          title: z.string().optional(),
+        }),
+      )
+      .optional(),
+    link: linkSchema.nullable().optional(),
+    poll: pollSchema.nullable().optional(),
+    // Per-account caption overrides; anything not listed uses `body`.
+    overrides: z
+      .array(z.object({ accountId: z.string(), body: z.string().max(3000) }))
+      .optional(),
+    action: z.enum(["draft", "schedule", "now"]),
+  })
+  .refine((d) => d.action !== "schedule" || Boolean(d.scheduledAt), {
+    message: "A scheduled post needs a date and time.",
+    path: ["scheduledAt"],
+  });
 
 /** Builds the per-target rows, applying a caption override where one differs. */
 function buildTargets(
@@ -272,7 +271,7 @@ export async function updatePost(
         ? "PUBLISHING"
         : "SCHEDULED";
 
-  // Replace media + targets wholesale — safe because nothing has published yet.
+  // Replace media + targets wholesale - safe because nothing has published yet.
   await prisma.$transaction([
     prisma.mediaAsset.deleteMany({ where: { postId: id } }),
     prisma.postTarget.deleteMany({ where: { postId: id } }),

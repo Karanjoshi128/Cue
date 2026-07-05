@@ -17,7 +17,8 @@ async function main() {
   const imgRes = await fetch(
     "https://upload.wikimedia.org/wikipedia/commons/3/3a/Cat03.jpg",
   );
-  if (!imgRes.ok) throw new Error(`Sample image fetch failed: ${imgRes.status}`);
+  if (!imgRes.ok)
+    throw new Error(`Sample image fetch failed: ${imgRes.status}`);
   const bytes = Buffer.from(await imgRes.arrayBuffer());
 
   console.log("2/3  Uploading to Cloudflare R2…");
@@ -27,7 +28,7 @@ async function main() {
 
   console.log("3/3  Publishing to Instagram (image hosted on R2)…");
   const result = await instagramAdapter.publish({
-    body: "Cue media test ✅ — image served from Cloudflare R2.",
+    body: "Cue media test ✅ - image served from Cloudflare R2.",
     media: [{ type: "IMAGE", url }],
     accessToken: token,
     externalId: accountId,

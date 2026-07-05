@@ -30,7 +30,9 @@ type PlatformFilter = "LINKEDIN" | "INSTAGRAM" | undefined;
 /** A single post chip inside a day cell. */
 function PostChip({ p }: { p: CalPost }) {
   const editable = p.status === "DRAFT" || p.status === "SCHEDULED";
-  const platforms = [...new Set(p.targets.map((t) => t.platform))] as Platform[];
+  const platforms = [
+    ...new Set(p.targets.map((t) => t.platform)),
+  ] as Platform[];
   return (
     <Link
       href={editable ? `/composer?edit=${p.id}` : "/queue"}
@@ -176,7 +178,12 @@ export default async function CalendarPage({
     const gridStart = startOfWeek(startOfMonth(base));
     const gridEnd = endOfWeek(endOfMonth(base));
     const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-    const posts = await getCalendarPosts(gridStart, gridEnd, clientId, platform);
+    const posts = await getCalendarPosts(
+      gridStart,
+      gridEnd,
+      clientId,
+      platform,
+    );
 
     return (
       <Shell
@@ -185,7 +192,13 @@ export default async function CalendarPage({
         offset={offset}
         platform={platform}
       >
-        <Grid days={days} posts={posts} base={base} maxVisible={3} minH="min-h-28" />
+        <Grid
+          days={days}
+          posts={posts}
+          base={base}
+          maxVisible={3}
+          minH="min-h-28"
+        />
       </Shell>
     );
   }
@@ -197,7 +210,12 @@ export default async function CalendarPage({
     const gridStart = startOfWeek(base);
     const gridEnd = endOfWeek(base);
     const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
-    const posts = await getCalendarPosts(gridStart, gridEnd, clientId, platform);
+    const posts = await getCalendarPosts(
+      gridStart,
+      gridEnd,
+      clientId,
+      platform,
+    );
 
     return (
       <Shell
@@ -206,7 +224,13 @@ export default async function CalendarPage({
         offset={offset}
         platform={platform}
       >
-        <Grid days={days} posts={posts} base={base} maxVisible={8} minH="min-h-64" />
+        <Grid
+          days={days}
+          posts={posts}
+          base={base}
+          maxVisible={8}
+          minH="min-h-64"
+        />
       </Shell>
     );
   }
@@ -246,7 +270,9 @@ export default async function CalendarPage({
                         className="hover:bg-accent flex items-center gap-3 px-3 py-2.5 text-sm transition-colors"
                       >
                         <span className="text-muted-foreground w-16 shrink-0 tabular-nums text-xs">
-                          {p.scheduledAt ? format(p.scheduledAt, "h:mm a") : "—"}
+                          {p.scheduledAt
+                            ? format(p.scheduledAt, "h:mm a")
+                            : "-"}
                         </span>
                         <ClientDot color={p.client.color} />
                         <span className="w-28 shrink-0 truncate font-medium">
@@ -296,7 +322,11 @@ function Shell({
     { key: "week", label: "Week" },
     { key: "list", label: "List" },
   ];
-  const platforms: { key: PlatformFilter; label: string; Icon?: typeof LinkedinIcon }[] = [
+  const platforms: {
+    key: PlatformFilter;
+    label: string;
+    Icon?: typeof LinkedinIcon;
+  }[] = [
     { key: undefined, label: "All" },
     { key: "LINKEDIN", label: "LinkedIn", Icon: LinkedinIcon },
     { key: "INSTAGRAM", label: "Instagram", Icon: InstagramIcon },
@@ -353,7 +383,9 @@ function Shell({
                 render={<Link href={stepLink(-1)} />}
                 variant="ghost"
                 size="icon"
-                aria-label={view === "week" ? "Previous week" : "Previous month"}
+                aria-label={
+                  view === "week" ? "Previous week" : "Previous month"
+                }
               >
                 <ChevronLeft className="size-4" />
               </Button>

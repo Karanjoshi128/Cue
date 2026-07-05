@@ -1,12 +1,7 @@
 import Link from "next/link";
 import { format, isToday, isTomorrow } from "date-fns";
 import type { Platform } from "@prisma/client";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getDashboardStats } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
@@ -135,7 +130,11 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button render={<Link href="/calendar" />} variant="outline" size="sm">
+          <Button
+            render={<Link href="/calendar" />}
+            variant="outline"
+            size="sm"
+          >
             <CalendarDays className="size-4" /> Calendar
           </Button>
           <Button render={<Link href="/composer" />} size="sm">
@@ -214,7 +213,7 @@ export default async function DashboardPage() {
                           ))}
                         </span>
                         <span className="text-muted-foreground hidden w-40 shrink-0 text-right text-xs md:block">
-                          {post.scheduledAt ? whenLabel(post.scheduledAt) : "—"}
+                          {post.scheduledAt ? whenLabel(post.scheduledAt) : "-"}
                         </span>
                       </Link>
                     </li>

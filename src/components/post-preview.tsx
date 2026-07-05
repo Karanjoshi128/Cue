@@ -48,7 +48,7 @@ interface PreviewProps {
   poll?: PreviewPoll;
 }
 
-/** Video / Reel placeholder — shows the first frame and is playable. */
+/** Video / Reel placeholder - shows the first frame and is playable. */
 function VideoBlock({ url, square }: { url: string; square?: boolean }) {
   return (
     <video
@@ -85,7 +85,9 @@ function domainOf(url: string): string {
  * swipeable doc carousel); falls back to a file tile for non-PDF documents.
  */
 function DocumentBlock({ title, url }: { title: string; url?: string }) {
-  const isPdf = url ? /\.pdf(\?|$)/i.test(url) || title.toLowerCase().endsWith(".pdf") : false;
+  const isPdf = url
+    ? /\.pdf(\?|$)/i.test(url) || title.toLowerCase().endsWith(".pdf")
+    : false;
 
   if (url && isPdf) {
     return (
@@ -109,7 +111,9 @@ function DocumentBlock({ title, url }: { title: string; url?: string }) {
         <FileText className="size-6 text-[#0a66c2]" />
       </div>
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium">{title || "Document"}</div>
+        <div className="truncate text-sm font-medium">
+          {title || "Document"}
+        </div>
         <div className="text-muted-foreground text-xs">
           Document · swipe to view
         </div>
@@ -142,7 +146,7 @@ function LinkBlock({ link }: { link: PreviewLink }) {
   );
 }
 
-/** LinkedIn poll — question + option bars + footer. */
+/** LinkedIn poll - question + option bars + footer. */
 function PollBlock({ poll }: { poll: PreviewPoll }) {
   const options = poll.options.length ? poll.options : ["", ""];
   return (
@@ -166,7 +170,13 @@ function PollBlock({ poll }: { poll: PreviewPoll }) {
 }
 
 /** Image carousel with LinkedIn/Instagram-style prev/next slider buttons. */
-function ImageCarousel({ images, square }: { images: string[]; square?: boolean }) {
+function ImageCarousel({
+  images,
+  square,
+}: {
+  images: string[];
+  square?: boolean;
+}) {
   const [i, setI] = useState(0);
   const n = images.length;
   const idx = Math.min(i, n - 1);
@@ -179,7 +189,10 @@ function ImageCarousel({ images, square }: { images: string[]; square?: boolean 
         alt=""
         width={480}
         height={square ? 480 : 300}
-        className={cn("w-full object-cover", square ? "aspect-square" : "max-h-96")}
+        className={cn(
+          "w-full object-cover",
+          square ? "aspect-square" : "max-h-96",
+        )}
       />
       {n > 1 && (
         <>
@@ -348,7 +361,12 @@ export function LinkedInPreview({
       </div>
 
       <p className="px-3 pb-3 text-sm">
-        <PostText body={body} limit={200} moreLabel="see more" lessLabel="see less" />
+        <PostText
+          body={body}
+          limit={200}
+          moreLabel="see more"
+          lessLabel="see less"
+        />
       </p>
 
       {poll ? (
@@ -430,7 +448,11 @@ export function InstagramPreview({
           activeClass="text-foreground"
           iconSize="size-6"
         />
-        <ActionButton icon={Send} activeClass="text-foreground" iconSize="size-6" />
+        <ActionButton
+          icon={Send}
+          activeClass="text-foreground"
+          iconSize="size-6"
+        />
         <ActionButton
           icon={Bookmark}
           activeClass="text-foreground"

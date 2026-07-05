@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 async function main() {
   const userCount = await prisma.user.count();
   if (userCount > 0) {
-    console.log(`Seed skipped — ${userCount} user(s) already exist.`);
+    console.log(`Seed skipped - ${userCount} user(s) already exist.`);
     return;
   }
 

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { PlatformIcon } from "@/components/post-bits";
-import { LinkedInPreview, InstagramPreview } from "@/components/post-preview";
+import { ExpandablePreview } from "@/components/post-preview";
 import { cn } from "@/lib/utils";
 import { ImagePlus, Loader2, X, Send, CalendarClock, Save } from "lucide-react";
 
@@ -438,7 +438,8 @@ export function Composer({
         <Label className="label-caps">Preview</Label>
         <motion.div layout className="space-y-3">
           {selectedPlatforms.size === 0 ? (
-            <LinkedInPreview
+            <ExpandablePreview
+              platform="LINKEDIN"
               name={client?.name ?? "Client"}
               color={client?.color}
               body={body}
@@ -452,16 +453,15 @@ export function Composer({
               const b = acct ? bodyFor(acct.id) : body;
               const img =
                 media[0]?.type === "IMAGE" ? media[0].url : undefined;
-              const props = {
-                name: client?.name ?? "Client",
-                color: client?.color,
-                body: b,
-                imageUrl: img,
-              };
-              return platform === "LINKEDIN" ? (
-                <LinkedInPreview key={platform} {...props} />
-              ) : (
-                <InstagramPreview key={platform} {...props} />
+              return (
+                <ExpandablePreview
+                  key={platform}
+                  platform={platform}
+                  name={client?.name ?? "Client"}
+                  color={client?.color}
+                  body={b}
+                  imageUrl={img}
+                />
               );
             })
           )}

@@ -1,7 +1,23 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import type { Platform } from "@prisma/client";
-import { Heart, MessageCircle, Repeat2, Send, ThumbsUp } from "lucide-react";
+import {
+  Heart,
+  Maximize2,
+  MessageCircle,
+  Repeat2,
+  Send,
+  ThumbsUp,
+} from "lucide-react";
 import { LinkedinIcon, InstagramIcon } from "@/components/platform-icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface PreviewProps {
   name: string;
@@ -108,17 +124,38 @@ export function InstagramPreview({ name, color, body, imageUrl }: PreviewProps) 
   );
 }
 
-export function PostPreview({
-  platforms,
+/**
+ * Renders a platform preview with a maximize button (top-right) that opens the
+ * same preview larger in a modal, so it's readable outside the narrow rail.
+ */
+export function ExpandablePreview({
+  platform,
   ...props
-}: PreviewProps & { platforms: Platform[] }) {
-  if (platforms.length === 0) {
-    return <LinkedInPreview {...props} />;
-  }
+}: PreviewProps & { platform: Platform }) {
+  const [open, setOpen] = useState(false);
+  const Preview = platform === "INSTAGRAM" ? InstagramPreview : LinkedInPreview;
+  const label = platform === "INSTAGRAM" ? "Instagram" : "LinkedIn";
+
   return (
-    <div className="space-y-3">
-      {platforms.includes("LINKEDIN") && <LinkedInPreview {...props} />}
-      {platforms.includes("INSTAGRAM") && <InstagramPreview {...props} />}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`Expand ${label} preview`}
+        className="bg-background/70 text-muted-foreground hover:text-foreground absolute top-2 right-2 z-10 rounded-md border p-1 backdrop-blur transition-colors"
+      >
+        <Maximize2 className="size-3.5" />
+      </button>
+      <Preview {...props} />
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{label} preview</DialogTitle>
+          </DialogHeader>
+          <Preview {...props} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

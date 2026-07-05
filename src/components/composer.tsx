@@ -344,6 +344,10 @@ export function Composer({
     contentType === "media"
       ? media.filter((m) => m.type === "IMAGE").map((m) => m.url)
       : [];
+  const previewVideo =
+    contentType === "media"
+      ? media.find((m) => m.type === "VIDEO")?.url
+      : undefined;
   const previewDoc =
     contentType === "document" && doc ? (doc.title ?? "Document") : undefined;
   const previewLink =
@@ -831,6 +835,7 @@ export function Composer({
               color={client?.color}
               body={body}
               images={previewImages}
+              videoUrl={previewVideo}
               documentTitle={previewDoc}
               documentUrl={contentType === "document" ? doc?.url : undefined}
               link={previewLink}
@@ -850,6 +855,7 @@ export function Composer({
                   color={client?.color}
                   body={b}
                   images={previewImages}
+                  videoUrl={previewVideo}
                   documentTitle={previewDoc}
                   link={previewLink}
                   poll={previewPoll}

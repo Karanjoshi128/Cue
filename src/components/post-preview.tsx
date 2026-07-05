@@ -41,10 +41,28 @@ interface PreviewProps {
   color?: string | null;
   body: string;
   images?: string[];
+  videoUrl?: string;
   documentTitle?: string;
   documentUrl?: string;
   link?: PreviewLink;
   poll?: PreviewPoll;
+}
+
+/** Video / Reel placeholder — shows the first frame and is playable. */
+function VideoBlock({ url, square }: { url: string; square?: boolean }) {
+  return (
+    <video
+      src={url}
+      controls
+      muted
+      playsInline
+      preload="metadata"
+      className={cn(
+        "w-full bg-black object-cover",
+        square ? "aspect-square" : "max-h-96",
+      )}
+    />
+  );
 }
 
 const DURATION_LABEL: Record<string, string> = {
@@ -306,6 +324,7 @@ export function LinkedInPreview({
   color,
   body,
   images,
+  videoUrl,
   documentTitle,
   documentUrl,
   link,
@@ -340,6 +359,8 @@ export function LinkedInPreview({
         <DocumentBlock title={documentTitle} url={documentUrl} />
       ) : images && images.length > 0 ? (
         <ImageCarousel images={images} />
+      ) : videoUrl ? (
+        <VideoBlock url={videoUrl} />
       ) : null}
 
       <div className="text-muted-foreground flex items-center justify-around border-t px-1 py-0.5">
@@ -369,7 +390,13 @@ export function LinkedInPreview({
 }
 
 /** Approximates how a post looks in the Instagram feed. */
-export function InstagramPreview({ name, color, body, images }: PreviewProps) {
+export function InstagramPreview({
+  name,
+  color,
+  body,
+  images,
+  videoUrl,
+}: PreviewProps) {
   const username = name.toLowerCase().replace(/\s+/g, "_");
   return (
     <div className="bg-card overflow-hidden rounded-xl border">
@@ -384,9 +411,11 @@ export function InstagramPreview({ name, color, body, images }: PreviewProps) {
 
       {images && images.length > 0 ? (
         <ImageCarousel images={images} square />
+      ) : videoUrl ? (
+        <VideoBlock url={videoUrl} square />
       ) : (
         <div className="bg-muted text-muted-foreground grid aspect-square w-full place-items-center text-xs">
-          Instagram needs an image
+          Instagram needs an image or video
         </div>
       )}
 

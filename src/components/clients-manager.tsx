@@ -105,33 +105,35 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
 
   function saveClient() {
     if (!name.trim()) return toast.error("Enter a name");
+    const t = toast.loading(editingId ? "Saving…" : "Adding client…");
     startTransition(async () => {
       try {
         if (editingId) {
           await updateClient(editingId, { name, color });
-          toast.success("Client updated");
+          toast.success("Client updated", { id: t });
         } else {
           await createClient({ name, color });
-          toast.success("Client added");
+          toast.success("Client added", { id: t });
         }
         setFormOpen(false);
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
+        toast.error(e instanceof Error ? e.message : "Failed", { id: t });
       }
     });
   }
 
   function runConfirm() {
     if (!confirm) return;
+    const t = toast.loading(`${confirm.action}…`);
     startTransition(async () => {
       try {
         await confirm.run();
-        toast.success("Done");
+        toast.success("Done", { id: t });
         setConfirm(null);
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
+        toast.error(e instanceof Error ? e.message : "Failed", { id: t });
       }
     });
   }

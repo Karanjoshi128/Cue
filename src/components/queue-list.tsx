@@ -128,13 +128,14 @@ export function QueueList({
   }
 
   function onApproval(id: string, approval: ApprovalStatus, ok: string) {
+    const t = toast.loading("Updating…");
     startTransition(async () => {
       try {
         await setApproval(id, approval);
-        toast.success(ok);
+        toast.success(ok, { id: t });
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
+        toast.error(e instanceof Error ? e.message : "Failed", { id: t });
       }
     });
   }
@@ -165,25 +166,29 @@ export function QueueList({
   }
 
   function onRetry(id: string) {
+    const t = toast.loading("Retrying…");
     startTransition(async () => {
       try {
         await retryPost(id);
-        toast.success("Retrying…");
+        toast.success("Retrying…", { id: t });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Retry failed");
+        toast.error(e instanceof Error ? e.message : "Retry failed", { id: t });
       }
     });
   }
   function onDelete() {
     if (!confirmId) return;
     const id = confirmId;
+    const t = toast.loading("Deleting…");
     startTransition(async () => {
       try {
         await deletePost(id);
-        toast.success("Deleted");
+        toast.success("Deleted", { id: t });
         setConfirmId(null);
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Delete failed");
+        toast.error(e instanceof Error ? e.message : "Delete failed", {
+          id: t,
+        });
       }
     });
   }

@@ -14,6 +14,7 @@ export function LoginForm() {
   async function send() {
     if (!email) return toast.error("Enter your email");
     setLoading(true);
+    const t = toast.loading("Sending magic link…");
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
@@ -21,9 +22,12 @@ export function LoginForm() {
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) throw error;
+      toast.success("Magic link sent", { id: t });
       setSent(true);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to send link");
+      toast.error(e instanceof Error ? e.message : "Failed to send link", {
+        id: t,
+      });
     } finally {
       setLoading(false);
     }

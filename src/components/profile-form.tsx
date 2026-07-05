@@ -23,13 +23,16 @@ export function ProfileForm({
   const dirty = value.trim() !== name && value.trim().length > 0;
 
   function save() {
+    const t = toast.loading("Saving…");
     startTransition(async () => {
       try {
         await updateProfile({ name: value.trim() });
-        toast.success("Profile updated");
+        toast.success("Profile updated", { id: t });
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to save");
+        toast.error(e instanceof Error ? e.message : "Failed to save", {
+          id: t,
+        });
       }
     });
   }

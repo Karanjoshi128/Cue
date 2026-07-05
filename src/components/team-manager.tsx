@@ -53,13 +53,14 @@ export function TeamManager({
   const [removeTarget, setRemoveTarget] = useState<Member | null>(null);
 
   function run(fn: () => Promise<void>, ok: string) {
+    const t = toast.loading("Saving…");
     startTransition(async () => {
       try {
         await fn();
-        toast.success(ok);
+        toast.success(ok, { id: t });
         router.refresh();
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed");
+        toast.error(e instanceof Error ? e.message : "Failed", { id: t });
       }
     });
   }

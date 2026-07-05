@@ -204,6 +204,9 @@ export function Composer({
   async function uploadFiles(files: File[], as: "media" | "doc") {
     if (files.length === 0) return;
     setUploading(true);
+    const t = toast.loading(
+      files.length > 1 ? `Uploading ${files.length} files…` : "Uploading…",
+    );
     try {
       for (const file of files) {
         const fd = new FormData();
@@ -219,8 +222,9 @@ export function Composer({
         }
         setMedia((m) => [...m, data]);
       }
+      toast.success(as === "doc" ? "Document added" : "Media added", { id: t });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Upload failed");
+      toast.error(e instanceof Error ? e.message : "Upload failed", { id: t });
     } finally {
       setUploading(false);
     }
@@ -301,6 +305,15 @@ export function Composer({
           : undefined,
     };
 
+    const t = toast.loading(
+      action === "now"
+        ? "Publishing…"
+        : action === "schedule"
+          ? editing
+            ? "Rescheduling…"
+            : "Scheduling…"
+          : "Saving draft…",
+    );
     startTransition(async () => {
       try {
         if (editing && initial) await updatePost(initial.id, payload);
@@ -315,10 +328,13 @@ export function Composer({
               : editing
                 ? "Draft updated"
                 : "Saved as draft",
+          { id: t },
         );
         router.push(action === "draft" ? "/queue" : "/calendar");
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Something went wrong");
+        toast.error(e instanceof Error ? e.message : "Something went wrong", {
+          id: t,
+        });
       }
     });
   }
@@ -809,6 +825,7 @@ export function Composer({
               body={body}
               images={previewImages}
               documentTitle={previewDoc}
+              documentUrl={contentType === "document" ? doc?.url : undefined}
               link={previewLink}
               poll={previewPoll}
             />

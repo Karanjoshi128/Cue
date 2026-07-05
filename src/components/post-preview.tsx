@@ -42,6 +42,7 @@ interface PreviewProps {
   body: string;
   images?: string[];
   documentTitle?: string;
+  documentUrl?: string;
   link?: PreviewLink;
   poll?: PreviewPoll;
 }
@@ -61,8 +62,29 @@ function domainOf(url: string): string {
   }
 }
 
-/** LinkedIn "document" post — a swipeable carousel shown here as a doc tile. */
-function DocumentBlock({ title }: { title: string }) {
+/**
+ * LinkedIn "document" post. Renders the actual PDF inline (like LinkedIn's
+ * swipeable doc carousel); falls back to a file tile for non-PDF documents.
+ */
+function DocumentBlock({ title, url }: { title: string; url?: string }) {
+  const isPdf = url ? /\.pdf(\?|$)/i.test(url) || title.toLowerCase().endsWith(".pdf") : false;
+
+  if (url && isPdf) {
+    return (
+      <div className="border-y">
+        <iframe
+          src={`${url}#toolbar=0&navpanes=0&view=FitH`}
+          title={title || "Document"}
+          className="bg-muted h-80 w-full"
+        />
+        <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 px-4 py-2 text-xs">
+          <FileText className="size-4" />
+          <span className="truncate">{title || "Document"}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-muted/40 flex items-center gap-3 border-y px-4 py-6">
       <div className="bg-background grid size-12 shrink-0 place-items-center rounded border">
@@ -285,6 +307,7 @@ export function LinkedInPreview({
   body,
   images,
   documentTitle,
+  documentUrl,
   link,
   poll,
 }: PreviewProps) {
@@ -314,7 +337,7 @@ export function LinkedInPreview({
       ) : link ? (
         <LinkBlock link={link} />
       ) : documentTitle ? (
-        <DocumentBlock title={documentTitle} />
+        <DocumentBlock title={documentTitle} url={documentUrl} />
       ) : images && images.length > 0 ? (
         <ImageCarousel images={images} />
       ) : null}

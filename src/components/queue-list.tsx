@@ -178,6 +178,7 @@ export function QueueList({
         await deletePost(id);
         toast.success("Deleted", { id: t });
         setConfirmId(null);
+        router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Delete failed", {
           id: t,

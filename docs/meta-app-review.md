@@ -21,6 +21,7 @@ Both need **Advanced Access**, which requires **App Review + Business Verificati
 - Terms of Service — `https://cue-ruddy.vercel.app/terms`
 - Data Deletion instructions — `https://cue-ruddy.vercel.app/data-deletion`
 - Clear connect success/error messages + a "Business/Creator account" hint on Clients
+- **App icon, 1024×1024** ready to upload — `public/brand/cue-app-icon-1024.png`
 
 > ⚠️ Before submitting, edit the `[bracketed]` placeholders in `/privacy` and
 > `/terms` (legal business name, governing law) and redeploy.

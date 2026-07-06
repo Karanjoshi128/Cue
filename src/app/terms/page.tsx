@@ -8,9 +8,9 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = "July 6, 2026";
-const ENTITY = "[Your legal business name] (“Cue”, “we”, “us”)";
+const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 const CONTACT = "digitallynexttech@gmail.com";
-const GOVERNING = "[your country / state]";
+const GOVERNING = "India";
 
 export default function TermsPage() {
   return (

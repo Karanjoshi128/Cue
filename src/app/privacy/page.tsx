@@ -7,10 +7,10 @@ export const metadata: Metadata = {
   description: "How Cue collects, uses, and protects your data.",
 };
 
-// NOTE: Replace the [bracketed] placeholders with your legal details before
-// submitting to Meta / LinkedIn. This describes Cue's actual data practices.
+// Operating entity: Karan Joshi (individual). Governing law: India (see /terms).
+// This describes Cue's actual data practices for Meta / LinkedIn review.
 const UPDATED = "July 6, 2026";
-const ENTITY = "[Your legal business name] (“Cue”, “we”, “us”)";
+const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 const CONTACT = "digitallynexttech@gmail.com";
 
 export default function PrivacyPage() {

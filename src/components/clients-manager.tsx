@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
@@ -64,6 +64,21 @@ type ConfirmState = {
   run: () => Promise<void>;
 } | null;
 
+// Friendly messages for the ?error= codes the OAuth connect routes redirect with.
+const CONNECT_ERRORS: Record<string, string> = {
+  not_your_client: "That client isn't in your workspace.",
+  linkedin_not_configured: "LinkedIn isn't set up on the server yet.",
+  instagram_not_configured: "Instagram isn't set up on the server yet.",
+  linkedin_denied: "LinkedIn connection was cancelled.",
+  instagram_denied: "Instagram connection was cancelled.",
+  linkedin_token: "LinkedIn didn't return a valid token. Please try again.",
+  instagram_token:
+    "Instagram couldn't be connected. It must be a Business or Creator account.",
+  linkedin_profile: "Couldn't read that LinkedIn profile. Please try again.",
+  instagram_profile:
+    "Couldn't read that Instagram profile. It must be a Business or Creator account.",
+};
+
 /** Health of a connected account based on its token expiry. */
 function tokenHealth(tokenExpires: string | null): {
   ok: boolean;
@@ -89,6 +104,23 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
 
   // Shared confirm dialog (delete client / disconnect account)
   const [confirm, setConfirm] = useState<ConfirmState>(null);
+
+  // Surface the OAuth connect result once, then strip the query so it doesn't
+  // re-fire on refresh. Read from window to avoid a Suspense boundary.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+    if (!connected && !error) return;
+    if (connected) {
+      toast.success(
+        `${connected === "instagram" ? "Instagram" : "LinkedIn"} account connected`,
+      );
+    } else if (error) {
+      toast.error(CONNECT_ERRORS[error] ?? "Couldn't connect the account.");
+    }
+    window.history.replaceState(null, "", "/clients");
+  }, []);
 
   function openAdd() {
     setEditingId(null);
@@ -150,6 +182,10 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
           <Plus className="size-4" /> Add client
         </Button>
       </div>
+      <p className="text-muted-foreground -mt-3 text-sm">
+        Connect each client&apos;s LinkedIn (personal profile) and Instagram
+        (Business or Creator account) from its card below.
+      </p>
 
       {clients.length === 0 ? (
         <Card>

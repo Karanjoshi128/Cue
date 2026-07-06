@@ -102,6 +102,15 @@ export default function LoginPage() {
         <p className="text-muted-foreground mt-6 text-center text-sm">
           Built for agencies · Runs on free tiers · LinkedIn + Instagram
         </p>
+        <p className="text-muted-foreground mt-2 text-center text-xs">
+          <Link href="/privacy" className="hover:text-foreground underline">
+            Privacy
+          </Link>{" "}
+          ·{" "}
+          <Link href="/terms" className="hover:text-foreground underline">
+            Terms
+          </Link>
+        </p>
       </div>
     </main>
   );

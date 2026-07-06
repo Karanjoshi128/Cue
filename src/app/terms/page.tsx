@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 const UPDATED = "July 6, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
-const CONTACT = "digitallynexttech@gmail.com";
+const CONTACT = "joshikaran0008@gmail.com";
 const GOVERNING = "India";
 
 export default function TermsPage() {

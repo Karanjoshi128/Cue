@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 // This describes Cue's actual data practices for Meta / LinkedIn review.
 const UPDATED = "July 6, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
-const CONTACT = "digitallynexttech@gmail.com";
+const CONTACT = "joshikaran0008@gmail.com";
 
 export default function PrivacyPage() {
   return (

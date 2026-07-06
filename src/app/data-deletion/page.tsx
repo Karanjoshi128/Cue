@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "How to delete your data from Cue.",
 };
 
-const CONTACT = "digitallynexttech@gmail.com";
+const CONTACT = "joshikaran0008@gmail.com";
 
 // Meta requires a public Data Deletion Instructions URL for app review.
 export default function DataDeletionPage() {

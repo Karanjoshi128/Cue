@@ -8,9 +8,11 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = "July 6, 2026";
-const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
+const ENTITY = "BFG Market Consult Private Limited (“Cue”, “we”, “us”)";
 const CONTACT = "joshikaran0008@gmail.com";
 const GOVERNING = "India";
+const ADDRESS =
+  "Floor 1st, House No-18, Block-SU, Pitampura, North West Delhi, Delhi 110034";
 
 export default function TermsPage() {
   return (
@@ -110,6 +112,10 @@ export default function TermsPage() {
           </Section>
 
           <Section title="10. Contact">
+            <p>
+              Cue is operated by BFG Market Consult Private Limited, registered
+              office: {ADDRESS}.
+            </p>
             <p>
               Questions about these Terms? Email{" "}
               <a className="text-primary underline" href={`mailto:${CONTACT}`}>

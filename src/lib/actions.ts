@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
+import { Prisma, type Platform } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuth, requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
@@ -236,7 +236,7 @@ const postSchema = z
 
 /** Builds the per-target rows, applying a caption override where one differs. */
 function buildTargets(
-  accounts: { id: string; platform: "LINKEDIN" | "INSTAGRAM" }[],
+  accounts: { id: string; platform: Platform }[],
   data: z.infer<typeof postSchema>,
 ) {
   const overrides = new Map(

@@ -16,7 +16,11 @@ import type { Platform } from "@prisma/client";
 import { getCalendarPosts } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
 import { ClientDot, PlatformIcon, StatusBadge } from "@/components/post-bits";
-import { LinkedinIcon, InstagramIcon } from "@/components/platform-icons";
+import {
+  LinkedinIcon,
+  InstagramIcon,
+  YoutubeIcon,
+} from "@/components/platform-icons";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
@@ -25,7 +29,7 @@ export const dynamic = "force-dynamic";
 
 type CalPost = Awaited<ReturnType<typeof getCalendarPosts>>[number];
 type View = "month" | "week" | "list";
-type PlatformFilter = "LINKEDIN" | "INSTAGRAM" | undefined;
+type PlatformFilter = "LINKEDIN" | "INSTAGRAM" | "YOUTUBE" | undefined;
 
 /** A single post chip inside a day cell. */
 function PostChip({ p }: { p: CalPost }) {
@@ -166,7 +170,9 @@ export default async function CalendarPage({
   const view: View =
     viewParam === "week" || viewParam === "list" ? viewParam : "month";
   const platform: PlatformFilter =
-    platformParam === "LINKEDIN" || platformParam === "INSTAGRAM"
+    platformParam === "LINKEDIN" ||
+    platformParam === "INSTAGRAM" ||
+    platformParam === "YOUTUBE"
       ? platformParam
       : undefined;
   const clientId = await getScopeClientId();
@@ -330,6 +336,7 @@ function Shell({
     { key: undefined, label: "All" },
     { key: "LINKEDIN", label: "LinkedIn", Icon: LinkedinIcon },
     { key: "INSTAGRAM", label: "Instagram", Icon: InstagramIcon },
+    { key: "YOUTUBE", label: "YouTube", Icon: YoutubeIcon },
   ];
 
   return (

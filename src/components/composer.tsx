@@ -78,6 +78,7 @@ export interface ComposerInitial {
 const PLATFORM_LIMITS: Record<Platform, number> = {
   LINKEDIN: 3000,
   INSTAGRAM: 2200,
+  YOUTUBE: 5000,
 };
 const HARD_LIMIT = 3000;
 
@@ -158,6 +159,15 @@ export function Composer({
     () => clients.find((c) => c.id === clientId),
     [clients, clientId],
   );
+
+  // YouTube posting isn't wired into the composer yet - hide those accounts so
+  // no invalid YouTube posts can be created (connecting still works on Clients).
+  const postableAccounts = useMemo(
+    () => client?.accounts.filter((a) => a.platform !== "YOUTUBE") ?? [],
+    [client],
+  );
+  const hasYoutube =
+    client?.accounts.some((a) => a.platform === "YOUTUBE") ?? false;
 
   // Document / link / poll are LinkedIn-only content types.
   const linkedInOnly = contentType !== "media";
@@ -423,9 +433,9 @@ export function Composer({
 
           <div className="space-y-2">
             <Label className="label-caps">Publish to</Label>
-            {client && client.accounts.length > 0 ? (
+            {postableAccounts.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {client.accounts.map((a) => {
+                {postableAccounts.map((a) => {
                   const on = selected.includes(a.id);
                   const disabled = linkedInOnly && a.platform === "INSTAGRAM";
                   return (
@@ -466,6 +476,12 @@ export function Composer({
               <p className="text-muted-foreground text-xs">
                 {CONTENT_TYPES.find((t) => t.key === contentType)?.label} posts
                 are supported on LinkedIn only.
+              </p>
+            )}
+            {hasYoutube && (
+              <p className="text-muted-foreground text-xs">
+                YouTube posting is coming soon — connected channels can&apos;t be
+                scheduled here yet.
               </p>
             )}
           </div>

@@ -34,7 +34,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PlatformIcon, ClientDot } from "@/components/post-bits";
-import { LinkedinIcon, InstagramIcon } from "@/components/platform-icons";
+import {
+  LinkedinIcon,
+  InstagramIcon,
+  YoutubeIcon,
+} from "@/components/platform-icons";
 import {
   Plus,
   MoreVertical,
@@ -77,6 +81,10 @@ const CONNECT_ERRORS: Record<string, string> = {
   linkedin_profile: "Couldn't read that LinkedIn profile. Please try again.",
   instagram_profile:
     "Couldn't read that Instagram profile. It must be a Business or Creator account.",
+  youtube_not_configured: "YouTube isn't set up on the server yet.",
+  youtube_denied: "YouTube connection was cancelled.",
+  youtube_token: "YouTube (Google) didn't return a valid token. Please try again.",
+  youtube_profile: "Couldn't read that Google account. Please try again.",
 };
 
 /** Health of a connected account based on its token expiry. */
@@ -113,9 +121,13 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
     const error = params.get("error");
     if (!connected && !error) return;
     if (connected) {
-      toast.success(
-        `${connected === "instagram" ? "Instagram" : "LinkedIn"} account connected`,
-      );
+      const label =
+        connected === "instagram"
+          ? "Instagram"
+          : connected === "youtube"
+            ? "YouTube"
+            : "LinkedIn";
+      toast.success(`${label} account connected`);
     } else if (error) {
       toast.error(CONNECT_ERRORS[error] ?? "Couldn't connect the account.");
     }
@@ -170,7 +182,10 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
     });
   }
 
-  function connect(clientId: string, platform: "linkedin" | "instagram") {
+  function connect(
+    clientId: string,
+    platform: "linkedin" | "instagram" | "youtube",
+  ) {
     window.location.href = `/api/oauth/${platform}/start?clientId=${clientId}`;
   }
 
@@ -183,8 +198,8 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
         </Button>
       </div>
       <p className="text-muted-foreground -mt-3 text-sm">
-        Connect each client&apos;s LinkedIn (personal profile) and Instagram
-        (Business or Creator account) from its card below.
+        Connect each client&apos;s LinkedIn (personal profile), Instagram
+        (Business or Creator account), or YouTube channel from its card below.
       </p>
 
       {clients.length === 0 ? (
@@ -278,7 +293,7 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                       })}
                     </div>
                   )}
-                  <div className="flex gap-2 pt-1">
+                  <div className="flex flex-wrap gap-2 pt-1">
                     <Button
                       size="sm"
                       variant="outline"
@@ -292,6 +307,13 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                       onClick={() => connect(c.id, "instagram")}
                     >
                       <InstagramIcon className="size-4" /> Instagram
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => connect(c.id, "youtube")}
+                    >
+                      <YoutubeIcon className="size-4" /> YouTube
                     </Button>
                   </div>
                 </CardContent>

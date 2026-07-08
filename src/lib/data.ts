@@ -161,7 +161,7 @@ export async function getCalendarPosts(
   from: Date,
   to: Date,
   clientId?: string,
-  platform?: "LINKEDIN" | "INSTAGRAM",
+  platform?: "LINKEDIN" | "INSTAGRAM" | "YOUTUBE",
 ) {
   const workspaceId = await requireWorkspaceId();
   return prisma.post.findMany({

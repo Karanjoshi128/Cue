@@ -1,5 +1,9 @@
 import { Badge } from "@/components/ui/badge";
-import { LinkedinIcon, InstagramIcon } from "@/components/platform-icons";
+import {
+  LinkedinIcon,
+  InstagramIcon,
+  YoutubeIcon,
+} from "@/components/platform-icons";
 import { cn } from "@/lib/utils";
 import type { Platform, PostStatus, TargetStatus } from "@prisma/client";
 
@@ -10,7 +14,12 @@ export function PlatformIcon({
   platform: Platform;
   className?: string;
 }) {
-  const Icon = platform === "LINKEDIN" ? LinkedinIcon : InstagramIcon;
+  const Icon =
+    platform === "LINKEDIN"
+      ? LinkedinIcon
+      : platform === "YOUTUBE"
+        ? YoutubeIcon
+        : InstagramIcon;
   return <Icon className={cn("size-4", className)} />;
 }
 

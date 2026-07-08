@@ -86,6 +86,7 @@ model SocialAccount {
 enum Platform {
   LINKEDIN
   INSTAGRAM
+  YOUTUBE
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +100,7 @@ model Post {
   author      User           @relation(fields: [authorId], references: [id])
   authorId    String
   body        String
+  title       String? // YouTube video title (unused by LinkedIn/Instagram)
   scheduledAt DateTime?
   status      PostStatus     @default(DRAFT)
   approval    ApprovalStatus @default(APPROVED)

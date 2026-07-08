@@ -7,13 +7,11 @@ export const metadata: Metadata = {
   description: "How Cue collects, uses, and protects your data.",
 };
 
-// Operating entity: BFG Market Consult Private Limited. Governing law: India.
+// Operating entity: Karan Joshi (individual). Governing law: India.
 // This describes Cue's actual data practices for Meta / LinkedIn review.
 const UPDATED = "July 6, 2026";
-const ENTITY = "BFG Market Consult Private Limited (“Cue”, “we”, “us”)";
+const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 const CONTACT = "joshikaran0008@gmail.com";
-const ADDRESS =
-  "Floor 1st, House No-18, Block-SU, Pitampura, North West Delhi, Delhi 110034";
 
 export default function PrivacyPage() {
   return (
@@ -167,10 +165,6 @@ export default function PrivacyPage() {
           </Section>
 
           <Section title="Contact">
-            <p>
-              Cue is operated by BFG Market Consult Private Limited, registered
-              office: {ADDRESS}.
-            </p>
             <p>
               Questions? Email{" "}
               <a className="text-primary underline" href={`mailto:${CONTACT}`}>

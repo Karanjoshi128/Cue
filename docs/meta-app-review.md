@@ -17,9 +17,9 @@ Both need **Advanced Access**, which requires **App Review + Business Verificati
 
 **✅ Built in the app (this repo):**
 
-- Privacy Policy — `https://cue-ruddy.vercel.app/privacy`
-- Terms of Service — `https://cue-ruddy.vercel.app/terms`
-- Data Deletion instructions — `https://cue-ruddy.vercel.app/data-deletion`
+- Privacy Policy — `https://trycue.space/privacy`
+- Terms of Service — `https://trycue.space/terms`
+- Data Deletion instructions — `https://trycue.space/data-deletion`
 - Clear connect success/error messages + a "Business/Creator account" hint on Clients
 - **App icon, 1024×1024** ready to upload — `public/brand/cue-app-icon-1024.png`
 
@@ -41,7 +41,7 @@ Both need **Advanced Access**, which requires **App Review + Business Verificati
 - [ ] App type is **Business**; the **Instagram** product is added with
       "Instagram API setup with Instagram login".
 - [ ] OAuth **redirect URI** is registered exactly:
-      `https://cue-ruddy.vercel.app/api/oauth/instagram/callback`
+      `https://trycue.space/api/oauth/instagram/callback`
 - [ ] **App icon** (1024×1024) and a **Category** are set.
 - [ ] **Privacy Policy URL**, **Terms URL**, and **User Data Deletion** →
       "Data deletion instructions URL" are filled with the three URLs above.
@@ -82,7 +82,7 @@ For each permission Meta asks *how* you use it. Paste these:
 Record a single screen capture (with the browser URL bar visible) showing the
 **full flow**. Narrate or add captions for each step.
 
-1. **Log in** to Cue at `cue-ruddy.vercel.app` (show the login → magic link →
+1. **Log in** to Cue at `trycue.space` (show the login → magic link →
    dashboard). *Captions: "User signs in to Cue."*
 2. Go to **Clients** → open a client (or add one). *"Each client is a brand the
    agency manages."*
@@ -108,7 +108,7 @@ result — reviewers reject videos that don't show the actual permission in use.
 
 Meta Business Settings → **Security Center** / **Business verification**:
 
-- [ ] Legal business name, address, phone, website (`cue-ruddy.vercel.app`).
+- [ ] Legal business name, address, phone, website (`trycue.space`).
 - [ ] A verification document (business registration / utility bill / license)
       matching that name + address.
 - [ ] A phone/email you can receive a verification code at.
@@ -128,7 +128,7 @@ In the App Review **"Instructions for reviewer"** field, give them a working pat
 Gmail) and share its **email + password** in the instructions, plus:
 
 ```
-1. Go to https://cue-ruddy.vercel.app/login
+1. Go to https://trycue.space/login
 2. Enter this email: <test-inbox@gmail.com>  (password: <shared password>)
 3. Click "Send magic link", open the email in that inbox, click the link.
 4. On first sign-in you'll be asked to name a workspace — type anything → Continue.

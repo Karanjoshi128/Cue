@@ -119,29 +119,35 @@ Meta Business Settings → **Security Center** / **Business verification**:
 
 ---
 
-## 5. Reviewer access (the magic-link gotcha)
+## 5. Reviewer access (sign-in is a 6-digit emailed code)
 
-Cue is passwordless (magic link), so a reviewer can't just "use a password."
-In the App Review **"Instructions for reviewer"** field, give them a working path:
+Cue is passwordless: you enter an email and Cue emails back a **one-time code**.
+There is deliberately **no click-through link** — Supabase issues one token per
+request and a link would embed the same token, so mail scanners that prefetch
+links were consuming it before the recipient clicked ("otp_expired"). A code
+can't be prefetched, so reviewer sign-in is reliable.
 
-**Recommended:** create a dedicated test inbox you control (e.g. a throwaway
-Gmail) and share its **email + password** in the instructions, plus:
+**Recommended:** let the reviewer use **their own email**. Cue is self-serve, so
+any address can sign in and gets its own private workspace — no shared inbox
+password needed. The only credential you must supply is the **test Instagram
+account**, because in Development Mode only Instagram Testers can connect.
 
 ```
 1. Go to https://trycue.space/login
-2. Enter this email: <test-inbox@gmail.com>  (password: <shared password>)
-3. Click "Send magic link", open the email in that inbox, click the link.
+2. Enter YOUR OWN email and click "Email me a sign-in code".
+3. Open the email from Cue and type the code into the sign-in screen.
 4. On first sign-in you'll be asked to name a workspace — type anything → Continue.
 5. Go to Clients → Add client → click "Instagram" → log into the test Instagram
-   Business account below and approve.
+   Business account below and approve the permissions.
    Test IG Business account: <handle> / <password>
 6. Go to Create, write a caption, attach an image, choose the account, Post now.
 7. The post will appear on the test Instagram account.
 ```
 
-Provide the **test IG Business/Creator account** credentials too, or confirm the
-reviewer may use their own. Meta weighs the **screencast** most heavily, so make §3
-airtight even if reviewer login is fiddly.
+If you'd rather hand over an explicit login, use a dedicated throwaway Gmail with
+2-Step Verification **off** and share its email + password — but the own-email
+path above is simpler and has fewer ways to fail. Meta weighs the **screencast**
+most heavily, so make §3 airtight regardless.
 
 ---
 

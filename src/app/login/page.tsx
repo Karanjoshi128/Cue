@@ -77,7 +77,7 @@ export default function LoginPage() {
 
           {/* Passwordless reassurance */}
           <p className="text-muted-foreground mt-5 text-center text-sm">
-            No password needed — we&apos;ll email you a secure sign-in link.
+            No password needed — we&apos;ll email you a one-time sign-in code.
           </p>
 
           {/* Value strip keeps the card feeling full and confident */}

@@ -25,7 +25,9 @@ export default function PrivacyPage() {
           <h1 className="text-3xl font-semibold tracking-tight">
             Privacy Policy
           </h1>
-          <p className="text-muted-foreground text-sm">Last updated {UPDATED}</p>
+          <p className="text-muted-foreground text-sm">
+            Last updated {UPDATED}
+          </p>
         </header>
 
         <div className="text-muted-foreground space-y-6 text-[0.95rem] leading-relaxed">
@@ -51,9 +53,9 @@ export default function PrivacyPage() {
                 </strong>{" "}
                 When you connect a LinkedIn, Instagram, or YouTube account, we
                 receive and store an access token (and, where provided, a
-                refresh token) plus
-                that account&apos;s platform id, username, and display name. Tokens
-                are <strong className="text-foreground">encrypted at rest</strong>{" "}
+                refresh token) plus that account&apos;s platform id, username,
+                and display name. Tokens are{" "}
+                <strong className="text-foreground">encrypted at rest</strong>{" "}
                 and used only to publish on your behalf.
               </li>
               <li>
@@ -110,7 +112,7 @@ export default function PrivacyPage() {
                 storage for the media you upload.
               </li>
               <li>
-                <strong className="text-foreground">Vercel</strong> — application
+                <strong className="text-foreground">Vercel</strong> - application
                 hosting.
               </li>
             </ul>
@@ -143,10 +145,10 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong className="text-foreground">What we access.</strong> Your
-                Google account id, email address, and name — used only to label
-                the connected channel — plus permission to upload videos on your
-                behalf. We do not read your existing videos, comments,
+                <strong className="text-foreground">What we access.</strong>{" "}
+                Your Google account id, email address, and name - used only to
+                label the connected channel - plus permission to upload videos on
+                your behalf. We do not read your existing videos, comments,
                 subscribers, or analytics.
               </li>
               <li>
@@ -187,13 +189,13 @@ export default function PrivacyPage() {
           <Section title="Data retention">
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                Access tokens are kept until you disconnect the account or delete
-                the client, then removed.
+                Access tokens are kept until you disconnect the account or
+                delete the client, then removed.
               </li>
               <li>
-                Published posts and their uploaded media are automatically purged
-                about 7 days after they finish publishing; a lightweight record
-                (platform, link, date) is retained for your history.
+                Published posts and their uploaded media are automatically
+                purged about 7 days after they finish publishing; a lightweight
+                record (platform, link, date) is retained for your history.
               </li>
               <li>
                 Deleting a client or workspace removes its accounts, posts, and
@@ -221,9 +223,9 @@ export default function PrivacyPage() {
 
           <Section title="Security">
             <p>
-              Traffic is served over HTTPS and social access tokens are encrypted
-              at rest. No system is perfectly secure, but we work to protect your
-              data using industry-standard measures.
+              Traffic is served over HTTPS and social access tokens are
+              encrypted at rest. No system is perfectly secure, but we work to
+              protect your data using industry-standard measures.
             </p>
           </Section>
 

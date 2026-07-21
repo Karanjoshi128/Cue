@@ -1,4 +1,4 @@
-# Meta App Review — Instagram publishing (playbook)
+# Meta App Review - Instagram publishing (playbook)
 
 Goal: move Cue's Meta app from **Development mode / Standard Access** (only tester
 accounts can connect) to **Live mode / Advanced Access** so **any** agency can
@@ -17,11 +17,11 @@ Both need **Advanced Access**, which requires **App Review + Business Verificati
 
 **✅ Built in the app (this repo):**
 
-- Privacy Policy — `https://trycue.space/privacy`
-- Terms of Service — `https://trycue.space/terms`
-- Data Deletion instructions — `https://trycue.space/data-deletion`
+- Privacy Policy -`https://trycue.space/privacy`
+- Terms of Service -`https://trycue.space/terms`
+- Data Deletion instructions -`https://trycue.space/data-deletion`
 - Clear connect success/error messages + a "Business/Creator account" hint on Clients
-- **App icon, 1024×1024** ready to upload — `public/brand/cue-app-icon-1024.png`
+- **App icon, 1024×1024** ready to upload -`public/brand/cue-app-icon-1024.png`
 
 > ⚠️ Before submitting, edit the `[bracketed]` placeholders in `/privacy` and
 > `/terms` (legal business name, governing law) and redeploy.
@@ -54,7 +54,7 @@ Both need **Advanced Access**, which requires **App Review + Business Verificati
 
 ## 2. Permissions + use-case text (paste into the review form)
 
-For each permission Meta asks *how* you use it. Paste these:
+For each permission Meta asks _how_ you use it. Paste these:
 
 ### `instagram_business_basic`
 
@@ -83,24 +83,24 @@ Record a single screen capture (with the browser URL bar visible) showing the
 **full flow**. Narrate or add captions for each step.
 
 1. **Log in** to Cue at `trycue.space` (show the login → magic link →
-   dashboard). *Captions: "User signs in to Cue."*
-2. Go to **Clients** → open a client (or add one). *"Each client is a brand the
-   agency manages."*
+   dashboard). _Captions: "User signs in to Cue."_
+2. Go to **Clients** → open a client (or add one). _"Each client is a brand the
+   agency manages."_
 3. Click **Instagram**. Show the **Instagram Login consent screen**, including the
-   requested permissions, and approve it. *"User connects their Instagram
-   Business account and grants permission."*
-4. Back in Cue, show the account now listed as **Connected**. *"The connected
-   account appears in the workspace."*
+   requested permissions, and approve it. _"User connects their Instagram
+   Business account and grants permission."_
+4. Back in Cue, show the account now listed as **Connected**. _"The connected
+   account appears in the workspace."_
 5. Open **Create/Composer**, write a caption, attach an image (and show a carousel
    and a Reel if you can), pick the Instagram account, and **schedule** or click
-   **Post now**. *"User composes and schedules a post."*
+   **Post now**. _"User composes and schedules a post."_
 6. Show the post **live on the Instagram account** (open Instagram and show it
-   published). *"content_publish creates the post on the connected account."*
+   published). _"content_publish creates the post on the connected account."_
 7. Optional: show **disconnect** on the Clients page + the `/data-deletion` page.
-   *"Users can revoke access and delete their data at any time."*
+   _"Users can revoke access and delete their data at any time."_
 
 Keep it 2–4 minutes, 1080p, no cuts that skip the consent screen or the published
-result — reviewers reject videos that don't show the actual permission in use.
+result - reviewers reject videos that don't show the actual permission in use.
 
 ---
 
@@ -122,13 +122,13 @@ Meta Business Settings → **Security Center** / **Business verification**:
 ## 5. Reviewer access (sign-in is a 6-digit emailed code)
 
 Cue is passwordless: you enter an email and Cue emails back a **one-time code**.
-There is deliberately **no click-through link** — Supabase issues one token per
+There is deliberately **no click-through link** - Supabase issues one token per
 request and a link would embed the same token, so mail scanners that prefetch
 links were consuming it before the recipient clicked ("otp_expired"). A code
 can't be prefetched, so reviewer sign-in is reliable.
 
 **Recommended:** let the reviewer use **their own email**. Cue is self-serve, so
-any address can sign in and gets its own private workspace — no shared inbox
+any address can sign in and gets its own private workspace - no shared inbox
 password needed. The only credential you must supply is the **test Instagram
 account**, because in Development Mode only Instagram Testers can connect.
 
@@ -136,7 +136,7 @@ account**, because in Development Mode only Instagram Testers can connect.
 1. Go to https://trycue.space/login
 2. Enter YOUR OWN email and click "Email me a sign-in code".
 3. Open the email from Cue and type the code into the sign-in screen.
-4. On first sign-in you'll be asked to name a workspace — type anything → Continue.
+4. On first sign-in you'll be asked to name a workspace - type anything → Continue.
 5. Go to Clients → Add client → click "Instagram" → log into the test Instagram
    Business account below and approve the permissions.
    Test IG Business account: <handle> / <password>
@@ -145,7 +145,7 @@ account**, because in Development Mode only Instagram Testers can connect.
 ```
 
 If you'd rather hand over an explicit login, use a dedicated throwaway Gmail with
-2-Step Verification **off** and share its email + password — but the own-email
+2-Step Verification **off** and share its email + password - but the own-email
 path above is simpler and has fewer ways to fail. Meta weighs the **screencast**
 most heavily, so make §3 airtight regardless.
 
@@ -167,7 +167,7 @@ screencast (§3), and reviewer instructions (§5) → **Submit**. Then flip the 
 - Top rejection reasons to avoid:
   - Screencast doesn't show the **consent screen** or the **published result**.
   - Privacy Policy / Data Deletion URL missing, broken, or not describing Instagram
-    data. (Ours cover this — just fill the placeholders.)
+    data. (Ours cover this - just fill the placeholders.)
   - Business Verification incomplete.
   - Reviewer couldn't reproduce the flow (bad/again-magic-link instructions).
   - Requesting a permission the app doesn't visibly use in the video.
@@ -179,5 +179,5 @@ screencast (§3), and reviewer instructions (§5) → **Submit**. Then flip the 
 LinkedIn is a different process and your app is already verified for personal-
 profile posting (`w_member_social`). No Meta-style review needed for that. To post
 to **Company Pages** you'd separately apply to LinkedIn's **Community Management
-API** partner program (`w_organization_social`) — out of scope for this Instagram
+API** partner program (`w_organization_social`) - out of scope for this Instagram
 submission.

@@ -10,7 +10,7 @@ const UPLOAD_URL =
  * The video is uploaded to the channel of whichever Google account authorized
  * the token, so `externalId` (the Google user id) isn't needed for the upload.
  *
- * `accessToken` must be fresh — Google tokens live ~1h, so publish.ts refreshes
+ * `accessToken` must be fresh - Google tokens live ~1h, so publish.ts refreshes
  * it via ensureFreshAccessToken() right before calling this.
  */
 export const youtubeAdapter: PlatformAdapter = {
@@ -30,7 +30,7 @@ export const youtubeAdapter: PlatformAdapter = {
     const description = body.slice(0, 5000);
     const privacyStatus = privacy ?? "public";
 
-    // Pull the video bytes from R2 (public URL). Buffered in full — fine for the
+    // Pull the video bytes from R2 (public URL). Buffered in full - fine for the
     // short-form videos this tool posts; revisit if very large files appear.
     const fileRes = await fetch(video.url);
     if (!fileRes.ok) {
@@ -39,7 +39,7 @@ export const youtubeAdapter: PlatformAdapter = {
     const bytes = Buffer.from(await fileRes.arrayBuffer());
     const contentType = fileRes.headers.get("content-type") || "video/*";
 
-    // 1. Open a resumable session — the upload URL comes back in `Location`.
+    // 1. Open a resumable session - the upload URL comes back in `Location`.
     const initRes = await fetch(UPLOAD_URL, {
       method: "POST",
       headers: {

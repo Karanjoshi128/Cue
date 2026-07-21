@@ -1,5 +1,5 @@
 <!--
-  Cue — Supabase auth email (one-time sign-in code).
+  Cue - Supabase auth email (one-time sign-in code).
 
   The code length is whatever Supabase is configured to issue
   (Authentication → Providers → Email → "Email OTP Length", 6-10 digits).
@@ -13,72 +13,72 @@
   ⚠️ Do NOT add {{ .ConfirmationURL }} back to this template.
   Supabase issues ONE token per request, and the ConfirmationURL embeds a hash
   of the very same token this code shows. Mail scanners routinely prefetch
-  links in email, which consumes the token before the recipient clicks — the
+  links in email, which consumes the token before the recipient clicks - the
   recipient then gets "Email link is invalid or has expired" (otp_expired).
   A code cannot be prefetched, so keeping this template link-free is what makes
   sign-in reliable.
 -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light" />
-    <title>Your Cue sign-in code</title>
-  </head>
-  <body
-    style="margin:0; padding:0; background-color:#f2f3ff; -webkit-font-smoothing:antialiased; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"
-  >
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f2f3ff;">
-      <tr>
-        <td align="center" style="padding:36px 12px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;">
-            <!-- Wordmark -->
-            <tr>
-              <td align="center" style="padding-bottom:22px;">
-                <span style="font-size:26px; font-weight:700; color:#2a6ff2; letter-spacing:-0.5px;">Cue</span>
-              </td>
-            </tr>
-            <!-- Card -->
-            <tr>
-              <td style="background-color:#ffffff; border:1px solid #dde2f2; border-radius:16px; padding:36px 32px;">
-                <h1 style="margin:0 0 12px; font-size:22px; font-weight:600; color:#131b2e;">Sign in to Cue</h1>
-                <p style="margin:0 0 26px; font-size:15px; line-height:1.6; color:#424654;">
-                  Enter this code in the sign-in screen to finish. It expires shortly and can only be used once.
-                </p>
 
-                <!-- The code -->
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                  <tr>
-                    <td
-                      align="center"
-                      style="background-color:#f2f5ff; border:1px solid #dde2f2; border-radius:12px; padding:22px 12px;"
-                    >
-                      <span
-                        style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size:34px; font-weight:700; color:#131b2e; letter-spacing:10px; line-height:1;"
-                        >{{ .Token }}</span
-                      >
-                    </td>
-                  </tr>
-                </table>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <title>Your Cue sign-in code</title>
+</head>
 
-                <p style="margin:26px 0 0; font-size:13px; line-height:1.6; color:#8a90a0;">
-                  Never share this code. Cue staff will never ask you for it.
-                </p>
-              </td>
-            </tr>
-            <!-- Footer -->
-            <tr>
-              <td style="padding:22px 8px 0; text-align:center;">
-                <p style="margin:0 0 6px; font-size:12px; line-height:1.6; color:#8a90a0;">
-                  This code was requested for this email address. If it wasn&rsquo;t you, you can safely ignore this email.
-                </p>
-                <p style="margin:0; font-size:12px; color:#a0a6b4;">Cue &middot; Social scheduling for every client</p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
+<body
+  style="margin:0; padding:0; background-color:#f2f3ff; -webkit-font-smoothing:antialiased; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f2f3ff;">
+    <tr>
+      <td align="center" style="padding:36px 12px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:460px;">
+          <!-- Wordmark -->
+          <tr>
+            <td align="center" style="padding-bottom:22px;">
+              <span style="font-size:26px; font-weight:700; color:#2a6ff2; letter-spacing:-0.5px;">Cue</span>
+            </td>
+          </tr>
+          <!-- Card -->
+          <tr>
+            <td style="background-color:#ffffff; border:1px solid #dde2f2; border-radius:16px; padding:36px 32px;">
+              <h1 style="margin:0 0 12px; font-size:22px; font-weight:600; color:#131b2e;">Sign in to Cue</h1>
+              <p style="margin:0 0 26px; font-size:15px; line-height:1.6; color:#424654;">
+                Enter this code in the sign-in screen to finish. It expires shortly and can only be used once.
+              </p>
+
+              <!-- The code -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center"
+                    style="background-color:#f2f5ff; border:1px solid #dde2f2; border-radius:12px; padding:22px 12px;">
+                    <span
+                      style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace; font-size:34px; font-weight:700; color:#131b2e; letter-spacing:10px; line-height:1;">{{
+                      .Token }}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:26px 0 0; font-size:13px; line-height:1.6; color:#8a90a0;">
+                Never share this code. Cue staff will never ask you for it.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:22px 8px 0; text-align:center;">
+              <p style="margin:0 0 6px; font-size:12px; line-height:1.6; color:#8a90a0;">
+                This code was requested for this email address. If it wasn&rsquo;t you, you can safely ignore this
+                email.
+              </p>
+              <p style="margin:0; font-size:12px; color:#a0a6b4;">Cue &middot; Social scheduling for every client</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+
 </html>

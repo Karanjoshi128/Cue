@@ -9,7 +9,11 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
-import { LinkedinIcon, InstagramIcon, YoutubeIcon } from "@/components/platform-icons";
+import {
+  LinkedinIcon,
+  InstagramIcon,
+  YoutubeIcon,
+} from "@/components/platform-icons";
 import { getAuth } from "@/lib/auth";
 
 // Public marketing home. Kept outside the (app) group so it renders for
@@ -17,7 +21,7 @@ import { getAuth } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Cue — social media scheduling for agencies",
+  title: "Cue - social media scheduling for agencies",
   description:
     "Cue is a social media scheduling tool for agencies. Plan, schedule, and publish posts to your clients' LinkedIn, Instagram, and YouTube accounts from one calendar.",
 };
@@ -46,9 +50,21 @@ const features = [
 ];
 
 const platforms = [
-  { icon: LinkedinIcon, label: "LinkedIn", note: "Text, images, documents, links, and polls" },
-  { icon: InstagramIcon, label: "Instagram", note: "Single images, carousels, and Reels" },
-  { icon: YoutubeIcon, label: "YouTube", note: "Video uploads with title and visibility" },
+  {
+    icon: LinkedinIcon,
+    label: "LinkedIn",
+    note: "Text, images, documents, links, and polls",
+  },
+  {
+    icon: InstagramIcon,
+    label: "Instagram",
+    note: "Single images, carousels, and Reels",
+  },
+  {
+    icon: YoutubeIcon,
+    label: "YouTube",
+    note: "Video uploads with title and visibility",
+  },
 ];
 
 const steps = [
@@ -95,7 +111,7 @@ export default async function HomePage() {
         />
         <div className="relative mx-auto max-w-3xl px-5 py-20 text-center sm:py-24">
           <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
-            Cue — social media scheduling for agencies
+            Cue - social media scheduling for agencies
           </h1>
           <p className="text-muted-foreground mx-auto mt-5 max-w-2xl text-lg leading-relaxed">
             <strong className="text-foreground">Cue</strong> helps social media
@@ -117,7 +133,7 @@ export default async function HomePage() {
             </Button>
           </div>
           <p className="text-muted-foreground mt-4 text-sm">
-            No password needed — sign in with a one-time code.
+            No password needed - sign in with a one-time code.
           </p>
         </div>
       </section>

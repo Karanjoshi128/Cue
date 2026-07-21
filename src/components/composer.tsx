@@ -257,9 +257,10 @@ export function Composer({
           }),
         });
         if (!presignRes.ok) throw new Error(await readError(presignRes));
-        const { uploadUrl, ...item } = (await presignRes.json()) as MediaItem & {
-          uploadUrl: string;
-        };
+        const { uploadUrl, ...item } =
+          (await presignRes.json()) as MediaItem & {
+            uploadUrl: string;
+          };
 
         // 2. Send the bytes straight to R2. Going direct is what allows files
         //    past the ~4.5 MB cap on requests routed through a function.
@@ -720,7 +721,7 @@ export function Composer({
               </div>
               {!hasVideo && (
                 <p className="text-amber-600 dark:text-amber-400 text-xs">
-                  YouTube needs a video — add one with “Add media” above.
+                  YouTube needs a video - add one with “Add media” above.
                 </p>
               )}
             </div>

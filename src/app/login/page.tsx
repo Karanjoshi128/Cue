@@ -63,7 +63,7 @@ export default function LoginPage() {
             ) : (
               <div className="space-y-4 text-center">
                 <p className="text-muted-foreground text-base">
-                  Auth isn&apos;t configured yet — running in local dev mode.
+                  Auth isn&apos;t configured yet - running in local dev mode.
                 </p>
                 <Button
                   render={<Link href="/dashboard" />}
@@ -77,7 +77,7 @@ export default function LoginPage() {
 
           {/* Passwordless reassurance */}
           <p className="text-muted-foreground mt-5 text-center text-sm">
-            No password needed — we&apos;ll email you a one-time sign-in code.
+            No password needed - we&apos;ll email you a one-time sign-in code.
           </p>
 
           {/* Value strip keeps the card feeling full and confident */}

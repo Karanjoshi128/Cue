@@ -10,22 +10,22 @@ Cue requests one sensitive scope:
 
 There are **two independent processes**. Do them in this order.
 
-| # | Process | Unlocks |
-| - | ------- | ------- |
-| 1 | **OAuth consent screen verification** | Anyone can connect a channel |
-| 2 | **YouTube API Services audit + quota extension** | More than ~6 uploads/day |
+| #   | Process                                          | Unlocks                      |
+| --- | ------------------------------------------------ | ---------------------------- |
+| 1   | **OAuth consent screen verification**            | Anyone can connect a channel |
+| 2   | **YouTube API Services audit + quota extension** | More than ~6 uploads/day     |
 
 ---
 
 ## 0. Two things that bite early
 
 **Testing mode expires refresh tokens after 7 days.** While the OAuth app is in
-*Testing* publishing status, Google invalidates refresh tokens weekly, so a
+_Testing_ publishing status, Google invalidates refresh tokens weekly, so a
 connected channel silently stops publishing. Publishing the app (step 1) is what
-fixes this — it is not just a "more users" nicety.
+fixes this - it is not just a "more users" nicety.
 
 **Quota is the real ceiling.** `videos.insert` costs **1600 units** and the
-default project quota is **10,000 units/day** — about **6 uploads per day across
+default project quota is **10,000 units/day** - about **6 uploads per day across
 all clients**. A 15-client agency will hit this immediately, so step 2 matters as
 much as step 1.
 
@@ -33,16 +33,16 @@ much as step 1.
 
 ## 1. Prerequisites (done in this repo)
 
-- Privacy Policy has a **YouTube API Services** section — `https://trycue.space/privacy`
+- Privacy Policy has a **YouTube API Services** section -`https://trycue.space/privacy`
   - links the [YouTube ToS](https://www.youtube.com/t/terms) and
     [Google Privacy Policy](https://policies.google.com/privacy)
   - states **Limited Use** compliance with the
     [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy)
   - documents revoking access at `myaccount.google.com/permissions`
-- Terms reference the YouTube ToS — `https://trycue.space/terms`
-- Data deletion covers YouTube/Google tokens — `https://trycue.space/data-deletion`
+- Terms reference the YouTube ToS -`https://trycue.space/terms`
+- Data deletion covers YouTube/Google tokens -`https://trycue.space/data-deletion`
 
-> These must be **live on the domain** before submitting — reviewers fetch them.
+> These must be **live on the domain** before submitting - reviewers fetch them.
 
 ---
 
@@ -63,7 +63,7 @@ client in `GOOGLE_CLIENT_ID`:
       `https://trycue.space/api/oauth/youtube/callback`
 
 **Verify domain ownership** in [Google Search Console](https://search.google.com/search-console)
-for `trycue.space` using the same Google account — Google will not accept the
+for `trycue.space` using the same Google account - Google will not accept the
 authorized domain otherwise.
 
 ---
@@ -73,7 +73,7 @@ authorized domain otherwise.
 Click **Publish app** → Google prompts for verification because of the sensitive
 scope. You'll be asked for:
 
-**Scope justification** — paste:
+**Scope justification** - paste:
 
 > Cue is a social media scheduling tool for agencies. After a user connects their
 > own YouTube channel via Google OAuth, Cue uses `youtube.upload` solely to

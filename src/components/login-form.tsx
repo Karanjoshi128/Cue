@@ -66,7 +66,7 @@ export function LoginForm() {
       window.location.href = "/dashboard";
     } catch (e) {
       toast.error(
-        e instanceof Error ? e.message : "That code didn't work — try again",
+        e instanceof Error ? e.message : "That code didn't work - try again",
         { id: t },
       );
       setLoading(false);

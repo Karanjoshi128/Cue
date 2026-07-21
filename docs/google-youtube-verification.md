@@ -101,12 +101,57 @@ account for follow-up questions and answer fast.
 
 ## 4. Quota extension (do after step 3)
 
-Search for the **"YouTube API Services – Audit and Quota Extension Form"**. It
-asks for a compliance review of how the app uses YouTube data, plus your expected
-daily upload volume. Budget real time for this one.
+Default quota is **10,000 units/day** and `videos.insert` costs **1600 units**,
+so Cue can publish roughly **6 videos a day across every client** before uploads
+start failing. Raising it means the **"YouTube API Services - Audit and Quota
+Extension Form"**, linked from Google's YouTube API compliance audit docs.
 
-Math to quote in the form: `uploads/day × 1600 units`. 15 clients posting once a
-day ≈ **24,000 units/day**, so request headroom above that.
+### Before applying
+
+- [ ] OAuth verification (step 3) complete, or at least submitted.
+- [ ] Real usage on the project. Google weighs **demonstrated need**, so an
+      application from a project with almost no traffic is usually deferred.
+      Onboard clients first and apply as you approach the ceiling.
+
+### Details to hand over
+
+| Field                | Value                                                     |
+| -------------------- | --------------------------------------------------------- |
+| Google Cloud project | `cuePostingProject`                                       |
+| Project number       | `887582754693` (numeric prefix of the OAuth client id)    |
+| API                  | YouTube Data API v3                                       |
+| Scope requested      | `youtube.upload` only                                     |
+| Methods called       | `videos.insert` (resumable upload), and nothing else      |
+
+### What the app does (paste)
+
+> Cue is a social media scheduling tool for agencies and social media managers.
+> A user connects their own or their client's YouTube channel through Google
+> OAuth, then composes a video post in Cue alongside their LinkedIn and Instagram
+> content on a single calendar. At the scheduled time Cue uploads the video to
+> that channel with `videos.insert`, using the title, description, and privacy
+> status the user chose. Cue calls no other YouTube Data API method and requests
+> no other YouTube scope: it does not read videos, comments, subscribers, or
+> analytics.
+
+### Quota justification (put real numbers in)
+
+Show the arithmetic, `uploads per day x 1600 units`:
+
+- 15 clients x 2 uploads/day = 30 uploads = **48,000 units/day**
+- roughly 20% headroom for retries and growth, so request about **60,000/day**
+
+Ask for what the arithmetic supports. Inflated requests with no calculation
+behind them get refused.
+
+### Compliance points the audit checks (already satisfied in this repo)
+
+- Privacy policy links the [YouTube ToS](https://www.youtube.com/t/terms) and the
+  [Google Privacy Policy](https://policies.google.com/privacy), at `/privacy`
+- Limited Use statement for the Google API Services User Data Policy, at `/privacy`
+- Revoking access via Google account permissions, at `/privacy` and `/data-deletion`
+- Terms reference the YouTube ToS, at `/terms`
+- Every upload is user-initiated, to a channel the user explicitly authorized
 
 ---
 

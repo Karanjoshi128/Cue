@@ -66,7 +66,7 @@ export default function LoginPage() {
                   Auth isn&apos;t configured yet — running in local dev mode.
                 </p>
                 <Button
-                  render={<Link href="/" />}
+                  render={<Link href="/dashboard" />}
                   className="h-11 w-full text-base font-medium"
                 >
                   Enter app

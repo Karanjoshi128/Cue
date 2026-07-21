@@ -57,7 +57,7 @@ function MobileNav({ pathname }: { pathname: string }) {
       </SheetTrigger>
       <SheetContent side="left" className="w-64 p-0" showCloseButton={false}>
         <div className="flex h-16 items-center px-5">
-          <Link href="/" onClick={() => setOpen(false)}>
+          <Link href="/dashboard" onClick={() => setOpen(false)}>
             <Logo />
           </Link>
         </div>

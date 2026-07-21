@@ -21,7 +21,7 @@ const workspaceNameSchema = z.string().trim().min(1).max(60);
  */
 export async function createWorkspace(name: string) {
   const { user, email } = await getAuth();
-  if (user) redirect("/");
+  if (user) redirect("/dashboard");
   if (!email) throw new Error("UNAUTHENTICATED");
   const wsName = workspaceNameSchema.parse(name);
 
@@ -31,7 +31,7 @@ export async function createWorkspace(name: string) {
       users: { create: { email, name: email.split("@")[0], role: "ADMIN" } },
     },
   });
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function renameWorkspace(name: string) {
@@ -316,7 +316,7 @@ export async function savePost(input: z.infer<typeof postSchema>) {
 
   revalidatePath("/queue");
   revalidatePath("/calendar");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
   return post;
 }
 
@@ -397,7 +397,7 @@ export async function updatePost(
 
   revalidatePath("/queue");
   revalidatePath("/calendar");
-  revalidatePath("/");
+  revalidatePath("/dashboard");
 }
 
 export async function deletePost(id: string) {

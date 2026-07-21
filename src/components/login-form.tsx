@@ -63,7 +63,7 @@ export function LoginForm() {
       toast.success("Signed in", { id: t });
       // Hard navigation: guarantees the server re-reads the freshly written
       // auth cookies instead of replaying a cached "/" → /login payload.
-      window.location.href = "/";
+      window.location.href = "/dashboard";
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "That code didn't work — try again",

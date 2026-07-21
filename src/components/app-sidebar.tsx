@@ -18,7 +18,7 @@ export function AppSidebar() {
   return (
     <aside className="bg-sidebar border-border sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r md:flex">
       <div className="flex h-16 items-center px-5">
-        <Link href="/">
+        <Link href="/dashboard">
           <Logo />
         </Link>
       </div>
@@ -35,10 +35,7 @@ export function AppSidebar() {
 
       <nav className="mt-5 flex flex-1 flex-col gap-1 overflow-y-auto px-3">
         {navItems.map((item) => {
-          const active =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
+          const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

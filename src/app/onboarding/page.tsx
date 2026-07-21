@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function OnboardingPage() {
   const { user, email, needsOnboarding } = await getAuth();
   // Already a member → into the app. Not authenticated → back to login.
-  if (user) redirect("/");
+  if (user) redirect("/dashboard");
   if (!email || !needsOnboarding) redirect("/login");
 
   const handle = email.split("@")[0];

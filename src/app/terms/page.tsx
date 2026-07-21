@@ -37,9 +37,9 @@ export default function TermsPage() {
 
           <Section title="2. The service">
             <p>
-              Cue lets you connect LinkedIn and Instagram accounts and schedule
-              and publish content to them. You are responsible for the accounts
-              you connect and the content you publish.
+              Cue lets you connect LinkedIn, Instagram, and YouTube accounts and
+              schedule and publish content to them. You are responsible for the
+              accounts you connect and the content you publish.
             </p>
           </Section>
 
@@ -51,7 +51,16 @@ export default function TermsPage() {
               </li>
               <li>
                 Your use must comply with the terms and policies of LinkedIn and
-                Meta/Instagram, and all applicable laws.
+                Meta/Instagram, the{" "}
+                <a
+                  className="text-primary underline"
+                  href="https://www.youtube.com/t/terms"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  YouTube Terms of Service
+                </a>
+                , and all applicable laws.
               </li>
               <li>
                 You must not use Cue to publish spam, illegal, infringing, or
@@ -70,7 +79,8 @@ export default function TermsPage() {
 
           <Section title="5. Third-party platforms">
             <p>
-              Cue depends on third-party APIs (LinkedIn, Meta/Instagram). We are
+              Cue depends on third-party APIs (LinkedIn, Meta/Instagram, and
+              YouTube API Services). We are
               not responsible for changes, outages, or actions those platforms
               take, including rate limits, account restrictions, or removal of a
               post.

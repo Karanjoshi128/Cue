@@ -8,7 +8,8 @@ export const metadata: Metadata = {
 };
 
 // Operating entity: Karan Joshi (individual). Governing law: India.
-// This describes Cue's actual data practices for Meta / LinkedIn review.
+// Describes Cue's actual data practices for Meta / LinkedIn / Google review.
+// The YouTube API Services section is required for Google OAuth verification.
 const UPDATED = "July 6, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 const CONTACT = "joshikaran0008@gmail.com";
@@ -32,8 +33,8 @@ export default function PrivacyPage() {
             <p>
               {ENTITY} operates Cue, a social media scheduling tool that lets
               agencies plan, schedule, and publish posts to their clients&apos;
-              LinkedIn and Instagram accounts. This policy explains what we
-              collect, why, and the choices you have.
+              LinkedIn, Instagram, and YouTube accounts. This policy explains
+              what we collect, why, and the choices you have.
             </p>
           </section>
 
@@ -41,15 +42,16 @@ export default function PrivacyPage() {
             <ul className="list-disc space-y-2 pl-5">
               <li>
                 <strong className="text-foreground">Account data.</strong> The
-                email address you sign in with (via a passwordless magic link)
-                and a display name you choose.
+                email address you sign in with (via a passwordless one-time code
+                we email you) and a display name you choose.
               </li>
               <li>
                 <strong className="text-foreground">
                   Connected social accounts.
                 </strong>{" "}
-                When you connect a LinkedIn or Instagram account, we receive and
-                store an access token (and, where provided, a refresh token) plus
+                When you connect a LinkedIn, Instagram, or YouTube account, we
+                receive and store an access token (and, where provided, a
+                refresh token) plus
                 that account&apos;s platform id, username, and display name. Tokens
                 are <strong className="text-foreground">encrypted at rest</strong>{" "}
                 and used only to publish on your behalf.
@@ -68,8 +70,8 @@ export default function PrivacyPage() {
             <ul className="list-disc space-y-2 pl-5">
               <li>Authenticate you and keep your workspace isolated.</li>
               <li>
-                Schedule and publish your posts to the LinkedIn and Instagram
-                accounts you connect, at the times you set.
+                Schedule and publish your posts to the LinkedIn, Instagram, and
+                YouTube accounts you connect, at the times you set.
               </li>
               <li>Show publishing status, history, and account health.</li>
             </ul>
@@ -83,7 +85,7 @@ export default function PrivacyPage() {
             <p>
               Cue integrates with the official APIs of{" "}
               <strong className="text-foreground">
-                LinkedIn and Meta (Instagram)
+                LinkedIn, Meta (Instagram), and YouTube
               </strong>
               . When you publish, your content and the relevant access token are
               sent to those platforms to create the post. Our use of the
@@ -110,6 +112,74 @@ export default function PrivacyPage() {
               <li>
                 <strong className="text-foreground">Vercel</strong> — application
                 hosting.
+              </li>
+            </ul>
+          </Section>
+
+          <Section title="YouTube API Services">
+            <p>
+              Cue uses{" "}
+              <strong className="text-foreground">YouTube API Services</strong>{" "}
+              to upload videos to the channel you connect. By connecting a
+              YouTube channel you agree to the{" "}
+              <a
+                className="text-primary underline"
+                href="https://www.youtube.com/t/terms"
+                target="_blank"
+                rel="noreferrer"
+              >
+                YouTube Terms of Service
+              </a>
+              , and Google&apos;s handling of your data is described in the{" "}
+              <a
+                className="text-primary underline"
+                href="https://policies.google.com/privacy"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Google Privacy Policy
+              </a>
+              .
+            </p>
+            <ul className="list-disc space-y-2 pl-5">
+              <li>
+                <strong className="text-foreground">What we access.</strong> Your
+                Google account id, email address, and name — used only to label
+                the connected channel — plus permission to upload videos on your
+                behalf. We do not read your existing videos, comments,
+                subscribers, or analytics.
+              </li>
+              <li>
+                <strong className="text-foreground">Limited Use.</strong>{" "}
+                Cue&apos;s use and transfer of information received from Google
+                APIs adheres to the{" "}
+                <a
+                  className="text-primary underline"
+                  href="https://developers.google.com/terms/api-services-user-data-policy"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Google API Services User Data Policy
+                </a>
+                , including its Limited Use requirements. We do not sell this
+                data, use it for advertising, or let humans read it except where
+                required for security or by law.
+              </li>
+              <li>
+                <strong className="text-foreground">Revoking access.</strong>{" "}
+                Disconnect the channel from the{" "}
+                <strong className="text-foreground">Clients</strong> page, which
+                deletes its stored tokens, or revoke Cue&apos;s access at any
+                time through your{" "}
+                <a
+                  className="text-primary underline"
+                  href="https://myaccount.google.com/permissions"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Google security settings
+                </a>
+                .
               </li>
             </ul>
           </Section>

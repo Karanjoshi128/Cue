@@ -36,7 +36,7 @@ export default function DataDeletionPage() {
             <p>
               Sign in to Cue, open the{" "}
               <strong className="text-foreground">Clients</strong> page, find the
-              connected LinkedIn or Instagram account, and click the{" "}
+              connected LinkedIn, Instagram, or YouTube account, and click the{" "}
               <strong className="text-foreground">disconnect</strong> (unplug)
               icon. This immediately deletes the stored access token and stops
               Cue from accessing that account. Deleting a client removes its
@@ -71,7 +71,8 @@ export default function DataDeletionPage() {
             <ul className="list-disc space-y-2 pl-5">
               <li>Your profile (email, name) and workspace membership.</li>
               <li>
-                All connected LinkedIn / Instagram access &amp; refresh tokens.
+                All connected LinkedIn / Instagram / YouTube (Google) access
+                &amp; refresh tokens.
               </li>
               <li>Clients, scheduled and published posts, and uploaded media.</li>
               <li>Publishing history records.</li>
@@ -82,7 +83,17 @@ export default function DataDeletionPage() {
             You can also revoke Cue&apos;s access directly from the platform: in
             Instagram, remove Cue under{" "}
             <em>Settings → Apps and Websites</em>; in LinkedIn, under{" "}
-            <em>Settings → Data privacy → Permitted services</em>.
+            <em>Settings → Data privacy → Permitted services</em>; and for a
+            YouTube channel, remove Cue from your{" "}
+            <a
+              className="text-primary underline"
+              href="https://myaccount.google.com/permissions"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Google account permissions
+            </a>
+            .
           </p>
         </div>
       </article>

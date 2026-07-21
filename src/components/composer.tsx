@@ -105,6 +105,21 @@ const YT_PRIVACY = [
   { value: "private", label: "Private" },
 ] as const;
 
+/**
+ * Error responses aren't always JSON - a platform-level rejection returns plain
+ * text, and calling res.json() on that surfaces a confusing "not valid JSON"
+ * parse error instead of the actual cause.
+ */
+async function readError(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    return (JSON.parse(text) as { error?: string }).error ?? text.slice(0, 140);
+  } catch {
+    if (res.status === 413) return "That file is too large to upload.";
+    return text.slice(0, 140) || `Upload failed (${res.status})`;
+  }
+}
+
 export function Composer({
   clients,
   initial,
@@ -231,18 +246,40 @@ export function Composer({
     );
     try {
       for (const file of files) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const res = await fetch("/api/upload", { method: "POST", body: fd });
-        if (!res.ok) {
-          throw new Error((await res.json()).error ?? "Upload failed");
+        // 1. Authorize the upload and mint a short-lived presigned PUT.
+        const presignRes = await fetch("/api/upload/presign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            size: file.size,
+          }),
+        });
+        if (!presignRes.ok) throw new Error(await readError(presignRes));
+        const { uploadUrl, ...item } = (await presignRes.json()) as MediaItem & {
+          uploadUrl: string;
+        };
+
+        // 2. Send the bytes straight to R2. Going direct is what allows files
+        //    past the ~4.5 MB cap on requests routed through a function.
+        //    A CORS failure rejects the fetch outright, hence the catch.
+        const put = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        }).catch(() => null);
+        if (!put?.ok) {
+          throw new Error(
+            `Could not upload ${file.name} to storage${put ? ` (${put.status})` : ""}. If this keeps happening, check the R2 bucket's CORS policy.`,
+          );
         }
-        const data = (await res.json()) as MediaItem;
+
         if (as === "doc") {
-          setDoc(data);
+          setDoc(item);
           break; // one document per post
         }
-        setMedia((m) => [...m, data]);
+        setMedia((m) => [...m, item]);
       }
       toast.success(as === "doc" ? "Document added" : "Media added", { id: t });
     } catch (e) {

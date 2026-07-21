@@ -5,7 +5,10 @@ import { uploadToR2 } from "@/lib/r2";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Accepts a multipart file, stores it in R2, returns its public URL + key.
+// Legacy multipart upload: the bytes pass through this function, so it is
+// bounded by the platform's ~4.5 MB request-body cap. Superseded by
+// /api/upload/presign, which has the browser PUT straight to R2. Kept as a
+// rollback path while the bucket's CORS policy beds in.
 export async function POST(req: NextRequest) {
   try {
     await requireUser();

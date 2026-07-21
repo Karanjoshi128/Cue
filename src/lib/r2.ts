@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Cloudflare R2 via the S3-compatible API.
 
@@ -35,6 +36,34 @@ export async function uploadToR2(
     }),
   );
   return `${process.env.R2_PUBLIC_URL}/${key}`;
+}
+
+/** Public URL for an object key. */
+export function publicUrl(key: string): string {
+  return `${process.env.R2_PUBLIC_URL}/${key}`;
+}
+
+/**
+ * Presigned PUT URL so the browser uploads straight to R2, never routing the
+ * bytes through a serverless function. Vercel caps request bodies at ~4.5 MB,
+ * which any real video blows past, so this is the only workable path for video.
+ *
+ * Requires a CORS policy on the bucket allowing PUT from the app's origins.
+ */
+export async function presignUpload(
+  key: string,
+  contentType: string,
+  expiresIn = 300,
+): Promise<string> {
+  return getSignedUrl(
+    client(),
+    new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET,
+      Key: key,
+      ContentType: contentType,
+    }),
+    { expiresIn },
+  );
 }
 
 export async function deleteFromR2(keys: string[]): Promise<void> {

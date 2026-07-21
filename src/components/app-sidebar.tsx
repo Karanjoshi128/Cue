@@ -12,8 +12,11 @@ import { Plus } from "lucide-react";
 export function AppSidebar() {
   const pathname = usePathname();
 
+  // sticky + h-screen keeps the rail pinned to the viewport. The explicit
+  // height also stops the default align-items:stretch from growing it to the
+  // page height, which is what made it scroll along with the content.
   return (
-    <aside className="bg-sidebar border-border hidden w-64 shrink-0 flex-col border-r md:flex">
+    <aside className="bg-sidebar border-border sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r md:flex">
       <div className="flex h-16 items-center px-5">
         <Link href="/">
           <Logo />
@@ -30,7 +33,7 @@ export function AppSidebar() {
         </Button>
       </div>
 
-      <nav className="mt-5 flex flex-1 flex-col gap-1 px-3">
+      <nav className="mt-5 flex flex-1 flex-col gap-1 overflow-y-auto px-3">
         {navItems.map((item) => {
           const active =
             item.href === "/"

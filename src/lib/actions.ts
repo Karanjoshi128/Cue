@@ -209,6 +209,9 @@ const postSchema = z
   .object({
     clientId: z.string().min(1),
     body: z.string().min(1).max(3000),
+    // YouTube-only: video title + visibility (ignored for other platforms).
+    title: z.string().max(100).optional(),
+    youtubePrivacy: z.enum(["public", "unlisted", "private"]).optional(),
     accountIds: z.array(z.string()).min(1),
     scheduledAt: z.string().datetime().nullable().optional(),
     media: z
@@ -282,6 +285,8 @@ export async function savePost(input: z.infer<typeof postSchema>) {
       clientId: data.clientId,
       authorId: user.id,
       body: data.body,
+      title: data.title,
+      youtubePrivacy: data.youtubePrivacy,
       status,
       link: data.link ?? undefined,
       poll: data.poll ?? undefined,
@@ -358,6 +363,9 @@ export async function updatePost(
       data: {
         clientId: data.clientId,
         body: data.body,
+        // Provided on every edit, so null clears them when YouTube is dropped.
+        title: data.title ?? null,
+        youtubePrivacy: data.youtubePrivacy ?? null,
         status,
         // Provided on every edit, so DbNull clears a removed link/poll.
         link: data.link ?? Prisma.DbNull,

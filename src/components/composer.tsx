@@ -60,11 +60,14 @@ type PollDuration = "ONE_DAY" | "THREE_DAYS" | "SEVEN_DAYS" | "FOURTEEN_DAYS";
 type LinkData = { url: string; title?: string; description?: string };
 type PollData = { question: string; options: string[]; duration: PollDuration };
 type ContentType = "media" | "document" | "link" | "poll";
+type YtPrivacy = "public" | "unlisted" | "private";
 
 export interface ComposerInitial {
   id: string;
   clientId: string;
   body: string;
+  title: string; // YouTube video title ("" when unused)
+  youtubePrivacy: YtPrivacy | null;
   accountIds: string[];
   scheduledAt: string; // datetime-local string, or ""
   media: MediaItem[];
@@ -94,6 +97,12 @@ const POLL_DURATIONS = [
   { value: "THREE_DAYS", label: "3 days" },
   { value: "SEVEN_DAYS", label: "1 week" },
   { value: "FOURTEEN_DAYS", label: "2 weeks" },
+] as const;
+
+const YT_PRIVACY = [
+  { value: "public", label: "Public" },
+  { value: "unlisted", label: "Unlisted" },
+  { value: "private", label: "Private" },
 ] as const;
 
 export function Composer({
@@ -130,6 +139,10 @@ export function Composer({
   );
   const [selected, setSelected] = useState<string[]>(initial?.accountIds ?? []);
   const [body, setBody] = useState(initial?.body ?? "");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [youtubePrivacy, setYoutubePrivacy] = useState<YtPrivacy>(
+    initial?.youtubePrivacy ?? "public",
+  );
   const [scheduledAt, setScheduledAt] = useState(
     initial?.scheduledAt ?? prefillDate ?? "",
   );
@@ -160,14 +173,7 @@ export function Composer({
     [clients, clientId],
   );
 
-  // YouTube posting isn't wired into the composer yet - hide those accounts so
-  // no invalid YouTube posts can be created (connecting still works on Clients).
-  const postableAccounts = useMemo(
-    () => client?.accounts.filter((a) => a.platform !== "YOUTUBE") ?? [],
-    [client],
-  );
-  const hasYoutube =
-    client?.accounts.some((a) => a.platform === "YOUTUBE") ?? false;
+  const postableAccounts = client?.accounts ?? [];
 
   // Document / link / poll are LinkedIn-only content types.
   const linkedInOnly = contentType !== "media";
@@ -186,6 +192,8 @@ export function Composer({
     perPlatform ? (overrides[accountId] ?? body) : body;
 
   const igSelected = selectedPlatforms.has("INSTAGRAM");
+  const ytSelected = selectedPlatforms.has("YOUTUBE");
+  const hasVideo = media.some((m) => m.type === "VIDEO");
   const limit = useMemo(() => {
     const limits = [...selectedPlatforms].map((p) => PLATFORM_LIMITS[p]);
     return limits.length ? Math.min(...limits) : HARD_LIMIT;
@@ -198,11 +206,11 @@ export function Composer({
   function changeType(t: ContentType) {
     setContentType(t);
     if (t !== "media") {
-      // Deselect Instagram - these content types are LinkedIn-only.
+      // Document / link / poll are LinkedIn-only - drop non-LinkedIn accounts.
       setSelected((s) =>
         s.filter(
           (id) =>
-            client?.accounts.find((a) => a.id === id)?.platform !== "INSTAGRAM",
+            client?.accounts.find((a) => a.id === id)?.platform === "LINKEDIN",
         ),
       );
       setPerPlatform(false);
@@ -264,6 +272,12 @@ export function Composer({
       if (igSelected && media.length === 0 && action !== "draft") {
         return toast.error("Instagram posts need at least one image or video");
       }
+      if (ytSelected && action !== "draft") {
+        if (!hasVideo) return toast.error("YouTube needs a video to upload");
+        if (!title.trim()) {
+          return toast.error("Add a title for your YouTube video");
+        }
+      }
     } else if (contentType === "document") {
       if (!doc && action !== "draft") return toast.error("Upload a document");
     } else if (contentType === "link") {
@@ -286,6 +300,8 @@ export function Composer({
     const payload = {
       clientId,
       body,
+      title: ytSelected ? title.trim() || undefined : undefined,
+      youtubePrivacy: ytSelected ? youtubePrivacy : undefined,
       accountIds: selected,
       action,
       scheduledAt:
@@ -437,7 +453,7 @@ export function Composer({
               <div className="flex flex-wrap gap-2">
                 {postableAccounts.map((a) => {
                   const on = selected.includes(a.id);
-                  const disabled = linkedInOnly && a.platform === "INSTAGRAM";
+                  const disabled = linkedInOnly && a.platform !== "LINKEDIN";
                   return (
                     <button
                       key={a.id}
@@ -476,12 +492,6 @@ export function Composer({
               <p className="text-muted-foreground text-xs">
                 {CONTENT_TYPES.find((t) => t.key === contentType)?.label} posts
                 are supported on LinkedIn only.
-              </p>
-            )}
-            {hasYoutube && (
-              <p className="text-muted-foreground text-xs">
-                YouTube posting is coming soon — connected channels can&apos;t be
-                scheduled here yet.
               </p>
             )}
           </div>
@@ -630,6 +640,53 @@ export function Composer({
                 )}
               </div>
             </>
+          )}
+
+          {/* --- YouTube video details --- */}
+          {contentType === "media" && ytSelected && (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <PlatformIcon platform="YOUTUBE" /> YouTube
+              </div>
+              <div className="space-y-1.5">
+                <Label className="label-caps">Video title</Label>
+                <Input
+                  value={title}
+                  maxLength={100}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Title shown on YouTube"
+                />
+                <div className="text-muted-foreground text-right text-xs">
+                  {title.length}/100
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="label-caps">Visibility</Label>
+                <Select
+                  value={youtubePrivacy}
+                  items={Object.fromEntries(
+                    YT_PRIVACY.map((p) => [p.value, p.label]),
+                  )}
+                  onValueChange={(v) => setYoutubePrivacy(v as YtPrivacy)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {YT_PRIVACY.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {!hasVideo && (
+                <p className="text-amber-600 dark:text-amber-400 text-xs">
+                  YouTube needs a video — add one with “Add media” above.
+                </p>
+              )}
+            </div>
           )}
 
           {/* --- Document --- */}
@@ -883,6 +940,7 @@ export function Composer({
                   name={client?.name ?? "Client"}
                   color={client?.color}
                   body={b}
+                  title={title}
                   images={previewImages}
                   videoUrl={previewVideo}
                   documentTitle={previewDoc}

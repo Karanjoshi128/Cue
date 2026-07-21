@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { Platform } from "@prisma/client";
 import { authorizeCron } from "@/lib/cron-auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { refreshAccessToken } from "@/lib/tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,10 @@ export async function POST(req: NextRequest) {
   let refreshed = 0;
   for (const account of expiring) {
     try {
-      const next = await refreshToken(account.platform, decrypt(account.refreshToken!));
+      const next = await refreshAccessToken(
+        account.platform,
+        decrypt(account.refreshToken!),
+      );
       if (next) {
         await prisma.socialAccount.update({
           where: { id: account.id },
@@ -54,54 +57,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, clientCount, refreshed });
-}
-
-async function refreshToken(
-  platform: Platform,
-  refreshToken: string,
-): Promise<{ accessToken: string; refreshToken?: string; expiresAt: Date } | null> {
-  if (platform === "LINKEDIN") {
-    const params = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: process.env.LINKEDIN_CLIENT_ID ?? "",
-      client_secret: process.env.LINKEDIN_CLIENT_SECRET ?? "",
-    });
-    const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params,
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      access_token: string;
-      expires_in: number;
-      refresh_token?: string;
-    };
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
-    };
-  }
-
-  if (platform === "INSTAGRAM") {
-    // Instagram: long-lived token refresh (extends another ~60 days).
-    // Instagram Login tokens refresh on graph.instagram.com, not graph.facebook.com.
-    const res = await fetch(
-      `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${refreshToken}`,
-    );
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      access_token: string;
-      expires_in: number;
-    };
-    return {
-      accessToken: data.access_token,
-      expiresAt: new Date(Date.now() + data.expires_in * 1000),
-    };
-  }
-
-  // YouTube (Google) tokens are refreshed at publish time, not here.
-  return null;
 }

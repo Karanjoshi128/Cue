@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
 import { getAdapter } from "@/lib/platforms";
+import { ensureFreshAccessToken } from "@/lib/tokens";
 import type { Post, PostTarget } from "@prisma/client";
-import type { PublishArticle, PublishPoll } from "@/lib/platforms/types";
+import type {
+  PublishArticle,
+  PublishPoll,
+  YouTubePrivacy,
+} from "@/lib/platforms/types";
 
 const MAX_ATTEMPTS = 3;
 
@@ -74,6 +78,9 @@ export async function publishDueTargets(now = new Date()): Promise<{
       const adapter = getAdapter(target.platform);
       const result = await adapter.publish({
         body: target.bodyOverride ?? target.post.body,
+        title: target.post.title ?? undefined,
+        privacy:
+          (target.post.youtubePrivacy as YouTubePrivacy | null) ?? undefined,
         media: target.post.media.map((m) => ({
           type: m.type,
           url: m.url,
@@ -81,7 +88,8 @@ export async function publishDueTargets(now = new Date()): Promise<{
         })),
         article: linkToArticle(target.post.link),
         poll: jsonToPoll(target.post.poll),
-        accessToken: decrypt(target.account.accessToken),
+        // Refreshes short-lived tokens (YouTube/Google ~1h) right before use.
+        accessToken: await ensureFreshAccessToken(target.account),
         externalId: target.account.externalId,
       });
 

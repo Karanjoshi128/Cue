@@ -49,7 +49,8 @@ export async function getPosts(filter?: {
       ...(filter?.clientId ? { clientId: filter.clientId } : {}),
       ...(filter?.status ? { status: filter.status as never } : {}),
     },
-    orderBy: [{ scheduledAt: "asc" }, { createdAt: "desc" }],
+    // Queue shows newest first - the most recently created posts on top.
+    orderBy: { createdAt: "desc" },
     include: {
       client: true,
       media: true,

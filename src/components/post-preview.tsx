@@ -17,7 +17,11 @@ import {
   Send,
   ThumbsUp,
 } from "lucide-react";
-import { LinkedinIcon, InstagramIcon } from "@/components/platform-icons";
+import {
+  LinkedinIcon,
+  InstagramIcon,
+  YoutubeIcon,
+} from "@/components/platform-icons";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +44,7 @@ interface PreviewProps {
   name: string;
   color?: string | null;
   body: string;
+  title?: string; // YouTube video title
   images?: string[];
   videoUrl?: string;
   documentTitle?: string;
@@ -473,6 +478,48 @@ export function InstagramPreview({
   );
 }
 
+/** Approximates how an uploaded video looks on YouTube (watch page style). */
+export function YouTubePreview({
+  name,
+  color,
+  body,
+  title,
+  videoUrl,
+}: PreviewProps) {
+  return (
+    <div className="bg-card overflow-hidden rounded-xl border">
+      {videoUrl ? (
+        <VideoBlock url={videoUrl} />
+      ) : (
+        <div className="bg-muted text-muted-foreground grid aspect-video w-full place-items-center text-xs">
+          Add a video to upload to YouTube
+        </div>
+      )}
+
+      <div className="flex items-start gap-2.5 p-3">
+        <Avatar name={name} color={color} size="size-9" />
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-sm font-semibold">
+            {title?.trim() || "Your video title"}
+          </div>
+          <div className="text-muted-foreground mt-0.5 flex items-center gap-1 text-xs">
+            <span className="truncate">{name}</span>
+            <YoutubeIcon className="size-3.5 shrink-0 text-[#ff0000]" />
+          </div>
+          <div className="text-muted-foreground text-xs">No views · now</div>
+        </div>
+        <MoreHorizontal className="text-muted-foreground size-5 shrink-0" />
+      </div>
+
+      {body.trim() && (
+        <p className="text-muted-foreground px-3 pb-3 text-xs">
+          <PostText body={body} limit={120} moreLabel="more" lessLabel="less" />
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Renders a platform preview with a maximize button (top-right) that opens the
  * same preview larger in a scrollable modal.
@@ -482,9 +529,24 @@ export function ExpandablePreview({
   ...props
 }: PreviewProps & { platform: Platform }) {
   const [open, setOpen] = useState(false);
-  const Preview = platform === "INSTAGRAM" ? InstagramPreview : LinkedInPreview;
-  const label = platform === "INSTAGRAM" ? "Instagram" : "LinkedIn";
-  const Icon = platform === "INSTAGRAM" ? InstagramIcon : LinkedinIcon;
+  const Preview =
+    platform === "INSTAGRAM"
+      ? InstagramPreview
+      : platform === "YOUTUBE"
+        ? YouTubePreview
+        : LinkedInPreview;
+  const label =
+    platform === "INSTAGRAM"
+      ? "Instagram"
+      : platform === "YOUTUBE"
+        ? "YouTube"
+        : "LinkedIn";
+  const Icon =
+    platform === "INSTAGRAM"
+      ? InstagramIcon
+      : platform === "YOUTUBE"
+        ? YoutubeIcon
+        : LinkedinIcon;
 
   return (
     <div className="space-y-1.5">

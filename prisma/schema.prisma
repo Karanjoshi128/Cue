@@ -94,21 +94,22 @@ enum Platform {
 // ---------------------------------------------------------------------------
 
 model Post {
-  id          String         @id @default(cuid())
-  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  clientId    String
-  author      User           @relation(fields: [authorId], references: [id])
-  authorId    String
-  body        String
-  title       String? // YouTube video title (unused by LinkedIn/Instagram)
-  scheduledAt DateTime?
-  status      PostStatus     @default(DRAFT)
-  approval    ApprovalStatus @default(APPROVED)
+  id             String         @id @default(cuid())
+  client         Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId       String
+  author         User           @relation(fields: [authorId], references: [id])
+  authorId       String
+  body           String
+  title          String? // YouTube video title (unused by LinkedIn/Instagram)
+  youtubePrivacy String? // YouTube visibility: public | unlisted | private (null for non-YT)
+  scheduledAt    DateTime?
+  status         PostStatus     @default(DRAFT)
+  approval       ApprovalStatus @default(APPROVED)
   // LinkedIn-only content types (null = a normal text/media post):
-  link        Json? // { url, title, description } - link-preview post
-  poll        Json? // { question, options: string[], duration } - poll post
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  link           Json? // { url, title, description } - link-preview post
+  poll           Json? // { question, options: string[], duration } - poll post
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   media    MediaAsset[]
   targets  PostTarget[]

@@ -18,8 +18,14 @@ export interface PublishPoll {
   duration: "ONE_DAY" | "THREE_DAYS" | "SEVEN_DAYS" | "FOURTEEN_DAYS";
 }
 
+// YouTube-only visibility for an uploaded video.
+export type YouTubePrivacy = "public" | "unlisted" | "private";
+
 export interface PublishInput {
   body: string;
+  // YouTube-only: the uploaded video's title + visibility. Ignored elsewhere.
+  title?: string;
+  privacy?: YouTubePrivacy;
   media: PublishMedia[];
   article?: PublishArticle;
   poll?: PublishPoll;

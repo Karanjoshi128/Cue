@@ -52,8 +52,12 @@ much as step 1.
 client in `GOOGLE_CLIENT_ID`:
 
 - [ ] User type **External**
-- [ ] App name `Cue`, user support email, and an **app logo** (square PNG;
-      `public/brand/cue-app-icon-1024.png` works, resized)
+- [ ] App name `Cue`, user support email, and an **app logo**:
+      `public/brand/cue-app-icon-wordmark-1024.png`. Use this one rather than
+      the mark-only `cue-app-icon-1024.png`. Google rejected the bare blue C
+      with "your logo does not uniquely identify your brand and identity", so
+      the icon now stacks the mark above the "cue" wordmark, which ties the
+      consent screen name, the homepage H1 and the logo into one identity.
 - [ ] **App domain**: home `https://trycue.space`, privacy
       `https://trycue.space/privacy`, terms `https://trycue.space/terms`
 - [ ] **Authorized domain**: `trycue.space`

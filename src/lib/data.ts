@@ -30,6 +30,21 @@ export async function getClients() {
   });
 }
 
+/**
+ * Minimal client list for the topbar switcher, which renders on every page.
+ * Deliberately not getClients(): that pulls each client's social accounts
+ * (including their encrypted tokens) and post counts, none of which the
+ * switcher uses.
+ */
+export async function getClientOptions() {
+  const workspaceId = await requireWorkspaceId();
+  return prisma.client.findMany({
+    where: { workspaceId },
+    select: { id: true, name: true, color: true },
+    orderBy: { name: "asc" },
+  });
+}
+
 export async function getClient(id: string) {
   const workspaceId = await requireWorkspaceId();
   return prisma.client.findFirst({

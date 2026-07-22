@@ -181,3 +181,7 @@ profile posting (`w_member_social`). No Meta-style review needed for that. To po
 to **Company Pages** you'd separately apply to LinkedIn's **Community Management
 API** partner program (`w_organization_social`) - out of scope for this Instagram
 submission.
+
+That has since become an active track rather than a nice-to-have: every client on
+the roster uses a Page, not a personal profile, so `w_member_social` cannot reach
+any of them. See `linkedin-pages-access.md`.

@@ -38,6 +38,8 @@ export default async function ComposerPage({
         title: post.title ?? "",
         youtubePrivacy:
           (post.youtubePrivacy as ComposerInitial["youtubePrivacy"]) ?? null,
+        youtubeTags: post.youtubeTags,
+        youtubeCategoryId: post.youtubeCategoryId,
         accountIds: post.targets.map((t) => t.accountId),
         scheduledAt: post.scheduledAt
           ? format(post.scheduledAt, "yyyy-MM-dd'T'HH:mm")

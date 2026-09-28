@@ -81,6 +81,10 @@ export async function publishDueTargets(now = new Date()): Promise<{
         title: target.post.title ?? undefined,
         privacy:
           (target.post.youtubePrivacy as YouTubePrivacy | null) ?? undefined,
+        tags: target.post.youtubeTags.length
+          ? target.post.youtubeTags
+          : undefined,
+        categoryId: target.post.youtubeCategoryId ?? undefined,
         media: target.post.media.map((m) => ({
           type: m.type,
           url: m.url,

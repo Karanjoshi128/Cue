@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireWorkspaceId } from "@/lib/auth";
+import { requireAdmin, requireWorkspaceId } from "@/lib/auth";
 
 // Every function here self-scopes to the caller's workspace via
 // requireWorkspaceId(), so a page can never accidentally read another tenant's
@@ -8,6 +8,27 @@ import { requireWorkspaceId } from "@/lib/auth";
 export async function getWorkspace() {
   const workspaceId = await requireWorkspaceId();
   return prisma.workspace.findUnique({ where: { id: workspaceId } });
+}
+
+/**
+ * API keys for Settings (admins only). Selects explicitly so the hash never
+ * leaves the database - the display prefix is all the UI needs.
+ */
+export async function getApiKeys() {
+  const admin = await requireAdmin();
+  return prisma.apiKey.findMany({
+    where: { workspaceId: admin.workspaceId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      prefix: true,
+      lastUsedAt: true,
+      revokedAt: true,
+      createdAt: true,
+      user: { select: { name: true, email: true } },
+    },
+  });
 }
 
 export async function getUsers() {

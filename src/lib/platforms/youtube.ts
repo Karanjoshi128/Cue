@@ -1,3 +1,4 @@
+import { DEFAULT_YOUTUBE_CATEGORY } from "@/lib/youtube-tags";
 import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
 
 // Resumable upload endpoint for videos.insert. `part` lists the resource parts
@@ -17,7 +18,7 @@ export const youtubeAdapter: PlatformAdapter = {
   platform: "YOUTUBE",
 
   async publish(input: PublishInput): Promise<PublishResult> {
-    const { accessToken, body, title, privacy } = input;
+    const { accessToken, body, title, privacy, tags, categoryId } = input;
     const video = input.media.find((m) => m.type === "VIDEO");
     if (!video) {
       throw new Error("YouTube requires a video to upload.");
@@ -49,7 +50,15 @@ export const youtubeAdapter: PlatformAdapter = {
         "X-Upload-Content-Length": String(bytes.length),
       },
       body: JSON.stringify({
-        snippet: { title: safeTitle, description, categoryId: "22" },
+        snippet: {
+          title: safeTitle,
+          description,
+          // Falls back to 22 (People & Blogs), what every post used before
+          // categories were configurable, so existing clients are unaffected.
+          categoryId: categoryId ?? DEFAULT_YOUTUBE_CATEGORY,
+          // Omitted entirely when empty rather than sent as [].
+          ...(tags?.length ? { tags } : {}),
+        },
         status: { privacyStatus, selfDeclaredMadeForKids: false },
       }),
     });

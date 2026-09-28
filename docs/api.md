@@ -77,9 +77,9 @@ second time.
   produce exactly one post, and they all receive its id.
 - The request body isn't compared. The key alone identifies the request, so
   derive it from something unique per video, such as the staging folder name.
-- **A key is remembered only while its post exists.** Finished posts are
-  purged 7 days after creation (see [Retention](#retention)), so don't reuse
-  keys: after a purge, a reused key creates a new post.
+- **A key is remembered for as long as its post exists**, which is
+  indefinitely unless someone deletes the post. Reusing a key always returns
+  that old post and publishes nothing, so give every video its own key.
 
 ---
 
@@ -340,12 +340,8 @@ On a network error at step 3, just re-send it with the **same**
 
 <a id="retention"></a>
 
-- **Retention:** a daily job deletes finished posts (`PUBLISHED`, `PARTIAL`,
-  `FAILED`) once they're **more than 7 days old, counted from creation, not
-  publishing**, along with their uploaded media. A post scheduled 10 days ahead
-  is therefore gone within about a day of publishing. After that,
-  `GET /posts/:id` returns 404, so record the `permalink` on your side as soon
-  as you have it.
+- **Retention:** posts and their uploaded media are kept indefinitely.
+  `GET /posts/:id` keeps working until someone deletes the post.
 - **YouTube quota:** Google's default API quota is 10,000 units/day for the
   whole project, and one upload costs 1,600. That's **about 6 uploads per day
   across every client**. Beyond that, uploads fail until the quota resets. An

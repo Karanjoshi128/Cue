@@ -237,6 +237,10 @@ jobs:
 
 ### 5c. Cleanup - daily (7-day data retention)
 
+> **Superseded (2026-09-28):** the 7-day purge was removed. Posts and their media are now
+> kept indefinitely, and the cleanup workflow and `/api/cron/cleanup` were deleted. 5c and 5d
+> below describe the original design.
+
 We keep nothing longer than **7 days**. A daily job deletes old posts, their text, and their
 R2 media objects, keeping storage tiny (so the 10 GB R2 free tier is rarely touched).
 

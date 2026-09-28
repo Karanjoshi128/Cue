@@ -211,7 +211,7 @@ model Comment {
 }
 
 // ---------------------------------------------------------------------------
-// Permanent lightweight history - survives the 7-day purge (no FK to Post)
+// Permanent lightweight history - no FK to Post, so it outlives deleted posts
 // ---------------------------------------------------------------------------
 
 model PostHistory {

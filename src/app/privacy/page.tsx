@@ -193,9 +193,10 @@ export default function PrivacyPage() {
                 delete the client, then removed.
               </li>
               <li>
-                Published posts and their uploaded media are automatically
-                purged about 7 days after they finish publishing; a lightweight
-                record (platform, link, date) is retained for your history.
+                Posts, their captions, and the media you upload are kept until
+                you delete them, so your publishing history stays available. A
+                lightweight record of each published post (platform, link,
+                date) is also kept for your history.
               </li>
               <li>
                 Deleting a client or workspace removes its accounts, posts, and

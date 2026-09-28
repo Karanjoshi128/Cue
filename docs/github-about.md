@@ -19,8 +19,8 @@ Paste these into the repo's **About** panel (⚙️ next to "About" on the repo 
 Cue is a self-hostable social media scheduler built for agencies and solo social managers who run
 content for many clients at once. Clients are first-class workspaces - each with its own connected
 LinkedIn and Instagram accounts, brand color, queue, and calendar. Compose once, target multiple
-accounts, schedule or post now, and let GitHub Actions cron handle publishing, token refresh, and a
-7-day media cleanup. The entire stack (Next.js + Supabase + Cloudflare R2 + GitHub Actions + Vercel)
+accounts, schedule or post now, and let GitHub Actions cron handle publishing and token refresh.
+The entire stack (Next.js + Supabase + Cloudflare R2 + GitHub Actions + Vercel)
 is designed to run on free tiers.
 
 ## Topics / tags

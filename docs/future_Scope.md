@@ -384,6 +384,10 @@ Ordered by effort-to-value; each phase is independently shippable.
 
 ### Cross-cutting note - the 7-day purge
 
+> **Superseded (2026-09-28):** the purge was removed and posts are kept indefinitely, so the
+> purge caveats throughout this document no longer apply. If a retention window returns, the
+> per-table approach below still holds.
+
 Several features hold data that should **not** be purged with posts: **Templates, Ideas, Start Pages,
 Tags, and the compact metrics on `PostHistory`**. Implement retention **per-table**, not globally -
 the daily cleanup job should target only `Post`/`PostTarget`/`MediaAsset` (+ their `Comment`s), and

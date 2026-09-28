@@ -48,8 +48,8 @@ operator managing many clients:
 - **Two platforms that matter for B2B + brand** - LinkedIn and Instagram, done properly.
 - **Free to run** - Supabase, Cloudflare R2, GitHub Actions and Vercel free tiers cover the
   whole stack. The only paid pieces are optional (X/Twitter API, AI assists).
-- **Privacy-minded retention** - post text and media are purged after 7 days; a permanent,
-  lightweight history row (client, platform, permalink, published date) survives for the record.
+- **Full history** - posts and their media are kept until you delete them, plus a permanent,
+  lightweight history row (client, platform, permalink, published date) for every publish.
 
 ---
 
@@ -71,9 +71,9 @@ operator managing many clients:
   3×, rolls each post up to an overall status, and writes a permanent `PostHistory` record.
 - **Publish adapters** - LinkedIn Posts API and Instagram Graph API (via **Instagram Login** -
   no Facebook Page required).
-- **Cron endpoints** - `/api/cron/publish`, `/api/cron/keepalive` (warms the DB + refreshes
-  tokens), and `/api/cron/cleanup` (7-day purge + R2 object delete), all Bearer-secured.
-- **GitHub Actions** - publish (every 5 min), keepalive (every 5 days), cleanup (daily).
+- **Cron endpoints** - `/api/cron/publish` and `/api/cron/keepalive` (warms the DB + refreshes
+  tokens), both Bearer-secured.
+- **GitHub Actions** - publish (every 5 min) and keepalive (every 5 days).
 - **Token encryption at rest** - OAuth access/refresh tokens are encrypted with `TOKEN_ENC_KEY`.
 - **Zero-credential dev mode** - runs locally without any secrets by auto-logging in as a
   seeded admin, so the whole UI is browsable before you wire a single integration.
@@ -133,9 +133,6 @@ retries failures (up to 3×), and rolls the parent post up to `PUBLISHED` / `PAR
 **Keepalive cron** pings the DB so Supabase's free tier never hits its 7-day inactivity pause,
 and refreshes OAuth tokens before they expire.
 
-**Cleanup cron** purges post text + media older than 7 days (and deletes the R2 objects), while
-copying the essentials into the permanent `PostHistory` table first.
-
 ---
 
 ## Data model
@@ -152,7 +149,7 @@ PARTIAL / FAILED`).
   error, and attempt count.
 - **MediaAsset** - image/video stored in R2 (public URL + storage key).
 - **Comment** - internal collaboration notes on a post.
-- **PostHistory** - permanent, lightweight record that survives the 7-day purge (no FK to Post),
+- **PostHistory** - permanent, lightweight record of every publish (no FK to Post, so it outlives deletions),
   with optional metrics fields reserved for future analytics.
 
 ---

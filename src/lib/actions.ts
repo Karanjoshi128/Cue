@@ -3,10 +3,23 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { Prisma, type Platform } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuth, requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
+import { generateApiKey } from "@/lib/api";
+import {
+  assertPostIsPublishable,
+  buildTargets,
+  createPostForUser,
+  mediaCreate,
+  postSchema,
+  resolveAccounts,
+  scheduledAtFor,
+  statusFor,
+  youtubeColumns,
+  type PostInput,
+} from "@/lib/posts";
 
 // ---------------------------------------------------------------------------
 // Workspace
@@ -133,6 +146,47 @@ export async function removeMember(id: string) {
 }
 
 // ---------------------------------------------------------------------------
+// API keys (admin only) - bearer tokens for /api/v1
+// ---------------------------------------------------------------------------
+
+const apiKeyNameSchema = z.string().trim().min(1).max(60);
+
+/**
+ * Creates a key that acts as the calling admin in their workspace, and returns
+ * the plaintext exactly once. Only its hash is stored, so if it's lost the
+ * answer is to revoke it and make another - nobody can recover it.
+ */
+export async function createApiKey(name: string): Promise<{ key: string }> {
+  const admin = await requireAdmin();
+  const label = apiKeyNameSchema.parse(name);
+  const { key, prefix, hash } = generateApiKey();
+
+  await prisma.apiKey.create({
+    data: {
+      name: label,
+      prefix,
+      hash,
+      userId: admin.id,
+      workspaceId: admin.workspaceId,
+    },
+  });
+  revalidatePath("/settings");
+  return { key };
+}
+
+/** Revokes immediately. Kept rather than deleted, so the list shows history. */
+export async function revokeApiKey(id: string) {
+  const admin = await requireAdmin();
+  // updateMany with a workspace guard = no cross-tenant revocation, and
+  // revoking an already-revoked key is a harmless no-op.
+  await prisma.apiKey.updateMany({
+    where: { id, workspaceId: admin.workspaceId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  revalidatePath("/settings");
+}
+
+// ---------------------------------------------------------------------------
 // Clients - all scoped to the caller's workspace
 // ---------------------------------------------------------------------------
 
@@ -193,126 +247,15 @@ export async function disconnectAccount(accountId: string) {
 // Posts
 // ---------------------------------------------------------------------------
 
-// LinkedIn-only content types.
-const linkSchema = z.object({
-  url: z.string().url(),
-  title: z.string().max(200).optional(),
-  description: z.string().max(300).optional(),
-});
-const pollSchema = z.object({
-  question: z.string().min(1).max(140),
-  options: z.array(z.string().min(1).max(30)).min(2).max(4),
-  duration: z.enum(["ONE_DAY", "THREE_DAYS", "SEVEN_DAYS", "FOURTEEN_DAYS"]),
-});
+// The schema, validation and creation logic live in src/lib/posts.ts so the
+// composer (below) and POST /api/v1/posts share one code path. These actions
+// only add what's specific to a cookie session: requireUser() and cache
+// revalidation.
 
-const postSchema = z
-  .object({
-    clientId: z.string().min(1),
-    body: z.string().min(1).max(3000),
-    // YouTube-only: video title + visibility (ignored for other platforms).
-    title: z.string().max(100).optional(),
-    youtubePrivacy: z.enum(["public", "unlisted", "private"]).optional(),
-    accountIds: z.array(z.string()).min(1),
-    scheduledAt: z.string().datetime().nullable().optional(),
-    media: z
-      .array(
-        z.object({
-          type: z.enum(["IMAGE", "VIDEO", "DOCUMENT"]),
-          url: z.string(),
-          storageKey: z.string(),
-          title: z.string().optional(),
-        }),
-      )
-      .optional(),
-    link: linkSchema.nullable().optional(),
-    poll: pollSchema.nullable().optional(),
-    // Per-account caption overrides; anything not listed uses `body`.
-    overrides: z
-      .array(z.object({ accountId: z.string(), body: z.string().max(3000) }))
-      .optional(),
-    action: z.enum(["draft", "schedule", "now"]),
-  })
-  .refine((d) => d.action !== "schedule" || Boolean(d.scheduledAt), {
-    message: "A scheduled post needs a date and time.",
-    path: ["scheduledAt"],
-  });
-
-/** Builds the per-target rows, applying a caption override where one differs. */
-function buildTargets(
-  accounts: { id: string; platform: Platform }[],
-  data: z.infer<typeof postSchema>,
-) {
-  const overrides = new Map(
-    (data.overrides ?? []).map((o) => [o.accountId, o.body.trim()]),
-  );
-  return accounts.map((a) => {
-    const ov = overrides.get(a.id);
-    return {
-      accountId: a.id,
-      platform: a.platform,
-      status: "SCHEDULED" as const,
-      bodyOverride: ov && ov !== data.body.trim() ? ov : null,
-    };
-  });
-}
-
-export async function savePost(input: z.infer<typeof postSchema>) {
+export async function savePost(input: PostInput) {
   const user = await requireUser();
   const data = postSchema.parse(input);
-
-  // Accounts are matched within the caller's workspace, so a client/account id
-  // from another tenant simply yields nothing → the guard below rejects it.
-  const accounts = await prisma.socialAccount.findMany({
-    where: {
-      id: { in: data.accountIds },
-      clientId: data.clientId,
-      client: { workspaceId: user.workspaceId },
-    },
-  });
-  if (accounts.length === 0) {
-    throw new Error("Select at least one connected account for this client.");
-  }
-
-  const status =
-    data.action === "draft"
-      ? "DRAFT"
-      : data.action === "now"
-        ? "PUBLISHING"
-        : "SCHEDULED";
-
-  const post = await prisma.post.create({
-    data: {
-      clientId: data.clientId,
-      authorId: user.id,
-      body: data.body,
-      title: data.title,
-      youtubePrivacy: data.youtubePrivacy,
-      status,
-      link: data.link ?? undefined,
-      poll: data.poll ?? undefined,
-      scheduledAt:
-        data.action === "schedule" && data.scheduledAt
-          ? new Date(data.scheduledAt)
-          : data.action === "now"
-            ? new Date()
-            : null,
-      media: data.media?.length
-        ? {
-            create: data.media.map((m) => ({
-              type: m.type,
-              url: m.url,
-              storageKey: m.storageKey,
-              title: m.title,
-            })),
-          }
-        : undefined,
-      targets: { create: buildTargets(accounts, data) },
-    },
-  });
-
-  if (data.action === "now") {
-    await publishPostNow(post.id);
-  }
+  const { post } = await createPostForUser(user, data);
 
   revalidatePath("/queue");
   revalidatePath("/calendar");
@@ -320,10 +263,7 @@ export async function savePost(input: z.infer<typeof postSchema>) {
   return post;
 }
 
-export async function updatePost(
-  id: string,
-  input: z.infer<typeof postSchema>,
-) {
+export async function updatePost(id: string, input: PostInput) {
   const user = await requireUser();
   const data = postSchema.parse(input);
 
@@ -336,23 +276,9 @@ export async function updatePost(
     throw new Error("Only drafts and scheduled posts can be edited.");
   }
 
-  const accounts = await prisma.socialAccount.findMany({
-    where: {
-      id: { in: data.accountIds },
-      clientId: data.clientId,
-      client: { workspaceId: user.workspaceId },
-    },
-  });
-  if (accounts.length === 0) {
-    throw new Error("Select at least one connected account for this client.");
-  }
-
-  const status =
-    data.action === "draft"
-      ? "DRAFT"
-      : data.action === "now"
-        ? "PUBLISHING"
-        : "SCHEDULED";
+  // Same account + platform rules as creating a post.
+  const accounts = await resolveAccounts(user, data);
+  assertPostIsPublishable(accounts, data);
 
   // Replace media + targets wholesale - safe because nothing has published yet.
   await prisma.$transaction([
@@ -363,29 +289,15 @@ export async function updatePost(
       data: {
         clientId: data.clientId,
         body: data.body,
-        // Provided on every edit, so null clears them when YouTube is dropped.
-        title: data.title ?? null,
-        youtubePrivacy: data.youtubePrivacy ?? null,
-        status,
+        // Written on every edit, so dropping YouTube also clears its title,
+        // visibility, tags and category.
+        ...youtubeColumns(data),
+        status: statusFor(data.action),
         // Provided on every edit, so DbNull clears a removed link/poll.
         link: data.link ?? Prisma.DbNull,
         poll: data.poll ?? Prisma.DbNull,
-        scheduledAt:
-          data.action === "schedule" && data.scheduledAt
-            ? new Date(data.scheduledAt)
-            : data.action === "now"
-              ? new Date()
-              : null,
-        media: data.media?.length
-          ? {
-              create: data.media.map((m) => ({
-                type: m.type,
-                url: m.url,
-                storageKey: m.storageKey,
-                title: m.title,
-              })),
-            }
-          : undefined,
+        scheduledAt: scheduledAtFor(data),
+        media: mediaCreate(data),
         targets: { create: buildTargets(accounts, data) },
       },
     }),

@@ -26,6 +26,14 @@ import { PlatformIcon } from "@/components/post-bits";
 import { ExpandablePreview } from "@/components/post-preview";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_YOUTUBE_CATEGORY,
+  YOUTUBE_CATEGORIES,
+  YOUTUBE_TAG_BUDGET,
+  cleanYoutubeTags,
+  youtubeTagsCost,
+  youtubeTagsProblem,
+} from "@/lib/youtube-tags";
+import {
   ImagePlus,
   Images,
   FileText,
@@ -68,6 +76,8 @@ export interface ComposerInitial {
   body: string;
   title: string; // YouTube video title ("" when unused)
   youtubePrivacy: YtPrivacy | null;
+  youtubeTags: string[];
+  youtubeCategoryId: string | null;
   accountIds: string[];
   scheduledAt: string; // datetime-local string, or ""
   media: MediaItem[];
@@ -83,7 +93,13 @@ const PLATFORM_LIMITS: Record<Platform, number> = {
   INSTAGRAM: 2200,
   YOUTUBE: 5000,
 };
-const HARD_LIMIT = 3000;
+// Shown before any account is picked.
+const DEFAULT_LIMIT = 3000;
+// Typing is only ever cut off at YouTube's cap. Tighter per-platform limits
+// are shown by the counter and enforced on submit, never by silently trimming
+// text - otherwise adding a LinkedIn account to a long YouTube description
+// would delete everything past 3000 on the next keystroke.
+const MAX_BODY = PLATFORM_LIMITS.YOUTUBE;
 
 const CONTENT_TYPES = [
   { key: "media", label: "Text & media", icon: Images },
@@ -158,6 +174,13 @@ export function Composer({
   const [youtubePrivacy, setYoutubePrivacy] = useState<YtPrivacy>(
     initial?.youtubePrivacy ?? "public",
   );
+  // Tags are edited as one comma-separated string and parsed on the fly.
+  const [tagsText, setTagsText] = useState(
+    initial?.youtubeTags.join(", ") ?? "",
+  );
+  const [youtubeCategoryId, setYoutubeCategoryId] = useState(
+    initial?.youtubeCategoryId ?? DEFAULT_YOUTUBE_CATEGORY,
+  );
   const [scheduledAt, setScheduledAt] = useState(
     initial?.scheduledAt ?? prefillDate ?? "",
   );
@@ -209,9 +232,14 @@ export function Composer({
   const igSelected = selectedPlatforms.has("INSTAGRAM");
   const ytSelected = selectedPlatforms.has("YOUTUBE");
   const hasVideo = media.some((m) => m.type === "VIDEO");
+  // Same cleaning + budget rules the server enforces (src/lib/youtube-tags.ts),
+  // so the counter can't disagree with what gets accepted.
+  const tags = useMemo(() => cleanYoutubeTags(tagsText.split(",")), [tagsText]);
+  const tagsCost = youtubeTagsCost(tags);
+  const tagsProblem = youtubeTagsProblem(tags);
   const limit = useMemo(() => {
     const limits = [...selectedPlatforms].map((p) => PLATFORM_LIMITS[p]);
-    return limits.length ? Math.min(...limits) : HARD_LIMIT;
+    return limits.length ? Math.min(...limits) : DEFAULT_LIMIT;
   }, [selectedPlatforms]);
   const overLimit = body.length > limit;
   const hasIgAccount = client?.accounts.some((a) => a.platform === "INSTAGRAM");
@@ -310,6 +338,8 @@ export function Composer({
       if (igSelected && media.length === 0 && action !== "draft") {
         return toast.error("Instagram posts need at least one image or video");
       }
+      // Checked for drafts too: the server rejects bad tags whatever the action.
+      if (ytSelected && tagsProblem) return toast.error(tagsProblem);
       if (ytSelected && action !== "draft") {
         if (!hasVideo) return toast.error("YouTube needs a video to upload");
         if (!title.trim()) {
@@ -340,6 +370,9 @@ export function Composer({
       body,
       title: ytSelected ? title.trim() || undefined : undefined,
       youtubePrivacy: ytSelected ? youtubePrivacy : undefined,
+      // Undefined when YouTube isn't targeted, which clears them on edit.
+      youtubeTags: ytSelected ? tags : undefined,
+      youtubeCategoryId: ytSelected ? youtubeCategoryId : undefined,
       accountIds: selected,
       action,
       scheduledAt:
@@ -538,7 +571,7 @@ export function Composer({
             <Label className="label-caps">Content</Label>
             <Textarea
               value={body}
-              onChange={(e) => setBody(e.target.value.slice(0, HARD_LIMIT))}
+              onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
               placeholder="What do you want to share?"
               className="min-h-32 resize-none"
             />
@@ -594,7 +627,7 @@ export function Composer({
                     onChange={(e) =>
                       setOverrides((o) => ({
                         ...o,
-                        [a.id]: e.target.value.slice(0, HARD_LIMIT),
+                        [a.id]: e.target.value.slice(0, MAX_BODY),
                       }))
                     }
                     className="min-h-28 resize-none"
@@ -718,6 +751,60 @@ export function Composer({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="label-caps">Category</Label>
+                <Select
+                  value={youtubeCategoryId}
+                  items={Object.fromEntries(
+                    YOUTUBE_CATEGORIES.map((c) => [c.id, c.label]),
+                  )}
+                  onValueChange={(v) =>
+                    setYoutubeCategoryId(
+                      (v as string) || DEFAULT_YOUTUBE_CATEGORY,
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {YOUTUBE_CATEGORIES.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="label-caps">Tags</Label>
+                <Input
+                  value={tagsText}
+                  onChange={(e) => setTagsText(e.target.value)}
+                  placeholder="Comma-separated, e.g. shorts, ai art, timelapse"
+                />
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span
+                    className={
+                      tagsProblem ? "text-destructive" : "text-muted-foreground"
+                    }
+                  >
+                    {tagsProblem ??
+                      `${tags.length} tag${tags.length === 1 ? "" : "s"}`}
+                  </span>
+                  {/* Budget, not character count: a tag with a space costs 2
+                      extra because YouTube stores it in quotes. */}
+                  <span
+                    className={cn(
+                      "text-muted-foreground shrink-0",
+                      tagsCost > YOUTUBE_TAG_BUDGET &&
+                        "text-destructive font-medium",
+                    )}
+                  >
+                    {tagsCost}/{YOUTUBE_TAG_BUDGET}
+                  </span>
+                </div>
               </div>
               {!hasVideo && (
                 <p className="text-amber-600 dark:text-amber-400 text-xs">

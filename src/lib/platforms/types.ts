@@ -26,6 +26,10 @@ export interface PublishInput {
   // YouTube-only: the uploaded video's title + visibility. Ignored elsewhere.
   title?: string;
   privacy?: YouTubePrivacy;
+  // YouTube-only: tags (already cleaned + within budget) and category id.
+  // Absent means no tags / the adapter's default category.
+  tags?: string[];
+  categoryId?: string;
   media: PublishMedia[];
   article?: PublishArticle;
   poll?: PublishPoll;

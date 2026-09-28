@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCurrentUser } from "@/lib/auth";
-import { getUsers, getWorkspace } from "@/lib/data";
+import { getApiKeys, getUsers, getWorkspace } from "@/lib/data";
 import { ProfileForm } from "@/components/profile-form";
 import { WorkspaceForm } from "@/components/workspace-form";
 import { TeamManager } from "@/components/team-manager";
+import { ApiKeysManager } from "@/components/api-keys-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,8 @@ export default async function SettingsPage() {
     getWorkspace(),
   ]);
   const isAdmin = user?.role === "ADMIN";
+  // Admin-only: getApiKeys() itself refuses non-admins, so don't ask.
+  const apiKeys = isAdmin ? await getApiKeys() : [];
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -63,6 +66,27 @@ export default async function SettingsPage() {
           />
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>API keys</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ApiKeysManager
+              keys={apiKeys.map((k) => ({
+                id: k.id,
+                name: k.name,
+                prefix: k.prefix,
+                lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+                revokedAt: k.revokedAt?.toISOString() ?? null,
+                createdAt: k.createdAt.toISOString(),
+                createdBy: k.user.name ?? k.user.email,
+              }))}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

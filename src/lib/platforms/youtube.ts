@@ -6,6 +6,13 @@ import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
 const UPLOAD_URL =
   "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
 
+// Every network call gets a deadline. A stalled connection otherwise hangs until
+// the function is killed, which leaves the target stuck in PROCESSING; a timeout
+// throws instead, so publish.ts records the error and retries on the next run.
+const FETCH_VIDEO_TIMEOUT_MS = 60_000;
+const INIT_TIMEOUT_MS = 30_000;
+const UPLOAD_TIMEOUT_MS = 180_000;
+
 /**
  * Publishes to YouTube via the Data API v3 `videos.insert` resumable flow.
  * The video is uploaded to the channel of whichever Google account authorized
@@ -33,7 +40,9 @@ export const youtubeAdapter: PlatformAdapter = {
 
     // Pull the video bytes from R2 (public URL). Buffered in full - fine for the
     // short-form videos this tool posts; revisit if very large files appear.
-    const fileRes = await fetch(video.url);
+    const fileRes = await fetch(video.url, {
+      signal: AbortSignal.timeout(FETCH_VIDEO_TIMEOUT_MS),
+    });
     if (!fileRes.ok) {
       throw new Error(`Could not fetch video (${fileRes.status})`);
     }
@@ -61,6 +70,7 @@ export const youtubeAdapter: PlatformAdapter = {
         },
         status: { privacyStatus, selfDeclaredMadeForKids: false },
       }),
+      signal: AbortSignal.timeout(INIT_TIMEOUT_MS),
     });
     if (!initRes.ok) {
       throw new Error(
@@ -80,6 +90,7 @@ export const youtubeAdapter: PlatformAdapter = {
         "Content-Type": contentType,
       },
       body: bytes,
+      signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
     });
     if (!putRes.ok) {
       throw new Error(

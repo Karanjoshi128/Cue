@@ -10,6 +10,15 @@ import type {
 
 const MAX_ATTEMPTS = 3;
 
+// A target still PROCESSING this long after its post was due belongs to a run
+// that died mid-publish (function timeout or crash). Nothing else would ever
+// pick it up again, because only SCHEDULED targets are claimed.
+const STALE_PROCESSING_MS = 20 * 60 * 1000;
+
+// Stop claiming new targets once a run has used this much of its time, so the
+// one in hand can finish and record its result before the function is killed.
+const RUN_BUDGET_MS = 200 * 1000;
+
 // The link/poll columns are JSON - normalize them into typed publish inputs.
 function linkToArticle(link: unknown): PublishArticle | undefined {
   if (!link || typeof link !== "object") return undefined;
@@ -44,6 +53,9 @@ export async function publishDueTargets(now = new Date()): Promise<{
   published: number;
   failed: number;
 }> {
+  const startedAt = Date.now();
+  await releaseStaleTargets(now);
+
   const due = await prisma.postTarget.findMany({
     where: {
       status: "SCHEDULED",
@@ -67,6 +79,9 @@ export async function publishDueTargets(now = new Date()): Promise<{
   let failed = 0;
 
   for (const target of due) {
+    // Out of time: leave the rest SCHEDULED for the next run.
+    if (Date.now() - startedAt > RUN_BUDGET_MS) break;
+
     // Claim the target (optimistic lock on status).
     const claim = await prisma.postTarget.updateMany({
       where: { id: target.id, status: "SCHEDULED" },
@@ -123,6 +138,7 @@ export async function publishDueTargets(now = new Date()): Promise<{
       published++;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      console.error(`[publish] target ${target.id} (${target.platform}): ${message}`);
       // Back to SCHEDULED for retry unless we've exhausted attempts.
       const exhausted = target.attempts + 1 >= MAX_ATTEMPTS;
       await prisma.postTarget.update({
@@ -143,6 +159,39 @@ export async function publishDueTargets(now = new Date()): Promise<{
   }
 
   return { processed: due.length, published, failed };
+}
+
+/**
+ * Hands back targets a dead run left in PROCESSING: retried if they have
+ * attempts left, FAILED otherwise. Without this a single killed invocation
+ * strands the post forever - it shows as "scheduled" and never publishes.
+ */
+async function releaseStaleTargets(now: Date): Promise<void> {
+  const stale = {
+    status: "PROCESSING" as const,
+    post: { scheduledAt: { lt: new Date(now.getTime() - STALE_PROCESSING_MS) } },
+  };
+  const error = "A previous publish attempt did not finish.";
+  const failed = await prisma.postTarget.findMany({
+    where: { ...stale, attempts: { gte: MAX_ATTEMPTS } },
+    select: { postId: true },
+  });
+  await prisma.postTarget.updateMany({
+    where: { ...stale, attempts: { gte: MAX_ATTEMPTS } },
+    data: { status: "FAILED", error },
+  });
+  const retried = await prisma.postTarget.updateMany({
+    where: { ...stale, attempts: { lt: MAX_ATTEMPTS } },
+    data: { status: "SCHEDULED", error },
+  });
+  if (failed.length || retried.count) {
+    console.warn(
+      `[publish] released stale PROCESSING targets: ${retried.count} to retry, ${failed.length} failed`,
+    );
+  }
+  for (const postId of new Set(failed.map((t) => t.postId))) {
+    await rollUpPostStatus(postId);
+  }
 }
 
 async function rollUpPostStatus(postId: string): Promise<void> {

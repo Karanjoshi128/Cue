@@ -3,7 +3,9 @@ import { authorizeCron } from "@/lib/cron-auth";
 import { publishDueTargets } from "@/lib/publish";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Same ceiling as the "post now" route: a video upload needs more than the
+// default, and a run killed mid-upload strands its target in PROCESSING.
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   if (!authorizeCron(req)) {

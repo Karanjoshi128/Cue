@@ -9,8 +9,19 @@ export interface RefreshedToken {
 }
 
 /**
+ * The provider rejected the stored refresh token itself (revoked, or Google's
+ * 7-day limit on apps still in Testing). Retrying can't help; only
+ * reconnecting the account does.
+ */
+export class ReconnectRequiredError extends Error {}
+
+const YOUTUBE_RECONNECT =
+  "YouTube connection expired or was revoked. Reconnect the channel in Clients, then retry this post.";
+
+/**
  * Exchanges a stored refresh token for a fresh access token. Returns null on
- * any failure (caller keeps using the existing token / surfaces a warning).
+ * any failure (caller keeps using the existing token / surfaces a warning),
+ * except a dead YouTube refresh token, which throws ReconnectRequiredError.
  * Shared by the keepalive cron (proactive, ~5-day cycle) and publish-time
  * refresh (YouTube's Google tokens live ~1h, so they're renewed here).
  */
@@ -72,7 +83,15 @@ export async function refreshAccessToken(
         client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      if (body?.error === "invalid_grant") {
+        throw new ReconnectRequiredError(YOUTUBE_RECONNECT);
+      }
+      return null;
+    }
     const data = (await res.json()) as {
       access_token: string;
       expires_in: number;
@@ -98,6 +117,9 @@ type RefreshableAccount = Pick<
  * when it's within `bufferMs` of expiry and a refresh token exists. Falls back
  * to the stored token when refresh isn't possible or fails. This is the hook
  * that keeps short-lived YouTube (Google) tokens usable at publish time.
+ *
+ * A dead YouTube connection throws ReconnectRequiredError instead, so the post
+ * fails with a message that says what to do rather than YouTube's bare 401.
  */
 export async function ensureFreshAccessToken(
   account: RefreshableAccount,
@@ -107,11 +129,33 @@ export async function ensureFreshAccessToken(
     account.tokenExpires !== null &&
     account.tokenExpires.getTime() - Date.now() < bufferMs;
 
+  if (
+    account.platform === "YOUTUBE" &&
+    !account.refreshToken &&
+    account.tokenExpires !== null &&
+    account.tokenExpires.getTime() <= Date.now()
+  ) {
+    throw new ReconnectRequiredError(YOUTUBE_RECONNECT);
+  }
+
   if (expiringSoon && account.refreshToken) {
-    const next = await refreshAccessToken(
-      account.platform,
-      decrypt(account.refreshToken),
-    );
+    let next: RefreshedToken | null;
+    try {
+      next = await refreshAccessToken(
+        account.platform,
+        decrypt(account.refreshToken),
+      );
+    } catch (err) {
+      if (err instanceof ReconnectRequiredError) {
+        // Drop the dead refresh token: Clients then shows "Reconnect needed"
+        // and the dashboard counts it, until the OAuth callback stores a new one.
+        await prisma.socialAccount.update({
+          where: { id: account.id },
+          data: { refreshToken: null },
+        });
+      }
+      throw err;
+    }
     if (next) {
       await prisma.socialAccount.update({
         where: { id: account.id },

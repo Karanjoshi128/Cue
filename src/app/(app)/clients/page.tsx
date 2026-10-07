@@ -15,6 +15,7 @@ export default async function ClientsPage() {
       platform: a.platform,
       displayName: a.displayName,
       tokenExpires: a.tokenExpires?.toISOString() ?? null,
+      renewable: a.refreshToken !== null,
     })),
   }));
   return <ClientsManager clients={plain} />;

@@ -144,9 +144,17 @@ export async function getDashboardStats(clientId?: string) {
     }),
     prisma.socialAccount.count({
       where: {
-        tokenExpires: { not: null, lte: soon },
         client: { workspaceId },
         ...(clientId ? { clientId } : {}),
+        // YouTube's hour-long access tokens are renewed at publish time, so for
+        // it only a dropped refresh token (dead connection) counts.
+        OR: [
+          {
+            platform: { not: "YOUTUBE" },
+            tokenExpires: { not: null, lte: soon },
+          },
+          { platform: "YOUTUBE", refreshToken: null },
+        ],
       },
     }),
     prisma.post.count({ where: { status: "DRAFT", ...postScope } }),

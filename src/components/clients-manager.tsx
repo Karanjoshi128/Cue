@@ -52,6 +52,7 @@ interface AccountLite {
   platform: Platform;
   displayName: string;
   tokenExpires: string | null;
+  renewable: boolean;
 }
 interface ClientLite {
   id: string;
@@ -88,16 +89,25 @@ const CONNECT_ERRORS: Record<string, string> = {
 };
 
 /** Health of a connected account based on its token expiry. */
-function tokenHealth(tokenExpires: string | null): {
+function tokenHealth(account: AccountLite): {
   ok: boolean;
+  dead: boolean;
   label: string;
 } {
-  if (!tokenExpires) return { ok: true, label: "Connected" };
-  const ms = new Date(tokenExpires).getTime() - Date.now();
+  // Google access tokens last an hour and are renewed at publish time, so for
+  // YouTube only the refresh token matters - and it's dropped once Google
+  // rejects it (see ensureFreshAccessToken).
+  if (account.platform === "YOUTUBE") {
+    return account.renewable
+      ? { ok: true, dead: false, label: "Connected" }
+      : { ok: false, dead: true, label: "Reconnect needed" };
+  }
+  if (!account.tokenExpires) return { ok: true, dead: false, label: "Connected" };
+  const ms = new Date(account.tokenExpires).getTime() - Date.now();
   const days = Math.floor(ms / 86_400_000);
-  if (ms <= 0) return { ok: false, label: "Expired" };
-  if (days <= 7) return { ok: false, label: `Expires in ${days}d` };
-  return { ok: true, label: `Expires in ${days}d` };
+  if (ms <= 0) return { ok: false, dead: true, label: "Expired" };
+  if (days <= 7) return { ok: false, dead: false, label: `Expires in ${days}d` };
+  return { ok: true, dead: false, label: `Expires in ${days}d` };
 }
 
 export function ClientsManager({ clients }: { clients: ClientLite[] }) {
@@ -252,7 +262,7 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                   {c.accounts.length > 0 && (
                     <div className="space-y-1.5">
                       {c.accounts.map((a) => {
-                        const health = tokenHealth(a.tokenExpires);
+                        const health = tokenHealth(a);
                         return (
                           <div
                             key={a.id}
@@ -266,7 +276,7 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                               className={`ml-auto rounded-full px-2 py-0.5 text-xs font-medium ${
                                 health.ok
                                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                  : health.label === "Expired"
+                                  : health.dead
                                     ? "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300"
                                     : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
                               }`}

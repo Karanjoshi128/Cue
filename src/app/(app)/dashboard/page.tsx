@@ -103,7 +103,7 @@ export default async function DashboardPage() {
       icon: AlertTriangle,
     },
     expiring > 0 && {
-      label: "Accounts expiring",
+      label: "Accounts to reconnect",
       value: expiring,
       href: "/clients",
       icon: Unplug,

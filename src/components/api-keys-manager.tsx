@@ -7,10 +7,11 @@ import { toast } from "sonner";
 import { createApiKey, revokeApiKey } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -81,11 +82,11 @@ export function ApiKeysManager({ keys }: { keys: ApiKeyRow[] }) {
   return (
     <div className="space-y-4">
       <p className="text-muted-foreground text-sm">
-        Keys let scripts and automations create and schedule posts in this
-        workspace through the API. A key acts as the admin who created it.
+        A key acts as the admin who created it. Cue stores only a hash, so the
+        full key is shown once, at creation.
       </p>
 
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="bg-muted/40 flex flex-col gap-2 rounded-xl border p-3 sm:flex-row">
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -99,24 +100,41 @@ export function ApiKeysManager({ keys }: { keys: ApiKeyRow[] }) {
       </div>
 
       {keys.length === 0 ? (
-        <p className="text-muted-foreground py-2 text-sm">No API keys yet.</p>
+        <p className="text-muted-foreground rounded-xl border border-dashed py-6 text-center text-sm">
+          No API keys yet.
+        </p>
       ) : (
-        <ul className="divide-border divide-y rounded-lg border">
+        <ul className="divide-border divide-y rounded-xl border">
           {keys.map((k) => {
             const revoked = Boolean(k.revokedAt);
             return (
               <li
                 key={k.id}
-                className="flex flex-wrap items-center gap-3 px-3 py-2.5"
+                className={cn(
+                  "flex flex-wrap items-center gap-3 px-3 py-3",
+                  revoked && "opacity-60",
+                )}
               >
+                <span className="bg-muted grid size-8 shrink-0 place-items-center rounded-lg">
+                  <KeyRound className="text-muted-foreground size-4" />
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <span className="truncate">{k.name}</span>
-                    {revoked ? (
-                      <Badge variant="outline">Revoked</Badge>
-                    ) : (
-                      <Badge variant="secondary">Active</Badge>
-                    )}
+                    <span
+                      className={cn(
+                        "flex items-center gap-1.5 text-[0.6875rem] font-medium",
+                        revoked ? "text-muted-foreground" : "text-live-ink",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "tally size-1.5",
+                          revoked ? "text-muted-foreground/50" : "text-live",
+                        )}
+                      />
+                      {revoked ? "Revoked" : "Active"}
+                    </span>
                   </div>
                   {/* Timestamps render in the viewer's timezone, which the
                       server can't know - so the SSR text may differ. */}
@@ -124,7 +142,7 @@ export function ApiKeysManager({ keys }: { keys: ApiKeyRow[] }) {
                     className="text-muted-foreground text-xs"
                     suppressHydrationWarning
                   >
-                    <code className="font-mono">{k.prefix}…</code> · created{" "}
+                    <code className="bg-muted rounded px-1 font-mono">{k.prefix}…</code> · created{" "}
                     {format(new Date(k.createdAt), "MMM d, yyyy")} by{" "}
                     {k.createdBy} ·{" "}
                     {k.lastUsedAt
@@ -156,11 +174,11 @@ export function ApiKeysManager({ keys }: { keys: ApiKeyRow[] }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Copy your API key</DialogTitle>
+            <DialogDescription>
+              This is the only time the full key is shown. Cue stores only a
+              hash of it, so if you lose it, revoke it and create a new one.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground text-sm">
-            This is the only time the full key is shown. Cue stores only a hash
-            of it, so if you lose it, revoke it and create a new one.
-          </p>
           <div className="flex gap-2">
             <Input
               readOnly
@@ -190,11 +208,11 @@ export function ApiKeysManager({ keys }: { keys: ApiKeyRow[] }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Revoke &ldquo;{revokeTarget?.name}&rdquo;?</DialogTitle>
+            <DialogDescription>
+              Anything using this key stops working immediately. This
+              can&apos;t be undone.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground text-sm">
-            Anything using this key stops working immediately. This can&apos;t
-            be undone.
-          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRevokeTarget(null)}>
               Cancel

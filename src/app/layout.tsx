@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono, Fraunces } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { TimezoneSync } from "@/components/timezone-sync";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -14,14 +15,30 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Display serif for headlines. The SOFT/WONK axes give it the warm,
+// playbill feel the "cue" theme leans on; opsz keeps it crisp at every size.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["SOFT", "WONK", "opsz"],
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
   title: {
-    default: "Cue - Social scheduling for every client",
+    default: "Cue - Social media scheduling for agencies",
     template: "%s · Cue",
   },
   description:
-    "Schedule and publish LinkedIn & Instagram posts for all your clients, in one place.",
+    "Plan, schedule, and publish LinkedIn, Instagram, and YouTube posts for every client from one calendar.",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f3ee" },
+    { media: "(prefers-color-scheme: dark)", color: "#060709" },
+  ],
 };
 
 export default function RootLayout({
@@ -33,7 +50,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground min-h-full">
         <ThemeProvider
@@ -43,7 +60,8 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
-          <Toaster richColors position="bottom-right" />
+          <TimezoneSync />
+          <Toaster position="bottom-right" />
         </ThemeProvider>
       </body>
     </html>

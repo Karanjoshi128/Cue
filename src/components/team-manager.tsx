@@ -21,6 +21,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -75,9 +76,9 @@ export function TeamManager({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {isAdmin && (
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="bg-muted/40 flex flex-col gap-2 rounded-xl border p-3 sm:flex-row">
           <Input
             type="email"
             aria-label="Teammate email address"
@@ -105,9 +106,12 @@ export function TeamManager({
         </div>
       )}
 
-      <div className="divide-border divide-y">
+      <div className="divide-border divide-y rounded-xl border">
         {members.map((u) => (
-          <div key={u.id} className="flex items-center gap-3 py-2 text-sm">
+          <div key={u.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+            <span className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-full font-mono text-[0.625rem] font-semibold uppercase">
+              {(u.name ?? u.email).slice(0, 2)}
+            </span>
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">
                 {u.name ?? u.email}
@@ -145,23 +149,28 @@ export function TeamManager({
               </span>
             )}
 
+            {/* Keeps the role column aligned on your own row. */}
+            {isAdmin && u.id === currentUserId && (
+              <span aria-hidden className="size-8 shrink-0" />
+            )}
             {isAdmin && u.id !== currentUserId && (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 aria-label={`Remove ${u.email}`}
-                className="text-muted-foreground hover:text-destructive"
+                className="hover:text-destructive"
                 onClick={() => setRemoveTarget(u)}
               >
-                <X className="size-4" />
-              </button>
+                <X />
+              </Button>
             )}
           </div>
         ))}
       </div>
 
       <p className="text-muted-foreground text-xs">
-        Invited teammates get access as soon as they sign in with that email.
-        The first user is the admin.
+        Admins manage the workspace, team and API keys. Managers create and
+        schedule posts.
       </p>
 
       <Dialog
@@ -171,10 +180,10 @@ export function TeamManager({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove {removeTarget?.email}?</DialogTitle>
+            <DialogDescription>
+              They&apos;ll lose access to Cue. You can invite them again later.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-muted-foreground text-sm">
-            They&apos;ll lose access to Cue. You can invite them again later.
-          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRemoveTarget(null)}>
               Cancel

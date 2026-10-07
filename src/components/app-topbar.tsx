@@ -4,42 +4,38 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Plus } from "lucide-react";
-import { navItems } from "@/components/nav-items";
-import { Logo } from "@/components/brand/logo";
+import { navItems, isActive } from "@/components/nav-items";
+import { Logo, LogoMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ClientSwitcher } from "@/components/client-switcher";
+import { ClientSwitcher, type ClientOption } from "@/components/client-switcher";
+import { CommandMenu } from "@/components/command-menu";
 import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
+  NavList,
+  NextCueCard,
+  UserMenu,
+  type NextCueData,
+  type ShellUser,
+} from "@/components/app-sidebar";
 import {
   Sheet,
   SheetContent,
+  SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
-function titleFor(pathname: string): string {
-  if (pathname === "/") return "Dashboard";
-  const match = navItems.find(
-    (i) => i.href !== "/" && pathname.startsWith(i.href),
-  );
-  return match?.label ?? "Cue";
-}
 
 /** Slide-out navigation for < md screens (the sidebar is hidden there). */
-function MobileNav({ pathname }: { pathname: string }) {
+function MobileNav({
+  nextCue,
+  user,
+  workspaceName,
+}: {
+  nextCue: NextCueData | null;
+  user: ShellUser;
+  workspaceName: string;
+}) {
   const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -48,117 +44,101 @@ function MobileNav({ pathname }: { pathname: string }) {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="-ml-1 md:hidden"
             aria-label="Open menu"
           />
         }
       >
         <Menu className="size-5" />
       </SheetTrigger>
-      <SheetContent side="left" className="w-64 p-0" showCloseButton={false}>
-        <div className="flex h-16 items-center px-5">
-          <Link href="/dashboard" onClick={() => setOpen(false)}>
-            <Logo />
+      <SheetContent
+        side="left"
+        className="bg-canvas w-[82%] max-w-xs gap-0 p-3"
+        showCloseButton={false}
+      >
+        <SheetTitle className="sr-only">Navigation</SheetTitle>
+        <div className="flex h-10 items-center px-2">
+          <Link href="/dashboard" onClick={close} aria-label="Cue dashboard">
+            <Logo className="h-8 w-auto" />
           </Link>
         </div>
-
-        <div className="px-3">
-          <Button
-            render={<Link href="/composer" />}
-            className="w-full justify-start gap-2"
-            onClick={() => setOpen(false)}
-          >
-            <Plus className="size-4" />
-            New post
-          </Button>
-        </div>
-
-        <nav className="mt-4 flex flex-col gap-1 px-3">
-          {navItems.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                )}
-              >
-                <item.icon className="size-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+        <Button
+          render={<Link href="/composer" />}
+          className="mt-5 h-10 w-full"
+          onClick={close}
+        >
+          <Plus className="size-4" /> New post
+        </Button>
+        <nav aria-label="Main" className="mt-7 flex-1 overflow-y-auto">
+          <NavList onNavigate={close} layoutGroup="mobile-nav" />
         </nav>
+        <NextCueCard cue={nextCue} onNavigate={close} className="mb-3" />
+        <UserMenu user={user} workspaceName={workspaceName} />
       </SheetContent>
     </Sheet>
   );
 }
 
-interface ClientOption {
-  id: string;
-  name: string;
-  color: string | null;
-}
-
 export function AppTopbar({
-  userEmail,
+  user,
+  workspaceName,
   clients,
   scopeClientId,
+  nextCue,
 }: {
-  userEmail: string;
+  user: ShellUser;
+  workspaceName: string;
   clients: ClientOption[];
   scopeClientId?: string;
+  nextCue: NextCueData | null;
 }) {
   const pathname = usePathname();
+  const page = navItems.find((i) => isActive(pathname, i.href));
 
   return (
-    <header className="bg-background/80 border-border sticky top-0 z-10 flex h-16 items-center justify-between border-b px-5 backdrop-blur md:px-8">
-      <div className="flex min-w-0 items-center gap-2">
-        <MobileNav pathname={pathname} />
-        <h1 className="hidden text-lg font-semibold sm:block">
-          {titleFor(pathname)}
-        </h1>
+    <header className="bg-background/75 supports-backdrop-filter:bg-background/65 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur-xl md:px-6">
+      <MobileNav nextCue={nextCue} user={user} workspaceName={workspaceName} />
+      <Link href="/dashboard" className="md:hidden" aria-label="Cue dashboard">
+        <LogoMark size={26} />
+      </Link>
+
+      <nav
+        aria-label="Breadcrumb"
+        className="flex min-w-0 items-center gap-1 text-[0.8125rem]"
+      >
+        <span className="text-muted-foreground hidden max-w-40 truncate px-1 lg:block">
+          {workspaceName}
+        </span>
+        <span aria-hidden className="text-border hidden text-lg font-light lg:block">
+          /
+        </span>
         {clients.length > 0 && (
+          <ClientSwitcher clients={clients} current={scopeClientId} />
+        )}
+        {page && (
           <>
-            <span className="text-border hidden sm:block">/</span>
-            <ClientSwitcher clients={clients} current={scopeClientId} />
+            <span aria-hidden className="text-border hidden text-lg font-light sm:block">
+              /
+            </span>
+            <span className="hidden items-center gap-1.5 px-1 font-medium sm:flex">
+              <page.icon className="text-muted-foreground size-3.5" />
+              {page.label}
+            </span>
           </>
         )}
-      </div>
+      </nav>
 
-      <div className="flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-1.5">
+        <CommandMenu clients={clients} />
         <ThemeToggle />
-        <DropdownMenu>
-          <DropdownMenuTrigger className="outline-none" aria-label="Account menu">
-            <Avatar className="size-9">
-              <AvatarFallback className="bg-primary text-primary-foreground text-sm">
-                {userEmail.slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="truncate font-normal">
-                {userEmail}
-              </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem render={<Link href="/settings" />}>
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem render={<Link href="/logout" />}>
-              Sign out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button
+          render={<Link href="/composer" />}
+          size="sm"
+          className="md:hidden"
+          aria-label="New post"
+        >
+          <Plus className="size-4" />
+        </Button>
       </div>
     </header>
   );

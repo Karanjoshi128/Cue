@@ -1,6 +1,5 @@
-import Link from "next/link";
 import type { Metadata } from "next";
-import { Logo } from "@/components/brand/logo";
+import { LegalShell } from "@/components/marketing/site-chrome";
 
 export const metadata: Metadata = {
   title: "Data Deletion",
@@ -12,25 +11,15 @@ const CONTACT = "joshikaran0008@gmail.com";
 // Meta requires a public Data Deletion Instructions URL for app review.
 export default function DataDeletionPage() {
   return (
-    <main className="bg-background text-foreground min-h-screen px-5 py-12">
-      <article className="mx-auto max-w-3xl space-y-6">
-        <header className="space-y-3">
-          <Link href="/" aria-label="Cue home">
-            <Logo className="h-8 w-auto" />
-          </Link>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Data Deletion
-          </h1>
-        </header>
-
-        <div className="text-muted-foreground space-y-6 text-[0.95rem] leading-relaxed">
+    <LegalShell title="Data Deletion">
+        <div className="text-muted-foreground space-y-10 text-[1rem] leading-[1.75] [&_a]:underline-offset-2 [&_li]:pl-1 [&_strong]:font-medium">
           <p>
             You are in control of the data Cue stores. There are two ways to
             remove it.
           </p>
 
-          <section className="space-y-2">
-            <h2 className="text-foreground text-xl font-semibold">
+          <section className="space-y-3">
+            <h2 className="headline text-foreground text-[1.75rem]">
               1. Disconnect an account yourself (instant)
             </h2>
             <p>
@@ -44,8 +33,8 @@ export default function DataDeletionPage() {
             </p>
           </section>
 
-          <section className="space-y-2">
-            <h2 className="text-foreground text-xl font-semibold">
+          <section className="space-y-3">
+            <h2 className="headline text-foreground text-[1.75rem]">
               2. Delete your whole account and workspace
             </h2>
             <p>
@@ -64,8 +53,8 @@ export default function DataDeletionPage() {
             </p>
           </section>
 
-          <section className="space-y-2">
-            <h2 className="text-foreground text-xl font-semibold">
+          <section className="space-y-3">
+            <h2 className="headline text-foreground text-[1.75rem]">
               What gets deleted
             </h2>
             <ul className="list-disc space-y-2 pl-5">
@@ -96,7 +85,6 @@ export default function DataDeletionPage() {
             .
           </p>
         </div>
-      </article>
-    </main>
+    </LegalShell>
   );
 }

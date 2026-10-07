@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { createWorkspace } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,9 +37,15 @@ export function OnboardingForm({ suggestion }: { suggestion?: string }) {
   }
 
   return (
-    <div className="space-y-4 text-left">
-      <div className="space-y-1.5">
-        <label htmlFor="workspace" className="label-caps">
+    <form
+      className="space-y-5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
+      <div className="space-y-2">
+        <label htmlFor="workspace" className="label-caps block">
           Workspace name
         </label>
         <Input
@@ -47,18 +54,17 @@ export function OnboardingForm({ suggestion }: { suggestion?: string }) {
           value={name}
           maxLength={60}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          className="h-11 md:text-base"
+          className="h-12 text-base md:text-base"
           autoFocus
         />
       </div>
-      <Button
-        onClick={submit}
-        disabled={loading}
-        className="h-11 w-full text-base font-medium"
-      >
+      <Button type="submit" size="xl" disabled={loading} className="group w-full">
+        {loading ? <Loader2 className="animate-spin" /> : null}
         {loading ? "Creating…" : "Create workspace"}
+        {!loading && (
+          <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+        )}
       </Button>
-    </div>
+    </form>
   );
 }

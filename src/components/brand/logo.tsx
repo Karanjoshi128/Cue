@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 // `dark:` classes (SSR-safe, no theme JS). The blue mark is identical in both.
 export function Logo({ className }: { className?: string }) {
   const shared = {
-    alt: "Cue",
     width: 120,
     height: 40,
     priority: true,
@@ -18,11 +17,13 @@ export function Logo({ className }: { className?: string }) {
     <>
       <Image
         {...shared}
+        alt="Cue"
         src="/brand/cue-logo-horizontal.png"
         className={cn("dark:hidden", className)}
       />
       <Image
         {...shared}
+        alt="Cue"
         src="/brand/cue-logo-horizontal-dark.png"
         className={cn("hidden dark:block", className)}
       />

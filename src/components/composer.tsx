@@ -1,15 +1,22 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { format } from "date-fns";
+import {
+  addDays,
+  addHours,
+  format,
+  nextMonday,
+  setHours,
+  setMinutes,
+  startOfHour,
+} from "date-fns";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import type { Platform } from "@prisma/client";
 import { savePost, updatePost } from "@/lib/actions";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -22,8 +29,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { PlatformIcon } from "@/components/post-bits";
+import {
+  ClientDot,
+  PlatformIcon,
+  PLATFORM_META,
+} from "@/components/post-bits";
 import { ExpandablePreview } from "@/components/post-preview";
+import { Countdown } from "@/components/fx/countdown";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_YOUTUBE_CATEGORY,
@@ -45,6 +57,10 @@ import {
   Send,
   CalendarClock,
   Save,
+  Check,
+  UploadCloud,
+  Film,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Account {
@@ -121,6 +137,16 @@ const YT_PRIVACY = [
   { value: "private", label: "Private" },
 ] as const;
 
+const LOCAL = "yyyy-MM-dd'T'HH:mm";
+
+/** One-tap times, computed in the browser's own zone when clicked. */
+const PRESETS: { label: string; at: () => Date }[] = [
+  { label: "In an hour", at: () => startOfHour(addHours(new Date(), 2)) },
+  { label: "Tomorrow 9 AM", at: () => setMinutes(setHours(addDays(new Date(), 1), 9), 0) },
+  { label: "Tomorrow 6 PM", at: () => setMinutes(setHours(addDays(new Date(), 1), 18), 0) },
+  { label: "Monday 9 AM", at: () => setMinutes(setHours(nextMonday(new Date()), 9), 0) },
+];
+
 /**
  * Error responses aren't always JSON - a platform-level rejection returns plain
  * text, and calling res.json() on that surfaces a confusing "not valid JSON"
@@ -134,6 +160,92 @@ async function readError(res: Response): Promise<string> {
     if (res.status === 413) return "That file is too large to upload.";
     return text.slice(0, 140) || `Upload failed (${res.status})`;
   }
+}
+
+/** Circular character budget: blue, then amber near the cap, red past it. */
+function CharRing({ used, limit }: { used: number; limit: number }) {
+  const r = 9;
+  const c = 2 * Math.PI * r;
+  const ratio = Math.min(used / limit, 1);
+  const over = used > limit;
+  const near = !over && used / limit >= 0.9;
+  const remaining = limit - used;
+  return (
+    <span className="flex items-center gap-2">
+      {(near || over) && (
+        <span
+          className={cn(
+            "font-mono text-xs tabular-nums",
+            over ? "text-fault-ink" : "text-standby-ink",
+          )}
+        >
+          {remaining}
+        </span>
+      )}
+      <svg
+        viewBox="0 0 24 24"
+        className="size-6 -rotate-90"
+        role="img"
+        aria-label={`${used} of ${limit} characters`}
+      >
+        <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" className="stroke-border" />
+        <circle
+          cx="12"
+          cy="12"
+          r={r}
+          fill="none"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - ratio)}
+          className={cn(
+            "transition-[stroke-dashoffset,stroke] duration-300",
+            over ? "stroke-fault" : near ? "stroke-standby" : "stroke-primary",
+          )}
+        />
+      </svg>
+    </span>
+  );
+}
+
+/** A numbered step of the composer, styled like a line on a cue sheet. */
+function Step({
+  n,
+  title,
+  hint,
+  children,
+  className,
+}: {
+  n: string;
+  title: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn(
+        "bg-card rounded-2xl border p-5 shadow-[0_1px_2px_0_rgb(20_20_40/0.04)] sm:p-6",
+        className,
+      )}
+    >
+      <div className="mb-4 flex items-baseline gap-3">
+        <span className="text-primary font-mono text-[0.6875rem] font-medium tracking-wider">
+          {n}
+        </span>
+        <h2 className="text-[0.9375rem] font-semibold tracking-tight">{title}</h2>
+        {hint && (
+          <span className="text-muted-foreground ml-auto text-xs">{hint}</span>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// A plain span: <Label>'s text-sm utility would override the mono caps size.
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <span className="label-caps mb-2 block">{children}</span>;
 }
 
 export function Composer({
@@ -199,12 +311,21 @@ export function Composer({
     },
   );
   const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [overrides, setOverrides] = useState<Record<string, string>>(
     initial?.overrides ?? {},
   );
   const [perPlatform, setPerPlatform] = useState(
     Boolean(initial && Object.keys(initial.overrides).length > 0),
   );
+  const [previewTab, setPreviewTab] = useState<Platform | null>(null);
+  // "Now" is only known in the browser; the server can't render a correct
+  // minimum for the picker, so it's set after mount.
+  const [minDateTime, setMinDateTime] = useState<string>();
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMinDateTime(format(new Date(), LOCAL));
+  }, []);
 
   const client = useMemo(
     () => clients.find((c) => c.id === clientId),
@@ -241,10 +362,11 @@ export function Composer({
     const limits = [...selectedPlatforms].map((p) => PLATFORM_LIMITS[p]);
     return limits.length ? Math.min(...limits) : DEFAULT_LIMIT;
   }, [selectedPlatforms]);
-  const overLimit = body.length > limit;
   const hasIgAccount = client?.accounts.some((a) => a.platform === "INSTAGRAM");
 
-  const minDateTime = format(new Date(), "yyyy-MM-dd'T'HH:mm");
+  const scheduledDate = scheduledAt ? new Date(scheduledAt) : null;
+  const scheduleValid =
+    scheduledDate !== null && !Number.isNaN(scheduledDate.getTime());
 
   function changeType(t: ContentType) {
     setContentType(t);
@@ -316,6 +438,26 @@ export function Composer({
     } finally {
       setUploading(false);
     }
+  }
+
+  function onDrop(e: React.DragEvent, as: "media" | "doc") {
+    e.preventDefault();
+    setDragging(false);
+    if (uploading) return;
+    const files = Array.from(e.dataTransfer.files).filter((f) =>
+      as === "doc"
+        ? /\.(pdf|pptx?|docx?)$/i.test(f.name)
+        : f.type.startsWith("image/") || f.type.startsWith("video/"),
+    );
+    if (files.length === 0) {
+      toast.error(
+        as === "doc"
+          ? "Drop a PDF, PowerPoint or Word file"
+          : "Drop images or videos",
+      );
+      return;
+    }
+    uploadFiles(files, as);
   }
 
   function submit(action: "draft" | "schedule" | "now") {
@@ -465,220 +607,273 @@ export function Composer({
         }
       : undefined;
 
+  // Which network the preview shows: the chosen tab if it's still targeted,
+  // else the first targeted network, else LinkedIn as a neutral default.
+  const platformsList = [...selectedPlatforms];
+  const shownPlatform: Platform =
+    previewTab && selectedPlatforms.has(previewTab)
+      ? previewTab
+      : (platformsList[0] ?? "LINKEDIN");
+  const shownAccount = selectedAccounts.find((a) => a.platform === shownPlatform);
+
+  // A short "what's missing" line for the action bar.
+  const blockers = [
+    !clientId && "pick a client",
+    selected.length === 0 && "choose an account",
+    !body.trim() && "write a caption",
+  ].filter(Boolean) as string[];
+
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_360px]">
-      {/* Editor */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{editing ? "Edit post" : "Create a post"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="space-y-2">
-            <Label className="label-caps">Client</Label>
-            <Select
-              value={clientId}
-              items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
-              onValueChange={(v) => {
-                setClientId((v as string) ?? "");
-                setSelected([]);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a client" />
-              </SelectTrigger>
-              <SelectContent>
-                {clients.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Content-type tabs */}
-          <div className="bg-muted flex gap-0.5 rounded-lg p-0.5 text-sm">
-            {CONTENT_TYPES.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => changeType(t.key)}
-                aria-label={t.label}
-                aria-pressed={contentType === t.key}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 font-medium transition-colors",
-                  contentType === t.key
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <t.icon className="size-4" />
-                <span className="hidden sm:inline">{t.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="space-y-2">
-            <Label className="label-caps">Publish to</Label>
-            {postableAccounts.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {postableAccounts.map((a) => {
-                  const on = selected.includes(a.id);
-                  const disabled = linkedInOnly && a.platform !== "LINKEDIN";
-                  return (
-                    <button
-                      key={a.id}
-                      type="button"
-                      disabled={disabled}
-                      aria-pressed={on}
-                      onClick={() => !disabled && toggleAccount(a.id)}
-                      title={disabled ? "LinkedIn only" : undefined}
-                      className={cn(
-                        "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                        disabled && "cursor-not-allowed opacity-40",
-                        on
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent",
-                      )}
-                    >
-                      <PlatformIcon
-                        platform={a.platform}
-                        className="shrink-0"
-                      />
-                      <span className="max-w-40 truncate">{a.displayName}</span>
-                    </button>
-                  );
-                })}
+    <div className="mx-auto max-w-6xl">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+        {/* ---------------- Editor ---------------- */}
+        <div className="min-w-0 space-y-4">
+          <Step
+            n="01"
+            title="Who it's for"
+            hint={
+              selected.length > 0
+                ? `${selected.length} account${selected.length === 1 ? "" : "s"} selected`
+                : undefined
+            }
+          >
+            <div className="space-y-5">
+              <div>
+                <FieldLabel>Client</FieldLabel>
+                <Select
+                  value={clientId}
+                  items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
+                  onValueChange={(v) => {
+                    setClientId((v as string) ?? "");
+                    setSelected([]);
+                  }}
+                >
+                  <SelectTrigger className="h-10 w-full">
+                    {client && <ClientDot color={client.color} />}
+                    <SelectValue placeholder="Select a client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        <ClientDot color={c.color} />
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                No accounts connected.{" "}
-                <Link href={`/clients`} className="text-primary underline">
-                  Connect one
-                </Link>
-                .
-              </p>
-            )}
-            {linkedInOnly && hasIgAccount && (
-              <p className="text-muted-foreground text-xs">
-                {CONTENT_TYPES.find((t) => t.key === contentType)?.label} posts
-                are supported on LinkedIn only.
-              </p>
-            )}
-          </div>
 
-          <div className="space-y-2">
-            <Label className="label-caps">Content</Label>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
-              placeholder="What do you want to share?"
-              className="min-h-32 resize-none"
-            />
-            <div className="flex items-center justify-between text-xs">
-              {contentType === "media" && igSelected && media.length === 0 ? (
-                <span className="text-amber-600 dark:text-amber-400">
-                  Instagram needs an image or video
-                </span>
-              ) : (
-                <span />
-              )}
-              <span
-                className={cn(
-                  "text-muted-foreground",
-                  overLimit && "text-destructive font-medium",
-                )}
-              >
-                {body.length}/{limit}
-              </span>
-            </div>
-          </div>
-
-          {contentType === "media" && selectedPlatforms.size > 1 && (
-            <div className="flex items-center justify-between">
-              <Label
-                htmlFor="per-platform-switch"
-                className="cursor-pointer text-sm"
-              >
-                Customize caption per platform
-              </Label>
-              <Switch
-                id="per-platform-switch"
-                checked={perPlatform}
-                onCheckedChange={setPerPlatform}
-              />
-            </div>
-          )}
-
-          {contentType === "media" &&
-            perPlatform &&
-            selectedAccounts.map((a) => {
-              const val = overrides[a.id] ?? body;
-              const lim = PLATFORM_LIMITS[a.platform];
-              const over = val.length > lim;
-              return (
-                <div key={a.id} className="space-y-1.5">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <PlatformIcon platform={a.platform} />
-                    {a.displayName}
+              <div>
+                <FieldLabel>Publish to</FieldLabel>
+                {postableAccounts.length > 0 ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {postableAccounts.map((a) => {
+                      const on = selected.includes(a.id);
+                      const disabled = linkedInOnly && a.platform !== "LINKEDIN";
+                      const meta = PLATFORM_META[a.platform];
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          disabled={disabled}
+                          aria-pressed={on}
+                          onClick={() => !disabled && toggleAccount(a.id)}
+                          title={disabled ? "LinkedIn only" : undefined}
+                          className={cn(
+                            "group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+                            disabled && "cursor-not-allowed opacity-40",
+                            on
+                              ? "border-primary/60 bg-primary/[0.05] shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_12%,transparent)]"
+                              : "bg-background hover:border-[color-mix(in_oklch,var(--border),var(--foreground)_16%)]",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "grid size-9 shrink-0 place-items-center rounded-lg transition-colors",
+                              on ? "bg-card shadow-[0_0_0_1px_var(--border)]" : "bg-muted",
+                            )}
+                          >
+                            <PlatformIcon
+                              platform={a.platform}
+                              brand={on}
+                              className="size-[1.1rem]"
+                            />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">
+                              {a.displayName}
+                            </span>
+                            <span className="text-muted-foreground block text-xs">
+                              {meta.label}
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              "grid size-5 shrink-0 place-items-center rounded-full transition-all",
+                              on
+                                ? "bg-primary text-primary-foreground scale-100"
+                                : "scale-90 shadow-[inset_0_0_0_1.5px_var(--border)]",
+                            )}
+                          >
+                            {on && <Check className="size-3" strokeWidth={3} />}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <Textarea
-                    value={val}
-                    onChange={(e) =>
-                      setOverrides((o) => ({
-                        ...o,
-                        [a.id]: e.target.value.slice(0, MAX_BODY),
-                      }))
-                    }
-                    className="min-h-28 resize-none"
-                  />
-                  <div
+                ) : (
+                  <div className="text-muted-foreground rounded-xl border border-dashed px-4 py-5 text-center text-sm">
+                    {client ? `${client.name} has no connected accounts yet.` : "No client selected."}{" "}
+                    <Link href="/clients" className="text-primary font-medium hover:underline">
+                      Connect one
+                    </Link>
+                  </div>
+                )}
+                {linkedInOnly && hasIgAccount && (
+                  <p className="text-muted-foreground mt-2 text-xs">
+                    {CONTENT_TYPES.find((t) => t.key === contentType)?.label}{" "}
+                    posts are supported on LinkedIn only.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Step>
+
+          <Step n="02" title="What it says">
+            {/* Content-type segmented control */}
+            <div className="bg-muted relative mb-4 flex gap-0.5 rounded-xl p-1 text-sm">
+              {CONTENT_TYPES.map((t) => {
+                const active = contentType === t.key;
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => changeType(t.key)}
+                    aria-label={t.label}
+                    aria-pressed={active}
                     className={cn(
-                      "text-right text-xs text-muted-foreground",
-                      over && "text-destructive font-medium",
+                      "relative flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+                      active
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {val.length}/{lim}
-                  </div>
-                </div>
-              );
-            })}
+                    {active && (
+                      <motion.span
+                        layoutId="content-type-pill"
+                        className="bg-card absolute inset-0 rounded-lg shadow-[0_0_0_1px_var(--border),0_1px_2px_0_rgb(20_20_40/0.06)]"
+                        transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                      />
+                    )}
+                    <t.icon className="relative size-4" />
+                    <span className="relative hidden sm:inline">{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* --- Media --- */}
-          {contentType === "media" && (
-            <>
-              {media.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {media.map((m, i) => (
-                    <div key={m.storageKey} className="relative">
-                      {m.type === "IMAGE" ? (
-                        <Image
-                          src={m.url}
-                          alt=""
-                          width={80}
-                          height={80}
-                          className="size-20 rounded-md object-cover"
-                        />
+            {/* Writing surface */}
+            <div className="bg-background focus-within:border-ring focus-within:ring-ring/15 rounded-xl border transition-[border-color,box-shadow] focus-within:ring-4">
+              <Textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
+                placeholder="What do you want to say?"
+                aria-label="Caption"
+                className="min-h-44 resize-none border-0 bg-transparent px-4 pt-3.5 text-[0.9375rem] shadow-none hover:border-0 focus-visible:ring-0 dark:bg-transparent"
+              />
+              <div className="flex items-center justify-between gap-3 border-t px-3 py-2">
+                <div className="flex items-center gap-1">
+                  {contentType === "media" && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={uploading}
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      {uploading ? (
+                        <Loader2 className="animate-spin" />
                       ) : (
-                        <div className="bg-accent grid size-20 place-items-center rounded-md text-xs">
-                          Video
-                        </div>
+                        <ImagePlus />
                       )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setMedia((arr) => arr.filter((_, j) => j !== i))
-                        }
-                        className="bg-background absolute -right-2 -top-2 rounded-full border p-0.5 shadow"
-                        aria-label="Remove media"
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </div>
-                  ))}
+                      Add media
+                    </Button>
+                  )}
+                  {contentType === "media" && igSelected && media.length === 0 && (
+                    <span className="text-standby-ink flex items-center gap-1 text-xs">
+                      <AlertTriangle className="size-3.5" />
+                      Instagram needs an image or video
+                    </span>
+                  )}
                 </div>
+                <CharRing used={body.length} limit={limit} />
+              </div>
+            </div>
+
+            {contentType === "media" && selectedPlatforms.size > 1 && (
+              <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border px-4 py-3">
+                <div>
+                  <Label
+                    htmlFor="per-platform-switch"
+                    className="cursor-pointer text-sm"
+                  >
+                    Tailor the caption per network
+                  </Label>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    Start from the caption above, then edit each one.
+                  </p>
+                </div>
+                <Switch
+                  id="per-platform-switch"
+                  checked={perPlatform}
+                  onCheckedChange={setPerPlatform}
+                />
+              </div>
+            )}
+
+            <AnimatePresence initial={false}>
+              {contentType === "media" && perPlatform && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-4 pt-4">
+                    {selectedAccounts.map((a) => {
+                      const val = overrides[a.id] ?? body;
+                      const lim = PLATFORM_LIMITS[a.platform];
+                      return (
+                        <div key={a.id} className="bg-background rounded-xl border">
+                          <div className="flex items-center gap-2 border-b px-4 py-2 text-sm font-medium">
+                            <PlatformIcon platform={a.platform} brand />
+                            {a.displayName}
+                            <span className="ml-auto">
+                              <CharRing used={val.length} limit={lim} />
+                            </span>
+                          </div>
+                          <Textarea
+                            value={val}
+                            aria-label={`Caption for ${a.displayName}`}
+                            onChange={(e) =>
+                              setOverrides((o) => ({
+                                ...o,
+                                [a.id]: e.target.value.slice(0, MAX_BODY),
+                              }))
+                            }
+                            className="min-h-28 resize-none border-0 bg-transparent px-4 shadow-none hover:border-0 focus-visible:ring-0 dark:bg-transparent"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
               )}
-              <div>
+            </AnimatePresence>
+
+            {/* --- Media --- */}
+            {contentType === "media" && (
+              <div className="mt-4">
                 <input
                   ref={fileRef}
                   type="file"
@@ -690,392 +885,586 @@ export function Composer({
                     e.target.value = "";
                   }}
                 />
-                <Button
+                {media.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2.5">
+                    {media.map((m, i) => (
+                      <motion.div
+                        key={m.storageKey}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="group relative"
+                      >
+                        {m.type === "IMAGE" ? (
+                          <Image
+                            src={m.url}
+                            alt=""
+                            width={96}
+                            height={96}
+                            className="size-24 rounded-xl object-cover shadow-[0_0_0_1px_var(--border)]"
+                          />
+                        ) : (
+                          <div className="bg-foreground text-background grid size-24 place-items-center rounded-xl">
+                            <span className="flex flex-col items-center gap-1 text-xs font-medium">
+                              <Film className="size-5" /> Video
+                            </span>
+                          </div>
+                        )}
+                        <span className="bg-background/90 absolute bottom-1.5 left-1.5 rounded-md px-1.5 font-mono text-[0.625rem] backdrop-blur">
+                          {i + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMedia((arr) => arr.filter((_, j) => j !== i))
+                          }
+                          className="bg-foreground text-background absolute -top-2 -right-2 grid size-6 place-items-center rounded-full opacity-0 shadow-md transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                          aria-label="Remove media"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
                   disabled={uploading}
                   onClick={() => fileRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragging(true);
+                  }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={(e) => onDrop(e, "media")}
+                  className={cn(
+                    "text-muted-foreground flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed px-4 py-6 text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+                    dragging
+                      ? "border-primary bg-primary/[0.05] text-primary"
+                      : "hover:border-[color-mix(in_oklch,var(--border),var(--foreground)_20%)] hover:bg-muted/40",
+                  )}
                 >
                   {uploading ? (
-                    <Loader2 className="size-4 animate-spin" />
+                    <Loader2 className="size-5 animate-spin" />
                   ) : (
-                    <ImagePlus className="size-4" />
+                    <UploadCloud className="size-5" />
                   )}
-                  Add media
-                </Button>
-                {media.length >= 2 && (
-                  <p className="text-muted-foreground mt-1.5 text-xs">
-                    LinkedIn will post these as an image gallery.
-                  </p>
-                )}
+                  <span>
+                    <span className="text-foreground font-medium">
+                      Drop images or video
+                    </span>{" "}
+                    or click to browse
+                  </span>
+                  <span className="text-xs">
+                    {media.length >= 2
+                      ? "LinkedIn posts several images as a gallery."
+                      : "Up to 512 MB per file."}
+                  </span>
+                </button>
               </div>
-            </>
-          )}
+            )}
 
-          {/* --- YouTube video details --- */}
-          {contentType === "media" && ytSelected && (
-            <div className="space-y-3 rounded-lg border p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <PlatformIcon platform="YOUTUBE" /> YouTube
+            {/* --- Document --- */}
+            {contentType === "document" && (
+              <div className="mt-4">
+                <FieldLabel>Document</FieldLabel>
+                {doc ? (
+                  <div className="bg-background flex items-center gap-3 rounded-xl border p-3 text-sm">
+                    <span className="bg-muted grid size-10 shrink-0 place-items-center rounded-lg">
+                      <FileText className="text-muted-foreground size-5" />
+                    </span>
+                    <span className="flex-1 truncate font-medium">
+                      {doc.title ?? "Document"}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setDoc(null)}
+                      aria-label="Remove document"
+                    >
+                      <X />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      ref={docRef}
+                      type="file"
+                      accept="application/pdf,.pdf,.ppt,.pptx,.doc,.docx"
+                      hidden
+                      onChange={(e) => {
+                        uploadFiles(Array.from(e.target.files ?? []), "doc");
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={uploading}
+                      onClick={() => docRef.current?.click()}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragging(true);
+                      }}
+                      onDragLeave={() => setDragging(false)}
+                      onDrop={(e) => onDrop(e, "doc")}
+                      className={cn(
+                        "text-muted-foreground flex w-full flex-col items-center gap-1.5 rounded-xl border border-dashed px-4 py-6 text-sm transition-colors",
+                        dragging
+                          ? "border-primary bg-primary/[0.05] text-primary"
+                          : "hover:bg-muted/40",
+                      )}
+                    >
+                      {uploading ? (
+                        <Loader2 className="size-5 animate-spin" />
+                      ) : (
+                        <FileText className="size-5" />
+                      )}
+                      <span>
+                        <span className="text-foreground font-medium">
+                          Drop a document
+                        </span>{" "}
+                        or click to browse
+                      </span>
+                    </button>
+                  </>
+                )}
+                <p className="text-muted-foreground mt-2 text-xs">
+                  PDF, PPT or DOC. LinkedIn renders it as a swipeable carousel.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <Label className="label-caps">Video title</Label>
-                <Input
-                  value={title}
-                  maxLength={100}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Title shown on YouTube"
-                />
-                <div className="text-muted-foreground text-right text-xs">
-                  {title.length}/100
+            )}
+
+            {/* --- Link --- */}
+            {contentType === "link" && (
+              <div className="mt-4 grid gap-4">
+                <div>
+                  <FieldLabel>Link URL</FieldLabel>
+                  <Input
+                    type="url"
+                    value={link.url}
+                    onChange={(e) =>
+                      setLink((l) => ({ ...l, url: e.target.value }))
+                    }
+                    placeholder="https://example.com/article"
+                  />
                 </div>
+                <div>
+                  <FieldLabel>Preview title</FieldLabel>
+                  <Input
+                    value={link.title ?? ""}
+                    onChange={(e) =>
+                      setLink((l) => ({ ...l, title: e.target.value }))
+                    }
+                    placeholder="Headline shown on the link card"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Preview description</FieldLabel>
+                  <Textarea
+                    value={link.description ?? ""}
+                    onChange={(e) =>
+                      setLink((l) => ({ ...l, description: e.target.value }))
+                    }
+                    className="min-h-16 resize-none"
+                    placeholder="Short description shown on the link card"
+                  />
+                </div>
+                <p className="text-muted-foreground text-xs">
+                  LinkedIn won&apos;t fetch these automatically, so set them to
+                  control the preview card.
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <Label className="label-caps">Visibility</Label>
-                <Select
-                  value={youtubePrivacy}
-                  items={Object.fromEntries(
-                    YT_PRIVACY.map((p) => [p.value, p.label]),
-                  )}
-                  onValueChange={(v) => setYoutubePrivacy(v as YtPrivacy)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {YT_PRIVACY.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>
-                        {p.label}
-                      </SelectItem>
+            )}
+
+            {/* --- Poll --- */}
+            {contentType === "poll" && (
+              <div className="mt-4 grid gap-4">
+                <div>
+                  <div className="flex items-baseline justify-between">
+                    <FieldLabel>Question</FieldLabel>
+                    <span className="text-muted-foreground font-mono text-[0.6875rem]">
+                      {poll.question.length}/140
+                    </span>
+                  </div>
+                  <Input
+                    value={poll.question}
+                    maxLength={140}
+                    onChange={(e) =>
+                      setPoll((p) => ({ ...p, question: e.target.value }))
+                    }
+                    placeholder="Ask your audience…"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Options</FieldLabel>
+                  <div className="space-y-2">
+                    {poll.options.map((opt, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-muted-foreground w-5 shrink-0 font-mono text-xs">
+                          {String.fromCharCode(65 + i)}
+                        </span>
+                        <Input
+                          value={opt}
+                          maxLength={30}
+                          onChange={(e) =>
+                            setPoll((p) => ({
+                              ...p,
+                              options: p.options.map((o, j) =>
+                                j === i ? e.target.value : o,
+                              ),
+                            }))
+                          }
+                          placeholder={`Option ${i + 1}`}
+                        />
+                        {poll.options.length > 2 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Remove option"
+                            onClick={() =>
+                              setPoll((p) => ({
+                                ...p,
+                                options: p.options.filter((_, j) => j !== i),
+                              }))
+                            }
+                          >
+                            <X />
+                          </Button>
+                        )}
+                      </div>
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="label-caps">Category</Label>
-                <Select
-                  value={youtubeCategoryId}
-                  items={Object.fromEntries(
-                    YOUTUBE_CATEGORIES.map((c) => [c.id, c.label]),
+                  </div>
+                  {poll.options.length < 4 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 ml-5"
+                      onClick={() =>
+                        setPoll((p) => ({ ...p, options: [...p.options, ""] }))
+                      }
+                    >
+                      <Plus /> Add option
+                    </Button>
                   )}
-                  onValueChange={(v) =>
-                    setYoutubeCategoryId(
-                      (v as string) || DEFAULT_YOUTUBE_CATEGORY,
-                    )
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {YOUTUBE_CATEGORIES.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="label-caps">Tags</Label>
-                <Input
-                  value={tagsText}
-                  onChange={(e) => setTagsText(e.target.value)}
-                  placeholder="Comma-separated, e.g. shorts, ai art, timelapse"
-                />
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span
-                    className={
-                      tagsProblem ? "text-destructive" : "text-muted-foreground"
+                </div>
+                <div>
+                  <FieldLabel>Duration</FieldLabel>
+                  <Select
+                    value={poll.duration}
+                    items={Object.fromEntries(
+                      POLL_DURATIONS.map((d) => [d.value, d.label]),
+                    )}
+                    onValueChange={(v) =>
+                      setPoll((p) => ({ ...p, duration: v as PollDuration }))
                     }
                   >
-                    {tagsProblem ??
-                      `${tags.length} tag${tags.length === 1 ? "" : "s"}`}
-                  </span>
-                  {/* Budget, not character count: a tag with a space costs 2
-                      extra because YouTube stores it in quotes. */}
-                  <span
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {POLL_DURATIONS.map((d) => (
+                        <SelectItem key={d.value} value={d.value}>
+                          {d.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-standby-ink text-xs">
+                  Polls can&apos;t be edited once published.
+                </p>
+              </div>
+            )}
+          </Step>
+
+          {/* --- YouTube video details --- */}
+          <AnimatePresence initial={false}>
+            {contentType === "media" && ytSelected && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+              >
+                <Step
+                  n="02b"
+                  title="YouTube details"
+                  hint={
+                    <span className="flex items-center gap-1.5">
+                      <PlatformIcon platform="YOUTUBE" brand className="size-3.5" />
+                      Uploads as a video
+                    </span>
+                  }
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <div className="flex items-baseline justify-between">
+                        <FieldLabel>Video title</FieldLabel>
+                        <span className="text-muted-foreground font-mono text-[0.6875rem]">
+                          {title.length}/100
+                        </span>
+                      </div>
+                      <Input
+                        value={title}
+                        maxLength={100}
+                        onChange={(e) => setTitle(e.target.value)}
+                        placeholder="Title shown on YouTube"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Visibility</FieldLabel>
+                      <Select
+                        value={youtubePrivacy}
+                        items={Object.fromEntries(
+                          YT_PRIVACY.map((p) => [p.value, p.label]),
+                        )}
+                        onValueChange={(v) => setYoutubePrivacy(v as YtPrivacy)}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {YT_PRIVACY.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <FieldLabel>Category</FieldLabel>
+                      <Select
+                        value={youtubeCategoryId}
+                        items={Object.fromEntries(
+                          YOUTUBE_CATEGORIES.map((c) => [c.id, c.label]),
+                        )}
+                        onValueChange={(v) =>
+                          setYoutubeCategoryId(
+                            (v as string) || DEFAULT_YOUTUBE_CATEGORY,
+                          )
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {YOUTUBE_CATEGORIES.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <div className="flex items-baseline justify-between">
+                        <FieldLabel>Tags</FieldLabel>
+                        {/* Budget, not character count: a tag with a space costs 2
+                            extra because YouTube stores it in quotes. */}
+                        <span
+                          className={cn(
+                            "text-muted-foreground font-mono text-[0.6875rem]",
+                            tagsCost > YOUTUBE_TAG_BUDGET && "text-fault-ink font-medium",
+                          )}
+                        >
+                          {tagsCost}/{YOUTUBE_TAG_BUDGET}
+                        </span>
+                      </div>
+                      <Input
+                        value={tagsText}
+                        onChange={(e) => setTagsText(e.target.value)}
+                        placeholder="Comma-separated, e.g. shorts, ai art, timelapse"
+                      />
+                      {tags.length > 0 && !tagsProblem && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {tags.map((t) => (
+                            <span
+                              key={t}
+                              className="bg-muted rounded-md px-2 py-0.5 text-xs"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {tagsProblem && (
+                        <p className="text-fault-ink mt-1.5 text-xs">{tagsProblem}</p>
+                      )}
+                    </div>
+                  </div>
+                  {!hasVideo && (
+                    <p className="text-standby-ink mt-4 flex items-center gap-1.5 text-xs">
+                      <AlertTriangle className="size-3.5" />
+                      YouTube needs a video. Add one in step 02.
+                    </p>
+                  )}
+                </Step>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <Step n="03" title="When it goes out">
+            <div className="flex flex-wrap gap-2">
+              {PRESETS.map((p) => {
+                const active =
+                  scheduledAt !== "" && scheduledAt === format(p.at(), LOCAL);
+                return (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => setScheduledAt(format(p.at(), LOCAL))}
+                    suppressHydrationWarning
                     className={cn(
-                      "text-muted-foreground shrink-0",
-                      tagsCost > YOUTUBE_TAG_BUDGET &&
-                        "text-destructive font-medium",
+                      "h-8 rounded-full border px-3 text-[0.8125rem] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+                      active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "bg-background hover:bg-accent",
                     )}
                   >
-                    {tagsCost}/{YOUTUBE_TAG_BUDGET}
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,16rem)_1fr] sm:items-center">
+              <Input
+                type="datetime-local"
+                aria-label="Schedule for"
+                min={minDateTime}
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                className="h-10 font-mono text-sm"
+              />
+              {scheduleValid && scheduledDate ? (
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Goes out </span>
+                  <span className="font-medium">
+                    {format(scheduledDate, "EEEE d MMMM, h:mm a")}
                   </span>
-                </div>
-              </div>
-              {!hasVideo && (
-                <p className="text-amber-600 dark:text-amber-400 text-xs">
-                  YouTube needs a video - add one with “Add media” above.
+                  <span className="text-muted-foreground"> · in </span>
+                  <Countdown to={scheduledDate} className="text-primary text-xs" />
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  Pick a time, or use{" "}
+                  <span className="text-foreground font-medium">Post now</span>{" "}
+                  to publish straight away.
                 </p>
               )}
             </div>
-          )}
+          </Step>
 
-          {/* --- Document --- */}
-          {contentType === "document" && (
-            <div className="space-y-2">
-              <Label className="label-caps">Document</Label>
-              {doc ? (
-                <div className="flex items-center gap-2 rounded-lg border p-3 text-sm">
-                  <FileText className="text-muted-foreground size-5 shrink-0" />
-                  <span className="flex-1 truncate">
-                    {doc.title ?? "Document"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setDoc(null)}
-                    aria-label="Remove document"
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
+          {/* Action bar: sticks to the bottom of the viewport while editing. */}
+          <div className="bg-background/80 supports-backdrop-filter:bg-background/70 sticky bottom-3 z-20 flex flex-wrap items-center gap-3 rounded-2xl border p-3 shadow-float backdrop-blur-xl">
+            <div className="hidden min-w-0 flex-1 px-1 text-xs sm:block">
+              {blockers.length > 0 ? (
+                <span className="text-muted-foreground">
+                  To continue, {blockers.join(", ")}.
+                </span>
               ) : (
-                <>
-                  <input
-                    ref={docRef}
-                    type="file"
-                    accept="application/pdf,.pdf,.ppt,.pptx,.doc,.docx"
-                    hidden
-                    onChange={(e) => {
-                      uploadFiles(Array.from(e.target.files ?? []), "doc");
-                      e.target.value = "";
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={uploading}
-                    onClick={() => docRef.current?.click()}
-                  >
-                    {uploading ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <FileText className="size-4" />
-                    )}
-                    Upload document
-                  </Button>
-                </>
+                <span className="flex items-center gap-2">
+                  <span className="tally text-live" data-live="true" />
+                  <span className="text-muted-foreground truncate">
+                    Ready for{" "}
+                    <span className="text-foreground font-medium">
+                      {selected.length} account{selected.length === 1 ? "" : "s"}
+                    </span>
+                    {client ? ` · ${client.name}` : ""}
+                  </span>
+                </span>
               )}
-              <p className="text-muted-foreground text-xs">
-                PDF, PPT or DOC - LinkedIn renders it as a swipeable carousel.
-              </p>
             </div>
-          )}
-
-          {/* --- Link --- */}
-          {contentType === "link" && (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label className="label-caps">Link URL</Label>
-                <Input
-                  type="url"
-                  value={link.url}
-                  onChange={(e) =>
-                    setLink((l) => ({ ...l, url: e.target.value }))
-                  }
-                  placeholder="https://example.com/article"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="label-caps">Preview title</Label>
-                <Input
-                  value={link.title ?? ""}
-                  onChange={(e) =>
-                    setLink((l) => ({ ...l, title: e.target.value }))
-                  }
-                  placeholder="Headline shown on the link card"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="label-caps">Preview description</Label>
-                <Textarea
-                  value={link.description ?? ""}
-                  onChange={(e) =>
-                    setLink((l) => ({ ...l, description: e.target.value }))
-                  }
-                  className="min-h-16 resize-none"
-                  placeholder="Short description shown on the link card"
-                />
-              </div>
-              <p className="text-muted-foreground text-xs">
-                LinkedIn won&apos;t fetch these automatically - set them to
-                control the preview card.
-              </p>
+            <div className="flex w-full gap-2 sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">
+              <Button
+                variant="ghost"
+                onClick={() => submit("draft")}
+                disabled={busy}
+              >
+                <Save /> <span className="sm:hidden">Draft</span>
+                <span className="hidden sm:inline">Save draft</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => submit("now")}
+                disabled={busy}
+              >
+                <Send /> Post now
+              </Button>
+              <Button onClick={() => submit("schedule")} disabled={busy}>
+                {pending ? <Loader2 className="animate-spin" /> : <CalendarClock />}
+                {editing ? "Reschedule" : "Schedule"}
+              </Button>
             </div>
-          )}
-
-          {/* --- Poll --- */}
-          {contentType === "poll" && (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label className="label-caps">Question</Label>
-                <Input
-                  value={poll.question}
-                  maxLength={140}
-                  onChange={(e) =>
-                    setPoll((p) => ({ ...p, question: e.target.value }))
-                  }
-                  placeholder="Ask your audience…"
-                />
-                <div className="text-muted-foreground text-right text-xs">
-                  {poll.question.length}/140
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="label-caps">Options</Label>
-                {poll.options.map((opt, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Input
-                      value={opt}
-                      maxLength={30}
-                      onChange={(e) =>
-                        setPoll((p) => ({
-                          ...p,
-                          options: p.options.map((o, j) =>
-                            j === i ? e.target.value : o,
-                          ),
-                        }))
-                      }
-                      placeholder={`Option ${i + 1}`}
-                    />
-                    {poll.options.length > 2 && (
-                      <button
-                        type="button"
-                        aria-label="Remove option"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() =>
-                          setPoll((p) => ({
-                            ...p,
-                            options: p.options.filter((_, j) => j !== i),
-                          }))
-                        }
-                      >
-                        <X className="size-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {poll.options.length < 4 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setPoll((p) => ({ ...p, options: [...p.options, ""] }))
-                    }
-                  >
-                    <Plus className="size-4" /> Add option
-                  </Button>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label className="label-caps">Duration</Label>
-                <Select
-                  value={poll.duration}
-                  items={Object.fromEntries(
-                    POLL_DURATIONS.map((d) => [d.value, d.label]),
-                  )}
-                  onValueChange={(v) =>
-                    setPoll((p) => ({ ...p, duration: v as PollDuration }))
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {POLL_DURATIONS.map((d) => (
-                      <SelectItem key={d.value} value={d.value}>
-                        {d.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-amber-600 dark:text-amber-400 text-xs">
-                Polls can&apos;t be edited once published.
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <Label className="label-caps">Schedule for</Label>
-            <Input
-              type="datetime-local"
-              min={minDateTime}
-              value={scheduledAt}
-              onChange={(e) => setScheduledAt(e.target.value)}
-            />
           </div>
+        </div>
 
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button onClick={() => submit("schedule")} disabled={busy}>
-              <CalendarClock className="size-4" />{" "}
-              {editing ? "Reschedule" : "Schedule"}
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => submit("now")}
-              disabled={busy}
-            >
-              <Send className="size-4" /> Post now
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => submit("draft")}
-              disabled={busy}
-            >
-              <Save className="size-4" /> Save draft
-            </Button>
+        {/* ---------------- Preview ---------------- */}
+        <aside className="lg:sticky lg:top-20 lg:self-start">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="label-caps">Live preview</span>
+            {platformsList.length > 1 && (
+              <div className="bg-muted flex gap-0.5 rounded-lg p-0.5">
+                {platformsList.map((p) => {
+                  const active = p === shownPlatform;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setPreviewTab(p)}
+                      aria-pressed={active}
+                      aria-label={`${PLATFORM_META[p].label} preview`}
+                      className={cn(
+                        "relative grid h-7 w-9 place-items-center rounded-md transition-colors",
+                        active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {active && (
+                        <motion.span
+                          layoutId="preview-tab"
+                          className="bg-card absolute inset-0 rounded-md shadow-[0_0_0_1px_var(--border)]"
+                          transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                        />
+                      )}
+                      <PlatformIcon platform={p} brand={active} className="relative size-3.5" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Preview */}
-      <div className="space-y-3">
-        <Label className="label-caps">Preview</Label>
-        <motion.div layout className="space-y-3">
-          {selectedPlatforms.size === 0 ? (
-            <ExpandablePreview
-              platform="LINKEDIN"
-              name={client?.name ?? "Client"}
-              color={client?.color}
-              body={body}
-              images={previewImages}
-              videoUrl={previewVideo}
-              documentTitle={previewDoc}
-              documentUrl={contentType === "document" ? doc?.url : undefined}
-              link={previewLink}
-              poll={previewPoll}
-            />
-          ) : (
-            [...selectedPlatforms].map((platform) => {
-              const acct = selectedAccounts.find(
-                (a) => a.platform === platform,
-              );
-              const b = acct ? bodyFor(acct.id) : body;
-              return (
+          <div className="bg-canvas/60 rounded-2xl border p-3 sm:p-4">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={shownPlatform}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18 }}
+              >
                 <ExpandablePreview
-                  key={platform}
-                  platform={platform}
+                  platform={shownPlatform}
                   name={client?.name ?? "Client"}
                   color={client?.color}
-                  body={b}
+                  body={shownAccount ? bodyFor(shownAccount.id) : body}
                   title={title}
                   images={previewImages}
                   videoUrl={previewVideo}
                   documentTitle={previewDoc}
+                  documentUrl={contentType === "document" ? doc?.url : undefined}
                   link={previewLink}
                   poll={previewPoll}
                 />
-              );
-            })
-          )}
-        </motion.div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+          <p className="text-muted-foreground mt-3 px-1 text-xs leading-relaxed">
+            Previews approximate each network&apos;s feed. Final rendering is up
+            to the platform.
+          </p>
+        </aside>
       </div>
     </div>
   );

@@ -115,6 +115,10 @@ export async function getDashboardStats(clientId?: string) {
   const workspaceId = await requireWorkspaceId();
   const now = new Date();
   const soon = new Date(Date.now() + 7 * 86_400_000);
+  // The dashboard's two-week strip. Starts a day back so "today" is always
+  // fully covered whatever the viewer's time zone.
+  const horizonFrom = new Date(Date.now() - 86_400_000);
+  const horizonTo = new Date(Date.now() + 15 * 86_400_000);
 
   // Post scope: always the workspace, optionally narrowed to one client.
   const postScope = {
@@ -133,6 +137,8 @@ export async function getDashboardStats(clientId?: string) {
     upcoming,
     clientRows,
     grouped,
+    horizon,
+    accounts,
   ] = await Promise.all([
     clientId ? 1 : prisma.client.count({ where: { workspaceId } }),
     prisma.post.count({ where: { status: "SCHEDULED", ...postScope } }),
@@ -181,6 +187,26 @@ export async function getDashboardStats(clientId?: string) {
       where: { status: "SCHEDULED", ...postScope },
       _count: { _all: true },
     }),
+    prisma.post.findMany({
+      where: {
+        status: { in: ["SCHEDULED", "PUBLISHED", "PARTIAL", "FAILED"] },
+        scheduledAt: { gte: horizonFrom, lt: horizonTo },
+        ...postScope,
+      },
+      orderBy: { scheduledAt: "asc" },
+      select: {
+        id: true,
+        status: true,
+        scheduledAt: true,
+        client: { select: { name: true, color: true } },
+      },
+    }),
+    prisma.socialAccount.count({
+      where: {
+        client: { workspaceId },
+        ...(clientId ? { clientId } : {}),
+      },
+    }),
   ]);
 
   const countByClient = new Map(grouped.map((g) => [g.clientId, g._count._all]));
@@ -199,7 +225,34 @@ export async function getDashboardStats(clientId?: string) {
     pending,
     upcoming,
     clientList,
+    horizon,
+    accounts,
   };
+}
+
+/**
+ * The next scheduled post, for the "next cue" countdown in the app shell.
+ * One indexed row, so it's cheap enough to run on every page.
+ */
+export async function getNextCue(clientId?: string) {
+  const workspaceId = await requireWorkspaceId();
+  return prisma.post.findFirst({
+    where: {
+      status: "SCHEDULED",
+      scheduledAt: { gte: new Date() },
+      client: { workspaceId },
+      ...(clientId ? { clientId } : {}),
+    },
+    orderBy: { scheduledAt: "asc" },
+    select: {
+      id: true,
+      body: true,
+      title: true,
+      scheduledAt: true,
+      client: { select: { name: true, color: true } },
+      targets: { select: { platform: true } },
+    },
+  });
 }
 
 export async function getCalendarPosts(

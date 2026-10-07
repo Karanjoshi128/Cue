@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Logo } from "@/components/brand/logo";
+import { LegalShell } from "@/components/marketing/site-chrome";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -16,22 +16,9 @@ const CONTACT = "joshikaran0008@gmail.com";
 
 export default function PrivacyPage() {
   return (
-    <main className="bg-background text-foreground min-h-screen px-5 py-12">
-      <article className="mx-auto max-w-3xl space-y-6">
-        <header className="space-y-3">
-          <Link href="/" aria-label="Cue home">
-            <Logo className="h-8 w-auto" />
-          </Link>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Privacy Policy
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Last updated {UPDATED}
-          </p>
-        </header>
-
-        <div className="text-muted-foreground space-y-6 text-[0.95rem] leading-relaxed">
-          <section className="space-y-2">
+    <LegalShell title="Privacy Policy" updated={UPDATED}>
+        <div className="text-muted-foreground space-y-10 text-[1rem] leading-[1.75] [&_a]:underline-offset-2 [&_li]:pl-1 [&_strong]:font-medium">
+          <section className="space-y-3">
             <p>
               {ENTITY} operates Cue, a social media scheduling tool that lets
               agencies plan, schedule, and publish posts to their clients&apos;
@@ -247,8 +234,7 @@ export default function PrivacyPage() {
             </p>
           </Section>
         </div>
-      </article>
-    </main>
+    </LegalShell>
   );
 }
 
@@ -260,8 +246,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-2">
-      <h2 className="text-foreground text-xl font-semibold">{title}</h2>
+    <section className="space-y-3">
+      <h2 className="headline text-foreground text-[1.75rem]">{title}</h2>
       {children}
     </section>
   );

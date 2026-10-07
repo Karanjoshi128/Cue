@@ -1,7 +1,10 @@
 import { format } from "date-fns";
 import { getClients, getPost } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
+import { getTimeZone } from "@/lib/timezone-server";
+import { zoned } from "@/lib/timezone";
 import { Composer, type ComposerInitial } from "@/components/composer";
+import { PageHeader } from "@/components/page-header";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +14,10 @@ export default async function ComposerPage({
   searchParams: Promise<{ edit?: string; date?: string }>;
 }) {
   const { edit, date } = await searchParams;
-  const [clients, scopeClientId] = await Promise.all([
+  const [clients, scopeClientId, timeZone] = await Promise.all([
     getClients(),
     getScopeClientId(),
+    getTimeZone(),
   ]);
   const plain = clients.map((c) => ({
     id: c.id,
@@ -41,8 +45,13 @@ export default async function ComposerPage({
         youtubeTags: post.youtubeTags,
         youtubeCategoryId: post.youtubeCategoryId,
         accountIds: post.targets.map((t) => t.accountId),
+        // The picker shows wall-clock time, so format in the viewer's zone:
+        // in the server's (UTC) zone, saving an untouched edit would shift
+        // the post by the viewer's UTC offset.
         scheduledAt: post.scheduledAt
-          ? format(post.scheduledAt, "yyyy-MM-dd'T'HH:mm")
+          ? format(post.scheduledAt, "yyyy-MM-dd'T'HH:mm", {
+              in: zoned(timeZone),
+            })
           : "",
         media: post.media.map((m) => ({
           type: m.type,
@@ -66,11 +75,42 @@ export default async function ComposerPage({
     date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T09:00` : undefined;
 
   return (
-    <Composer
-      clients={plain}
-      initial={initial}
-      prefillDate={prefillDate}
-      defaultClientId={scopeClientId}
-    />
+    <div className="space-y-8">
+      <PageHeader
+        className="mx-auto max-w-6xl"
+        eyebrow={
+          initial ? (
+            <>
+              <span className="tally text-standby" />
+              Editing a {edit && initial.scheduledAt ? "scheduled post" : "draft"}
+            </>
+          ) : (
+            "Compose"
+          )
+        }
+        title={
+          initial ? (
+            <>
+              Fine-tune the <em>cue.</em>
+            </>
+          ) : (
+            <>
+              Write it once. <em>Cue it everywhere.</em>
+            </>
+          )
+        }
+        description={
+          initial
+            ? "Changes apply to every account this post targets."
+            : "Pick the client and accounts, write the post, then choose when it goes out."
+        }
+      />
+      <Composer
+        clients={plain}
+        initial={initial}
+        prefillDate={prefillDate}
+        defaultClientId={scopeClientId}
+      />
+    </div>
   );
 }

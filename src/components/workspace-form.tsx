@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { renameWorkspace } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export function WorkspaceForm({
   name,
@@ -36,25 +35,23 @@ export function WorkspaceForm({
   }
 
   if (!isAdmin) {
-    return (
-      <div className="text-sm">
-        <div className="flex justify-between py-1">
-          <span className="text-muted-foreground">Name</span>
-          <span>{name}</span>
-        </div>
-      </div>
-    );
+    return <div className="font-medium">{name}</div>;
   }
 
   return (
     <div className="space-y-2">
-      <Label>Workspace name</Label>
+      <label htmlFor="workspace-name" className="label-caps block">
+        Workspace name
+      </label>
       <div className="flex gap-2">
         <Input
+          id="workspace-name"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && dirty && save()}
           placeholder="Workspace name"
           maxLength={60}
+          className="max-w-sm"
         />
         <Button onClick={save} disabled={!dirty || pending}>
           Save

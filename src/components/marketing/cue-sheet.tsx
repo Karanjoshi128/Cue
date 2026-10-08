@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 export function useCueClock(count: number, interval = 2200, enabled = true) {
   const reduce = usePrefersReducedMotion();
   const [called, setCalled] = useState(-1);
+  // A click "calls" a cue by hand; the loop holds there for a few seconds.
+  const [heldAt, setHeldAt] = useState(0);
   useEffect(() => {
     if (reduce) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -22,12 +24,24 @@ export function useCueClock(count: number, interval = 2200, enabled = true) {
       return;
     }
     if (!enabled) return;
-    const id = window.setInterval(() => {
-      setCalled((c) => (c >= count ? -1 : c + 1));
-    }, interval);
-    return () => window.clearInterval(id);
-  }, [reduce, enabled, count, interval]);
-  return called;
+    let id = 0;
+    const start = () => {
+      id = window.setInterval(() => {
+        setCalled((c) => (c >= count ? -1 : c + 1));
+      }, interval);
+    };
+    const hold = heldAt ? Math.max(0, heldAt + 6000 - Date.now()) : 0;
+    const t = window.setTimeout(start, hold);
+    return () => {
+      window.clearTimeout(t);
+      window.clearInterval(id);
+    };
+  }, [reduce, enabled, count, interval, heldAt]);
+  const jump = (i: number) => {
+    setCalled(i + 1);
+    setHeldAt(Date.now());
+  };
+  return [called, jump] as const;
 }
 
 // Fictional clients: a demo of the product, not a claim about real customers.
@@ -55,6 +69,7 @@ export function CueSheet({
   rows = 5,
   interval = 2200,
   called: controlled,
+  onCall,
   title = "Cue sheet · Today",
 }: {
   className?: string;
@@ -62,12 +77,15 @@ export function CueSheet({
   interval?: number;
   /** Drive the playhead from outside (e.g. to sync other visuals). */
   called?: number;
+  /** Called with a row's index when it's clicked. */
+  onCall?: (index: number) => void;
   title?: React.ReactNode;
 }) {
   const items = CUE_ROWS.slice(0, rows);
-  const own = useCueClock(items.length, interval, controlled === undefined);
+  const [own, jump] = useCueClock(items.length, interval, controlled === undefined);
   // -1 = nothing called yet; items.length = all gone live (then reset).
   const called = controlled ?? own;
+  const call = onCall ?? jump;
 
   return (
     <div
@@ -90,8 +108,13 @@ export function CueSheet({
           return (
             <li
               key={row.client}
+              role="button"
+              tabIndex={0}
+              title="Call this cue"
+              onClick={() => call(i)}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), call(i))}
               className={cn(
-                "relative grid grid-cols-[3.25rem_1fr_auto] items-center gap-3 rounded-xl px-3.5 py-3 transition-colors duration-500",
+                "relative grid cursor-pointer grid-cols-[3.25rem_1fr_auto] items-center gap-3 rounded-xl px-3.5 py-3 transition-colors duration-500 outline-none hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-[#4c8dff]/60",
                 calling ? "bg-white/[0.07]" : "bg-transparent",
               )}
             >

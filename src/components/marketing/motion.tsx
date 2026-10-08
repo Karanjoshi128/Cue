@@ -160,12 +160,15 @@ export function ProductShot({
   alt,
   url = "trycue.space/dashboard",
   className,
+  children,
 }: {
-  light: string;
-  dark: string;
-  alt: string;
+  light?: string;
+  dark?: string;
+  alt?: string;
   url?: string;
   className?: string;
+  /** Live content to show instead of the light/dark screenshot. */
+  children?: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduce = usePrefersReducedMotion();
@@ -194,22 +197,26 @@ export function ProductShot({
           </span>
           <span className="w-12" />
         </div>
-        <div className="relative aspect-[16/10] overflow-hidden rounded-b-[16px]">
-          <Image
-            src={light}
-            alt={alt}
-            fill
-            sizes="(min-width: 1280px) 1200px, 100vw"
-            className="object-cover object-top dark:hidden"
-          />
-          <Image
-            src={dark}
-            alt={alt}
-            fill
-            sizes="(min-width: 1280px) 1200px, 100vw"
-            className="hidden object-cover object-top dark:block"
-          />
-        </div>
+        {children ? (
+          <div className="overflow-hidden rounded-b-[16px]">{children}</div>
+        ) : (
+          <div className="relative aspect-[16/10] overflow-hidden rounded-b-[16px]">
+            <Image
+              src={light!}
+              alt={alt ?? ""}
+              fill
+              sizes="(min-width: 1280px) 1200px, 100vw"
+              className="object-cover object-top dark:hidden"
+            />
+            <Image
+              src={dark!}
+              alt={alt ?? ""}
+              fill
+              sizes="(min-width: 1280px) 1200px, 100vw"
+              className="hidden object-cover object-top dark:block"
+            />
+          </div>
+        )}
       </motion.div>
     </div>
   );

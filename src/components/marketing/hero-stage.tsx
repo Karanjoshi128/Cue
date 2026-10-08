@@ -58,7 +58,7 @@ function CueTag({ live, time }: { live: boolean; time: string }) {
  */
 export function HeroStage({ className }: { className?: string }) {
   const reduce = usePrefersReducedMotion();
-  const called = useCueClock(ROWS, 2300);
+  const [called, jump] = useCueClock(ROWS, 2300);
   const isLive = (i: number) => called > i;
 
   const mx = useMotionValue(0);
@@ -99,6 +99,7 @@ export function HeroStage({ className }: { className?: string }) {
           <CueSheet
             rows={ROWS}
             called={called}
+            onCall={jump}
             className="relative border-white/[0.07] bg-white/[0.025]"
           />
         </div>

@@ -31,6 +31,7 @@ import {
   WorkspaceDemo,
 } from "@/components/marketing/feature-demos";
 import { Acts } from "@/components/marketing/acts";
+import { LiveDashboard } from "@/components/marketing/demo/loader";
 import { Spotlight } from "@/components/fx/spotlight";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +54,13 @@ const TICKER = [
   "One calendar for the whole roster",
   "Connection health alerts",
   "An API with idempotent writes",
+];
+
+const DEMO_HINTS = [
+  "Drag a post to another day on the Calendar",
+  "Schedule one for \u201cIn 1 minute\u201d and watch it go live",
+  "Switch clients from the top bar",
+  "Approve or retry posts in the Queue",
 ];
 
 const PLATFORMS = [
@@ -322,14 +330,26 @@ export default async function HomePage() {
                   The whole roster, <em>at a glance.</em>
                 </>
               }
-              body="Every client's next two weeks, a live countdown to the next post, and a clear signal when something needs you."
+              body="This is the real interface, running on sample data. Click around: everything works, and nothing you do here leaves your browser."
             />
-            <ProductShot
-              className="mx-auto mt-16 max-w-6xl"
-              light="/marketing/app-dashboard-light.webp"
-              dark="/marketing/app-dashboard-dark.webp"
-              alt="The Cue dashboard: next scheduled post with a countdown, totals, and a two-week schedule strip"
-            />
+            <Reveal className="mx-auto mt-10 hidden max-w-4xl flex-wrap items-center justify-center gap-2 md:flex">
+              {DEMO_HINTS.map((h) => (
+                <span
+                  key={h}
+                  className="bg-card text-muted-foreground inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs shadow-[0_0_0_1px_var(--border)]"
+                >
+                  <span className="bg-primary size-1.5 rounded-full" />
+                  {h}
+                </span>
+              ))}
+            </Reveal>
+            <ProductShot className="mx-auto mt-8 max-w-6xl">
+              <LiveDashboard />
+            </ProductShot>
+            <p className="text-muted-foreground mx-auto mt-5 hidden max-w-xl text-center text-xs md:block">
+              Sample clients and posts. The demo resets when you reload, or with
+              the reset button in its top bar.
+            </p>
           </div>
         </section>
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef } from "react";
-import Image from "next/image";
 import {
   motion,
   useScroll,
@@ -13,6 +12,7 @@ import { usePrefersReducedMotion } from "@/lib/use-reduced-motion";
 import { Check, Lock } from "lucide-react";
 import { CueSheet } from "@/components/marketing/cue-sheet";
 import { Reveal } from "@/components/marketing/motion";
+import { LiveComposer } from "@/components/marketing/demo/loader";
 import {
   LinkedinIcon,
   InstagramIcon,
@@ -87,22 +87,12 @@ function ConnectVisual() {
 function ComposeVisual() {
   return (
     <div className="bg-card overflow-hidden rounded-2xl p-1.5 shadow-[0_0_0_1px_var(--border),0_20px_60px_-30px_rgb(20_20_40/0.35)]">
-      <div className="relative aspect-[5/3] overflow-hidden rounded-[12px]">
-        <Image
-          src="/marketing/app-composer-crop-light.webp"
-          alt="The Cue composer with account picker and live preview"
-          fill
-          sizes="(min-width: 1024px) 560px, 100vw"
-          className="object-cover object-top dark:hidden"
-        />
-        <Image
-          src="/marketing/app-composer-crop-dark.webp"
-          alt="The Cue composer with account picker and live preview"
-          fill
-          sizes="(min-width: 1024px) 560px, 100vw"
-          className="hidden object-cover object-top dark:block"
-        />
+      <div className="overflow-hidden rounded-[12px]">
+        <LiveComposer />
       </div>
+      <p className="text-muted-foreground px-2 pt-2 pb-1 text-xs">
+        Live: pick a client, edit the caption, and schedule it.
+      </p>
     </div>
   );
 }

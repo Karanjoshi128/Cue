@@ -44,7 +44,7 @@ function MobileNav({
           <Button
             variant="ghost"
             size="icon"
-            className="-ml-1 md:hidden"
+            className="-ml-1 shell:hidden"
             aria-label="Open menu"
           />
         }
@@ -53,7 +53,9 @@ function MobileNav({
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="bg-canvas w-[82%] max-w-xs gap-0 p-3"
+        // The whole menu scrolls as one column, so short screens (small
+        // phones, landscape) never squeeze the nav out of view.
+        className="bg-canvas w-[82%] max-w-xs gap-0 overflow-y-auto p-3"
         showCloseButton={false}
       >
         <SheetTitle className="sr-only">Navigation</SheetTitle>
@@ -69,10 +71,11 @@ function MobileNav({
         >
           <Plus className="size-4" /> New post
         </Button>
-        <nav aria-label="Main" className="mt-7 flex-1 overflow-y-auto">
+        <nav aria-label="Main" className="mt-7 shrink-0">
           <NavList onNavigate={close} layoutGroup="mobile-nav" />
         </nav>
-        <NextCueCard cue={nextCue} onNavigate={close} className="mb-3" />
+        <div className="min-h-6 flex-1" />
+        <NextCueCard cue={nextCue} onNavigate={close} className="mb-3 shrink-0" />
         <UserMenu user={user} workspaceName={workspaceName} />
       </SheetContent>
     </Sheet>
@@ -96,9 +99,13 @@ export function AppTopbar({
   const page = navItems.find((i) => isActive(pathname, i.href));
 
   return (
-    <header className="bg-background/75 supports-backdrop-filter:bg-background/65 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur-xl md:px-6">
+    <header className="bg-background/75 supports-backdrop-filter:bg-background/65 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur-xl shell:px-6">
       <MobileNav nextCue={nextCue} user={user} workspaceName={workspaceName} />
-      <Link href="/dashboard" className="md:hidden" aria-label="Cue dashboard">
+      <Link
+        href="/dashboard"
+        className="grid size-9 place-items-center rounded-lg shell:hidden"
+        aria-label="Cue dashboard"
+      >
         <LogoMark size={26} />
       </Link>
 
@@ -134,7 +141,7 @@ export function AppTopbar({
         <Button
           render={<Link href="/composer" />}
           size="sm"
-          className="md:hidden"
+          className="shell:hidden"
           aria-label="New post"
         >
           <Plus className="size-4" />

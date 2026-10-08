@@ -171,6 +171,175 @@ function DayCell({
   );
 }
 
+/**
+ * Phones: a compact month of dots (one per post, in the client's colour).
+ * Days with posts jump to their place in the agenda below; empty days open
+ * the composer on that date.
+ */
+function MobileMonth({
+  days,
+  posts,
+  base,
+  ctx,
+}: {
+  days: Date[];
+  posts: CalPost[];
+  base: Date;
+  ctx: Ctx;
+}) {
+  return (
+    <div className="bg-card rounded-2xl border p-3 md:hidden">
+      <div className="text-muted-foreground grid grid-cols-7 pb-2 text-center font-mono text-[0.625rem] tracking-widest uppercase">
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+          <span key={i}>{d}</span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((day) => {
+          const key = format(day, "yyyy-MM-dd", ctx);
+          const inMonth = isSameMonth(day, base, ctx);
+          const today = isToday(day, ctx);
+          const dayPosts = posts.filter(
+            (p) => p.scheduledAt && isSameDay(p.scheduledAt, day, ctx),
+          );
+          return (
+            <Link
+              key={key}
+              href={dayPosts.length ? `#day-${key}` : `/composer?date=${key}`}
+              aria-label={`${format(day, "EEEE d MMMM", ctx)}: ${dayPosts.length} post${dayPosts.length === 1 ? "" : "s"}`}
+              className={cn(
+                "flex aspect-square flex-col items-center justify-center gap-1 rounded-lg transition-colors",
+                today
+                  ? "bg-primary text-primary-foreground"
+                  : inMonth
+                    ? "hover:bg-accent"
+                    : "text-muted-foreground/50",
+              )}
+            >
+              <span className="font-mono text-xs tabular-nums">
+                {format(day, "d", ctx)}
+              </span>
+              <span className="flex h-1.5 gap-0.5">
+                {dayPosts.slice(0, 3).map((p) => (
+                  <span
+                    key={p.id}
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      p.status === "PUBLISHED" && "opacity-50",
+                    )}
+                    style={{
+                      backgroundColor: today
+                        ? "currentColor"
+                        : (p.client.color ?? "var(--primary)"),
+                    }}
+                  />
+                ))}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Phones: the posts as a day-by-day list. */
+function MobileAgenda({
+  days,
+  posts,
+  ctx,
+  showEmpty,
+}: {
+  days: Date[];
+  posts: CalPost[];
+  ctx: Ctx;
+  /** Week view lists every day, even empty ones; month view skips them. */
+  showEmpty: boolean;
+}) {
+  const sections = days
+    .map((day) => ({
+      day,
+      key: format(day, "yyyy-MM-dd", ctx),
+      posts: posts
+        .filter((p) => p.scheduledAt && isSameDay(p.scheduledAt, day, ctx))
+        .sort(
+          (a, b) =>
+            (a.scheduledAt?.getTime() ?? 0) - (b.scheduledAt?.getTime() ?? 0),
+        ),
+    }))
+    .filter((d) => showEmpty || d.posts.length > 0);
+
+  return (
+    <div className="space-y-6 md:hidden">
+      {sections.length === 0 && (
+        <p className="text-muted-foreground rounded-2xl border border-dashed px-4 py-8 text-center text-sm">
+          Nothing scheduled this month.
+        </p>
+      )}
+      {sections.map(({ day, key, posts: dayPosts }) => (
+        <section key={key} id={`day-${key}`} className="scroll-mt-20">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-baseline gap-2">
+              <span className="headline text-xl">{format(day, "d MMM", ctx)}</span>
+              <span className="label-caps">
+                {isToday(day, ctx)
+                  ? "Today"
+                  : isTomorrow(day, ctx)
+                    ? "Tomorrow"
+                    : format(day, "EEEE", ctx)}
+              </span>
+            </div>
+            <Link
+              href={`/composer?date=${key}`}
+              aria-label={`Schedule a post on ${format(day, "MMMM d", ctx)}`}
+              className="text-primary hover:bg-accent grid size-9 place-items-center rounded-lg"
+            >
+              <Plus className="size-4" />
+            </Link>
+          </div>
+          {dayPosts.length === 0 ? (
+            <p className="text-muted-foreground rounded-xl border border-dashed px-4 py-3 text-sm">
+              Nothing scheduled.
+            </p>
+          ) : (
+            <ul className="bg-card divide-border divide-y overflow-hidden rounded-2xl border">
+              {dayPosts.map((p) => {
+                const editable = p.status === "DRAFT" || p.status === "SCHEDULED";
+                return (
+                  <li key={p.id}>
+                    <Link
+                      href={editable ? `/composer?edit=${p.id}` : "/queue"}
+                      className="hover:bg-accent/50 flex items-center gap-3 px-3.5 py-3 transition-colors"
+                    >
+                      <span className="w-14 shrink-0 font-mono text-xs tabular-nums">
+                        {p.scheduledAt ? format(p.scheduledAt, "h:mm a", ctx) : "-"}
+                      </span>
+                      <ClientMonogram
+                        name={p.client.name}
+                        color={p.client.color}
+                        className="size-8 rounded-lg text-[0.625rem]"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {p.client.name}
+                        </span>
+                        <span className="text-muted-foreground line-clamp-1 text-xs">
+                          {p.title || p.body}
+                        </span>
+                      </span>
+                      <StatusDot status={p.status} />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function Grid({
   days,
   posts,
@@ -189,8 +358,8 @@ function Grid({
   week?: boolean;
 }) {
   return (
-    <div className="bg-card overflow-x-auto rounded-2xl border shadow-[0_1px_2px_0_rgb(20_20_40/0.04)]">
-      <div className="bg-border grid min-w-180 grid-cols-7 gap-px">
+    <div className="bg-card hidden overflow-x-auto rounded-2xl border shadow-[0_1px_2px_0_rgb(20_20_40/0.04)] md:block">
+      <div className="bg-border grid min-w-[37rem] grid-cols-7 gap-px">
         {!week &&
           ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
             <div
@@ -277,6 +446,13 @@ export default async function CalendarPage({
           minH="min-h-32"
           ctx={ctx}
         />
+        <MobileMonth days={days} posts={posts} base={base} ctx={ctx} />
+        <MobileAgenda
+          days={days.filter((d) => isSameMonth(d, base, ctx))}
+          posts={posts}
+          ctx={ctx}
+          showEmpty={false}
+        />
       </Shell>
     );
   }
@@ -317,6 +493,7 @@ export default async function CalendarPage({
           ctx={ctx}
           week
         />
+        <MobileAgenda days={days} posts={posts} ctx={ctx} showEmpty />
       </Shell>
     );
   }

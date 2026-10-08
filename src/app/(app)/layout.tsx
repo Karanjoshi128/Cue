@@ -52,18 +52,18 @@ export default async function AppLayout({
 
   return (
     <TooltipProvider delay={300}>
-      <div className="bg-canvas min-h-dvh md:flex">
+      <div className="bg-canvas min-h-dvh shell:flex">
         <AppSidebar
           nextCue={nextCue}
           user={shellUser}
           workspaceName={workspaceName}
         />
-        <div className="min-w-0 flex-1 md:py-2 md:pr-2">
+        <div className="min-w-0 flex-1 shell:py-2 shell:pr-2">
           {/* The working surface: an inset sheet on md+, full-bleed on phones.
               On md+ it is its own scroll container, so the rail never moves. */}
           <div
             id="app-panel"
-            className="bg-background flex min-h-dvh flex-col md:h-[calc(100dvh-1rem)] md:min-h-0 md:overflow-y-auto md:rounded-2xl md:shadow-[0_0_0_1px_var(--border),0_1px_3px_0_rgb(20_20_40/0.04),0_12px_32px_-12px_rgb(20_20_40/0.08)]"
+            className="bg-background flex min-h-dvh flex-col shell:h-[calc(100dvh-1rem)] shell:min-h-0 shell:overflow-y-auto shell:rounded-2xl shell:shadow-[0_0_0_1px_var(--border),0_1px_3px_0_rgb(20_20_40/0.04),0_12px_32px_-12px_rgb(20_20_40/0.08)]"
           >
             <AppTopbar
               user={shellUser}
@@ -72,7 +72,7 @@ export default async function AppLayout({
               scopeClientId={scopeClientId}
               nextCue={nextCue}
             />
-            <main className="flex-1 px-4 pt-7 pb-16 sm:px-6 md:px-10 md:pt-10">
+            <main className="flex-1 px-4 pt-7 pb-16 sm:px-6 shell:px-10 shell:pt-10">
               {children}
             </main>
           </div>

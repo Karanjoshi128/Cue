@@ -8,7 +8,7 @@ export default function Loading() {
       <div className="mx-auto max-w-6xl">
         <HeaderSkeleton actions={0} />
       </div>
-      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="mx-auto grid max-w-6xl gap-8 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="space-y-4">
           <Skeleton className="h-52 rounded-2xl" />
           <Skeleton className="h-96 rounded-2xl" />

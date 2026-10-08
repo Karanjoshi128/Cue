@@ -229,7 +229,7 @@ function Step({
         className,
       )}
     >
-      <div className="mb-4 flex items-baseline gap-3">
+      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-primary font-mono text-[0.6875rem] font-medium tracking-wider">
           {n}
         </span>
@@ -625,7 +625,7 @@ export function Composer({
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_400px]">
         {/* ---------------- Editor ---------------- */}
         <div className="min-w-0 space-y-4">
           <Step
@@ -1377,7 +1377,8 @@ export function Composer({
                 </span>
               )}
             </div>
-            <div className="flex w-full gap-2 sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">
+            {/* Phones: Schedule gets its own full-width row, the others share one. */}
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto [&>*]:min-w-0">
               <Button
                 variant="ghost"
                 onClick={() => submit("draft")}
@@ -1393,7 +1394,11 @@ export function Composer({
               >
                 <Send /> Post now
               </Button>
-              <Button onClick={() => submit("schedule")} disabled={busy}>
+              <Button
+                onClick={() => submit("schedule")}
+                disabled={busy}
+                className="order-first col-span-2 sm:order-none"
+              >
                 {pending ? <Loader2 className="animate-spin" /> : <CalendarClock />}
                 {editing ? "Reschedule" : "Schedule"}
               </Button>
@@ -1402,7 +1407,7 @@ export function Composer({
         </div>
 
         {/* ---------------- Preview ---------------- */}
-        <aside className="lg:sticky lg:top-20 lg:self-start">
+        <aside className="xl:sticky xl:top-20 xl:self-start">
           <div className="mb-3 flex items-center justify-between">
             <span className="label-caps">Live preview</span>
             {platformsList.length > 1 && (

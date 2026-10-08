@@ -219,7 +219,7 @@ export default async function HomePage() {
                 >
                   Cue · Social media scheduling for agencies
                 </span>
-                <span className="headline mt-5 block text-[clamp(3.4rem,7.4vw,7rem)] leading-[0.93] tracking-[-0.035em]">
+                <span className="headline mt-5 block text-[clamp(2.5rem,11.5vw,5.5rem)] leading-[0.93] tracking-[-0.035em] lg:text-[clamp(3.4rem,7.4vw,7rem)]">
                   <span className="animate-rise block" style={{ animationDelay: "120ms" }}>
                     Every client.
                   </span>

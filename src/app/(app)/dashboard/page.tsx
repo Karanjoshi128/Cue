@@ -413,8 +413,9 @@ export default async function DashboardPage() {
             {format(days[13].day, "d MMM", ctx)}
           </span>
         </div>
-        <div className="scrollbar-none -mx-1 mt-5 overflow-x-auto px-1">
-          <ol className="grid min-w-[42rem] grid-cols-14 gap-1.5">
+        {/* Two rows of seven on phones and tablets, one row of fourteen on desktop. */}
+        <div className="mt-5">
+          <ol className="grid grid-cols-7 gap-1 sm:gap-1.5 lg:grid-cols-14">
             {days.map(({ day, key, posts }, i) => {
               const weekend = ["Sat", "Sun"].includes(format(day, "EEE", ctx));
               const week = differenceInCalendarWeeks(day, now, ctx);
@@ -428,7 +429,7 @@ export default async function DashboardPage() {
                     }
                     title={`${format(day, "EEEE d MMMM", ctx)}: ${posts.length} post${posts.length === 1 ? "" : "s"}`}
                     className={cn(
-                      "group hover:border-primary/40 flex h-36 flex-col rounded-xl border p-2 transition-colors",
+                      "group hover:border-primary/40 flex h-24 flex-col rounded-lg border p-1.5 transition-colors sm:h-28 sm:rounded-xl sm:p-2 lg:h-36",
                       i === 0
                         ? "border-primary/50 bg-primary/[0.04]"
                         : weekend
@@ -442,7 +443,10 @@ export default async function DashboardPage() {
                         i === 0 ? "text-primary" : "text-muted-foreground",
                       )}
                     >
-                      {i === 0 ? "Today" : format(day, "EEE", ctx)}
+                      <span className="sm:hidden">{format(day, "EEEEE", ctx)}</span>
+                      <span className="hidden sm:inline">
+                        {i === 0 ? "Today" : format(day, "EEE", ctx)}
+                      </span>
                     </span>
                     <span className="mt-0.5 text-sm font-semibold tabular-nums">
                       {format(day, "d", ctx)}
@@ -492,7 +496,7 @@ export default async function DashboardPage() {
             </div>
             <Link
               href="/calendar?view=list"
-              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium"
+              className="text-muted-foreground hover:text-foreground -my-1.5 inline-flex items-center gap-1 py-1.5 text-xs font-medium"
             >
               Full schedule <ArrowUpRight className="size-3.5" />
             </Link>
@@ -621,7 +625,7 @@ export default async function DashboardPage() {
               </h2>
               <Link
                 href="/clients"
-                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium"
+                className="text-muted-foreground hover:text-foreground -my-1.5 inline-flex items-center gap-1 py-1.5 text-xs font-medium"
               >
                 Manage <ArrowUpRight className="size-3.5" />
               </Link>

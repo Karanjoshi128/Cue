@@ -398,7 +398,7 @@ export function QueueList({
                                 href={tg.permalink}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="hover:text-primary inline-flex items-center gap-0.5 font-medium"
+                                className="hover:text-primary inline-flex items-center gap-0.5 self-stretch font-medium"
                               >
                                 View <ArrowUpRight className="size-3" />
                               </a>

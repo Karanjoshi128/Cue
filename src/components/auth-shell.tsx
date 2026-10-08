@@ -71,7 +71,7 @@ export function AuthShell({
           </Link>
           <Link
             href="/"
-            className="text-muted-foreground hover:text-foreground text-sm transition-colors"
+            className="text-muted-foreground hover:text-foreground -my-2 py-2 text-sm transition-colors"
           >
             What is Cue?
           </Link>

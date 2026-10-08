@@ -108,11 +108,11 @@ export function TeamManager({
 
       <div className="divide-border divide-y rounded-xl border">
         {members.map((u) => (
-          <div key={u.id} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+          <div key={u.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 text-sm">
             <span className="bg-muted text-muted-foreground grid size-8 shrink-0 place-items-center rounded-full font-mono text-[0.625rem] font-semibold uppercase">
               {(u.name ?? u.email).slice(0, 2)}
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-36 flex-1">
               <div className="truncate font-medium">
                 {u.name ?? u.email}
                 {u.id === currentUserId && (
@@ -124,6 +124,8 @@ export function TeamManager({
               </div>
             </div>
 
+            {/* Role and remove wrap under the name on narrow screens. */}
+            <div className="ml-auto flex items-center gap-2">
             {isAdmin ? (
               <Select
                 value={u.role}
@@ -164,6 +166,7 @@ export function TeamManager({
                 <X />
               </Button>
             )}
+            </div>
           </div>
         ))}
       </div>

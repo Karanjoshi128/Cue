@@ -81,13 +81,13 @@ export function NavList({
           <div
             className={cn(
               "label-caps px-3 pb-2",
-              compact && "lg:block hidden",
+              compact && "xl:block hidden",
             )}
           >
             {group.label}
           </div>
           {compact && gi > 0 && (
-            <div className="bg-border mx-auto mb-3 h-px w-6 lg:hidden" />
+            <div className="bg-border mx-auto mb-3 h-px w-6 xl:hidden" />
           )}
           <ul className="space-y-0.5">
             {navItems
@@ -101,7 +101,7 @@ export function NavList({
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "group/nav relative flex h-9 items-center gap-3 rounded-lg px-3 text-[0.8125rem] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
-                      compact && "justify-center px-0 lg:justify-start lg:px-3",
+                      compact && "justify-center px-0 xl:justify-start xl:px-3",
                       active
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground",
@@ -120,7 +120,7 @@ export function NavList({
                         active ? "text-primary" : "group-hover/nav:text-foreground",
                       )}
                     />
-                    <span className={cn("relative", compact && "hidden lg:inline")}>
+                    <span className={cn("relative", compact && "hidden xl:inline")}>
                       {item.label}
                     </span>
                   </Link>
@@ -130,7 +130,7 @@ export function NavList({
                     {compact ? (
                       <Tooltip>
                         <TooltipTrigger render={link} />
-                        <TooltipContent side="right" className="lg:hidden">
+                        <TooltipContent side="right" className="xl:hidden">
                           {item.label}
                         </TooltipContent>
                       </Tooltip>
@@ -236,14 +236,14 @@ export function UserMenu({
       <DropdownMenuTrigger
         className={cn(
           "hover:bg-sidebar-accent flex w-full items-center gap-2.5 rounded-xl p-1.5 text-left outline-none transition-colors hover:shadow-[0_0_0_1px_var(--sidebar-border)] focus-visible:ring-3 focus-visible:ring-ring/30 aria-expanded:bg-sidebar-accent",
-          compact && "justify-center lg:justify-start",
+          compact && "justify-center xl:justify-start",
         )}
         aria-label="Account menu"
       >
         <span className="bg-foreground text-background grid size-8 shrink-0 place-items-center rounded-lg font-mono text-[0.6875rem] font-semibold tracking-wider">
           {initialsOf(user)}
         </span>
-        <span className={cn("min-w-0 flex-1", compact && "hidden lg:block")}>
+        <span className={cn("min-w-0 flex-1", compact && "hidden xl:block")}>
           <span className="block truncate text-[0.8125rem] font-medium leading-tight">
             {user.name || user.email.split("@")[0]}
           </span>
@@ -254,7 +254,7 @@ export function UserMenu({
         <ChevronsUpDown
           className={cn(
             "text-muted-foreground size-3.5 shrink-0",
-            compact && "hidden lg:block",
+            compact && "hidden xl:block",
           )}
         />
       </DropdownMenuTrigger>
@@ -312,13 +312,13 @@ export function AppSidebar({
   // sticky + an explicit height pins the rail to the viewport; without the
   // height, align-items:stretch grows it with the page and it scrolls along.
   return (
-    <aside className="sticky top-0 hidden h-dvh shrink-0 flex-col py-3 pr-2 pl-3 md:flex md:w-[76px] lg:w-[248px]">
-      <div className="flex h-10 items-center justify-center px-2 lg:justify-start">
+    <aside className="sticky top-0 hidden h-dvh shrink-0 flex-col py-3 pr-2 pl-3 shell:flex shell:w-[76px] shell-xl:w-[248px]">
+      <div className="flex h-10 items-center justify-center px-2 xl:justify-start">
         <Link href="/dashboard" aria-label="Cue dashboard" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/30">
-          <span className="lg:hidden">
+          <span className="xl:hidden">
             <LogoMark size={30} />
           </span>
-          <span className="hidden lg:block">
+          <span className="hidden xl:block">
             <Logo className="h-8 w-auto" />
           </span>
         </Link>
@@ -326,14 +326,14 @@ export function AppSidebar({
 
       <Button
         render={<Link href="/composer" />}
-        className="mt-5 h-10 w-full justify-center px-0 lg:justify-between lg:px-3"
+        className="mt-5 h-10 w-full justify-center px-0 xl:justify-between xl:px-3"
         aria-label="New post"
       >
         <span className="flex items-center gap-2">
           <Plus className="size-4" />
-          <span className="hidden lg:inline">New post</span>
+          <span className="hidden xl:inline">New post</span>
         </span>
-        <Kbd className="hidden border-white/20 bg-white/15 text-white/90 shadow-none lg:inline-flex">
+        <Kbd className="hidden border-white/20 bg-white/15 text-white/90 shadow-none xl:inline-flex">
           N
         </Kbd>
       </Button>
@@ -344,7 +344,7 @@ export function AppSidebar({
 
       {/* The dashboard leads with its own, larger next-cue card. */}
       {pathname !== "/dashboard" && (
-        <NextCueCard cue={nextCue} className="mb-3 hidden lg:block" />
+        <NextCueCard cue={nextCue} className="mb-3 hidden xl:block" />
       )}
 
       <UserMenu user={user} workspaceName={workspaceName} compact />

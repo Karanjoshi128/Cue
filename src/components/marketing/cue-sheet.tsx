@@ -114,7 +114,7 @@ export function CueSheet({
               onClick={() => call(i)}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), call(i))}
               className={cn(
-                "relative grid cursor-pointer grid-cols-[3.25rem_1fr_auto] items-center gap-3 rounded-xl px-3.5 py-3 transition-colors duration-500 outline-none hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-[#4c8dff]/60",
+                "relative grid cursor-pointer grid-cols-[2.6rem_1fr_auto] items-center gap-2.5 rounded-xl px-2.5 py-3 sm:grid-cols-[3.25rem_1fr_auto] sm:gap-3 sm:px-3.5 transition-colors duration-500 outline-none hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-[#4c8dff]/60",
                 calling ? "bg-white/[0.07]" : "bg-transparent",
               )}
             >
@@ -149,7 +149,7 @@ export function CueSheet({
                   {row.text}
                 </span>
               </span>
-              <span className="relative h-6 w-[4.5rem]">
+              <span className="relative h-6 w-[3.9rem] sm:w-[4.5rem]">
                 <AnimatePresence mode="popLayout" initial={false}>
                   {live ? (
                     <motion.span
@@ -157,7 +157,7 @@ export function CueSheet({
                       initial={{ opacity: 0, y: 8, scale: 0.9 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -8 }}
-                      className="absolute inset-0 flex items-center justify-center gap-1.5 rounded-full bg-[#1fc677]/15 font-mono text-[0.625rem] font-semibold tracking-[0.12em] text-[#5ee09e] uppercase"
+                      className="absolute inset-0 flex items-center justify-center gap-1.5 rounded-full bg-[#1fc677]/15 font-mono text-[0.625rem] font-semibold tracking-[0.06em] text-[#5ee09e] uppercase sm:tracking-[0.12em]"
                     >
                       <span className="size-1.5 rounded-full bg-[#1fc677]" />
                       Go
@@ -169,7 +169,7 @@ export function CueSheet({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
                       className={cn(
-                        "absolute inset-0 flex items-center justify-center gap-1.5 rounded-full font-mono text-[0.625rem] font-semibold tracking-[0.12em] uppercase",
+                        "absolute inset-0 flex items-center justify-center gap-1 rounded-full font-mono text-[0.625rem] font-semibold tracking-[0.06em] uppercase sm:gap-1.5 sm:tracking-[0.12em]",
                         calling
                           ? "bg-[#f5a524]/15 text-[#ffc266]"
                           : "text-white/35 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)]",

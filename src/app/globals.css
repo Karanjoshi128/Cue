@@ -3,6 +3,11 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* The sidebar-and-panel shell needs width AND height: a landscape phone is
+   768px+ wide but only ~400px tall, so it keeps the phone layout. */
+@custom-variant shell (@media (min-width: 48rem) and (min-height: 30rem));
+/* Declared after `shell` so the expanded sidebar width wins from 1280px. */
+@custom-variant shell-xl (@media (min-width: 80rem) and (min-height: 30rem));
 
 @theme inline {
   --color-background: var(--background);

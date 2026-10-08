@@ -67,32 +67,33 @@ const ComposeDemoApp = dynamic(
   { ssr: false, loading: () => <Poster {...COMPOSER_POSTER} /> },
 );
 
-const QUERY = "(min-width: 768px)";
-const subscribe = (cb: () => void) => {
-  const mql = window.matchMedia(QUERY);
-  mql.addEventListener("change", cb);
-  return () => mql.removeEventListener("change", cb);
-};
-
 /**
- * Whether the screen is wide enough for the demo to be usable. Scaled to a
- * phone it would be a quarter size with untappable controls, so phones get
- * the screenshot instead (and never download the demo code).
+ * Whether the screen is wide enough for a demo to be usable. Each demo is
+ * scaled to fit its frame, so below these widths its text and controls would
+ * be too small to read or tap; those screens get the screenshot instead (and
+ * never download the demo code).
  */
-function useRoomForDemo() {
+function useMinWidth(px: number) {
+  const query = `(min-width: ${px}px)`;
   return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(QUERY).matches,
+    (cb) => {
+      const mql = window.matchMedia(query);
+      mql.addEventListener("change", cb);
+      return () => mql.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(query).matches,
     () => false,
   );
 }
 
 export function LiveDashboard({ initialView = "dashboard" }: { initialView?: DemoView }) {
-  const wide = useRoomForDemo();
+  // Full width frame: ~75% scale at 1024px.
+  const wide = useMinWidth(1024);
   return wide ? <DemoApp initialView={initialView} /> : <Poster {...DASHBOARD_POSTER} note />;
 }
 
 export function LiveComposer() {
-  const wide = useRoomForDemo();
+  // Half-width column in "How it works": ~60% scale from 1200px.
+  const wide = useMinWidth(1200);
   return wide ? <ComposeDemoApp /> : <Poster {...COMPOSER_POSTER} />;
 }

@@ -17,9 +17,9 @@ const NAV = [
 export function SiteHeader({ signedIn }: { signedIn: boolean }) {
   return (
     <header className="bg-background/70 supports-backdrop-filter:bg-background/55 sticky top-0 z-40 border-b backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-5 sm:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:gap-8 sm:px-8">
         <Link href="/" aria-label="Cue home" className="shrink-0">
-          <Logo className="h-8 w-auto" />
+          <Logo className="h-7 w-auto sm:h-8" />
         </Link>
         <nav aria-label="Site" className="hidden items-center gap-1 md:flex">
           {NAV.map((n) => (
@@ -45,10 +45,14 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
           <Button
             render={<Link href={signedIn ? "/dashboard" : "/login"} />}
             variant="ink"
-            className="group rounded-full pr-3 pl-4"
+            className="group rounded-full px-4 sm:pr-3"
           >
-            {signedIn ? "Open dashboard" : "Get started"}
-            <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+            {/* Phones get the short label so the header never overflows. */}
+            <span className="sm:hidden">{signedIn ? "Dashboard" : "Get started"}</span>
+            <span className="hidden sm:inline">
+              {signedIn ? "Open dashboard" : "Get started"}
+            </span>
+            <ArrowRight className="hidden transition-transform group-hover:translate-x-0.5 sm:block" />
           </Button>
         </div>
       </div>
@@ -117,12 +121,12 @@ function FooterCol({
   return (
     <div>
       <div className="label-caps mb-4">{title}</div>
-      <ul className="space-y-2.5 text-sm">
+      <ul className="space-y-0.5 text-sm">
         {links.map((l) => (
           <li key={l.href}>
             <Link
               href={l.href}
-              className="text-foreground/80 hover:text-foreground break-all underline-offset-4 transition-colors hover:underline"
+              className="text-foreground/80 hover:text-foreground inline-block py-1.5 break-all underline-offset-4 transition-colors hover:underline"
             >
               {l.label}
             </Link>

@@ -8,6 +8,14 @@ import { prisma } from "@/lib/prisma";
 import { getAuth, requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
 import { generateApiKey } from "@/lib/api";
+import { encrypt } from "@/lib/crypto";
+import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
+import {
+  BROWSER_TEST_KEY,
+  settingsFromInput,
+  testStorage,
+  type StorageTestResult,
+} from "@/lib/storage-config";
 import {
   assertPostIsPublishable,
   buildTargets,
@@ -184,6 +192,137 @@ export async function revokeApiKey(id: string) {
     data: { revokedAt: new Date() },
   });
   revalidatePath("/settings");
+}
+
+// ---------------------------------------------------------------------------
+// Media storage (admin only) - the workspace's own bucket, if any
+// ---------------------------------------------------------------------------
+
+// These return failures as values rather than throwing: production builds
+// hide a thrown error's message, and here the message is the whole point
+// ("the public URL refused to serve it" tells the admin what to fix).
+
+/** Runs the live test against what's in the form, without saving anything. */
+export async function testStorageConnection(
+  input: unknown,
+): Promise<StorageTestResult> {
+  const admin = await requireAdmin();
+  const existing = await prisma.storageConfig.findUnique({
+    where: { workspaceId: admin.workspaceId },
+  });
+  try {
+    return await testStorage(settingsFromInput(input, existing));
+  } catch (e) {
+    return { ok: false, checks: [], error: errorMessage(e) };
+  }
+}
+
+/** Re-tests the saved bucket, and records when it last passed. */
+export async function retestStorage(): Promise<StorageTestResult> {
+  const admin = await requireAdmin();
+  const cfg = await prisma.storageConfig.findUnique({
+    where: { workspaceId: admin.workspaceId },
+  });
+  if (!cfg) return { ok: false, checks: [], error: "No storage is connected." };
+  try {
+    const result = await testStorage(settingsFromConfig(cfg));
+    if (result.ok) {
+      await prisma.storageConfig.update({
+        where: { id: cfg.id },
+        data: { verifiedAt: new Date() },
+      });
+      revalidatePath("/settings");
+    }
+    return result;
+  } catch (e) {
+    return { ok: false, checks: [], error: errorMessage(e) };
+  }
+}
+
+/**
+ * Deletes the file the browser uploaded during a test. `input` is the form
+ * being tested, or null to use the saved settings. Only the browser test key
+ * pattern is accepted, so this can't delete anything else in the bucket.
+ */
+export async function cleanupStorageTest(input: unknown, key: string) {
+  const admin = await requireAdmin();
+  if (!BROWSER_TEST_KEY.test(key)) return;
+  const existing = await prisma.storageConfig.findUnique({
+    where: { workspaceId: admin.workspaceId },
+  });
+  try {
+    const settings =
+      input === null
+        ? existing && settingsFromConfig(existing)
+        : settingsFromInput(input, existing);
+    if (settings) await deleteObject(makeTarget(settings), key);
+  } catch {
+    // Best effort: a stray 60-byte text file is harmless.
+  }
+}
+
+/**
+ * Saves the workspace's bucket. The server-side checks run again first, so
+ * nothing that fails them is ever saved, whatever the browser claims.
+ */
+export async function saveStorageConfig(
+  input: unknown,
+): Promise<StorageTestResult> {
+  const admin = await requireAdmin();
+  const existing = await prisma.storageConfig.findUnique({
+    where: { workspaceId: admin.workspaceId },
+  });
+  try {
+    const s = settingsFromInput(input, existing);
+    const result = await testStorage(s);
+    if (!result.ok) return result;
+    if (result.browserTest) {
+      // Nobody will PUT to this one; don't leave a signed URL lying about.
+      delete result.browserTest;
+    }
+
+    const data = {
+      provider: s.provider,
+      accountId: s.accountId ?? null,
+      jurisdiction: s.jurisdiction ?? null,
+      endpoint: s.endpoint ?? null,
+      region: s.region,
+      bucket: s.bucket,
+      forcePathStyle: s.forcePathStyle,
+      accessKeyId: s.accessKeyId,
+      secretAccessKey: encrypt(s.secretAccessKey),
+      publicUrl: s.publicUrl,
+      verifiedAt: new Date(),
+    };
+    await prisma.storageConfig.upsert({
+      where: { workspaceId: admin.workspaceId },
+      create: { ...data, workspaceId: admin.workspaceId },
+      update: data,
+    });
+    revalidatePath("/settings");
+    return result;
+  } catch (e) {
+    return { ok: false, checks: [], error: errorMessage(e) };
+  }
+}
+
+/**
+ * Goes back to Cue's default storage. Files already uploaded stay where they
+ * are, and posts keep pointing at them, so the bucket must stay public for as
+ * long as those posts matter.
+ */
+export async function removeStorageConfig() {
+  const admin = await requireAdmin();
+  await prisma.storageConfig.deleteMany({
+    where: { workspaceId: admin.workspaceId },
+  });
+  revalidatePath("/settings");
+}
+
+function errorMessage(e: unknown): string {
+  if (e instanceof Error && e.name === "StorageError") return e.message;
+  console.error("[storage] unexpected error:", e);
+  return "Something went wrong while checking the bucket. Try again.";
 }
 
 // ---------------------------------------------------------------------------

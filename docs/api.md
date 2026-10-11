@@ -113,6 +113,12 @@ A short-lived (5 minute) URL for uploading a file **directly to storage**. The
 file never passes through Cue, so there's no request-size limit (max 512 MB per
 file).
 
+"Storage" is the workspace's own bucket if an admin has connected one in
+Settings (Cloudflare R2 or any S3-compatible service), otherwise Cue's. Either
+way `url` is the file's public address, which is where the platforms fetch it
+from when the post goes live. Server-side callers aren't affected by the
+bucket's CORS policy; only browsers are.
+
 ```bash
 curl -s -X POST "$CUE/media/presign" \
   -H "Authorization: Bearer $CUE_KEY" -H "Content-Type: application/json" \
@@ -121,7 +127,7 @@ curl -s -X POST "$CUE/media/presign" \
 
 ```json
 {
-  "uploadUrl": "https://....r2.cloudflarestorage.com/...&X-Amz-Signature=...",
+  "uploadUrl": "https://<bucket endpoint>/posts/2f0c...e1.mp4?X-Amz-Signature=...",
   "storageKey": "posts/2f0c...e1.mp4",
   "url": "https://.../posts/2f0c...e1.mp4",
   "type": "VIDEO"
@@ -129,7 +135,7 @@ curl -s -X POST "$CUE/media/presign" \
 ```
 
 Then `PUT` the raw bytes to `uploadUrl`, with the **same `Content-Type`** you
-declared (the signature covers it):
+declared, so the file is served with the right type:
 
 ```bash
 curl -s -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @short.mp4

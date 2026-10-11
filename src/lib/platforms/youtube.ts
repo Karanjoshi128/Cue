@@ -38,7 +38,8 @@ export const youtubeAdapter: PlatformAdapter = {
     const description = body.slice(0, 5000);
     const privacyStatus = privacy ?? "public";
 
-    // Pull the video bytes from R2 (public URL). Buffered in full - fine for the
+    // Pull the video bytes from its public URL (Cue's R2 bucket or the
+    // workspace's own). Buffered in full - fine for the
     // short-form videos this tool posts; revisit if very large files appear.
     const fileRes = await fetch(video.url, {
       signal: AbortSignal.timeout(FETCH_VIDEO_TIMEOUT_MS),

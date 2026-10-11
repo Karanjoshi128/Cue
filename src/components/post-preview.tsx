@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { canOptimizeMedia } from "@/lib/media-hosts";
 
 interface PreviewLink {
   url: string;
@@ -194,6 +195,7 @@ function ImageCarousel({
         alt=""
         width={480}
         height={square ? 480 : 300}
+        unoptimized={!canOptimizeMedia(images[idx])}
         className={cn(
           "w-full object-cover",
           square ? "aspect-square" : "max-h-96",

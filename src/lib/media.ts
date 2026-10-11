@@ -1,5 +1,5 @@
 import { ApiError } from "@/lib/api";
-import { presignUpload, publicUrl } from "@/lib/r2";
+import { getWorkspaceStorage, objectUrl, presignPut } from "@/lib/storage";
 
 // Ceiling so a presigned URL can't be used to dump arbitrarily large objects.
 const MAX_BYTES = 512 * 1024 * 1024; // 512 MB
@@ -13,9 +13,10 @@ export interface PresignResult {
 }
 
 /**
- * Issues a short-lived presigned PUT so a client can upload directly to R2.
- * The bytes never pass through a function, which is what lifts the ~4.5 MB
- * platform cap on request bodies (see src/lib/r2.ts).
+ * Issues a short-lived presigned PUT so a client can upload directly to the
+ * workspace's storage: its own bucket if an admin connected one, otherwise
+ * Cue's default R2 bucket. The bytes never pass through a function, which is
+ * what lifts the ~4.5 MB platform cap on request bodies (see src/lib/storage.ts).
  *
  * Shared by the cookie-session route (/api/upload/presign) and the API route
  * (/api/v1/media/presign) so both return an identical response. Callers do
@@ -24,7 +25,10 @@ export interface PresignResult {
  * The object key is generated here, never taken from the caller, so nobody can
  * target or overwrite an existing object.
  */
-export async function presignMediaUpload(body: unknown): Promise<PresignResult> {
+export async function presignMediaUpload(
+  workspaceId: string,
+  body: unknown,
+): Promise<PresignResult> {
   const { filename, contentType, size } = (body ?? {}) as {
     filename?: unknown;
     contentType?: unknown;
@@ -57,10 +61,11 @@ export async function presignMediaUpload(body: unknown): Promise<PresignResult> 
     /\.(pdf|ppt|pptx|doc|docx)$/i.test(filename);
   const type = isDoc ? "DOCUMENT" : mime.startsWith("video") ? "VIDEO" : "IMAGE";
 
+  const storage = await getWorkspaceStorage(workspaceId);
   return {
-    uploadUrl: await presignUpload(key, mime),
+    uploadUrl: await presignPut(storage, key, mime),
     storageKey: key,
-    url: publicUrl(key),
+    url: objectUrl(storage, key),
     type,
     // Original filename - LinkedIn requires a title for document posts.
     title: isDoc ? filename : undefined,

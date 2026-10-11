@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 // Operating entity: Karan Joshi (individual). Governing law: India.
 // Describes Cue's actual data practices for Meta / LinkedIn / Google review.
 // The YouTube API Services section is required for Google OAuth verification.
-const UPDATED = "July 6, 2026";
+const UPDATED = "October 11, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 const CONTACT = "joshikaran0008@gmail.com";
 
@@ -49,7 +49,8 @@ export default function PrivacyPage() {
                 <strong className="text-foreground">Content you create.</strong>{" "}
                 Post captions, scheduling times, and any images, videos, or
                 documents you upload for publishing. Media is stored in
-                Cloudflare R2.
+                Cloudflare R2, or in the storage provider your workspace
+                connects in Settings.
               </li>
             </ul>
           </Section>
@@ -96,7 +97,8 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong className="text-foreground">Cloudflare R2</strong> —
-                storage for the media you upload.
+                storage for the media you upload, unless your workspace
+                connects its own storage.
               </li>
               <li>
                 <strong className="text-foreground">Vercel</strong> - application

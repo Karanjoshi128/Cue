@@ -37,6 +37,7 @@ import {
 import { ExpandablePreview } from "@/components/post-preview";
 import { Countdown } from "@/components/fx/countdown";
 import { cn } from "@/lib/utils";
+import { canOptimizeMedia } from "@/lib/media-hosts";
 import {
   DEFAULT_YOUTUBE_CATEGORY,
   YOUTUBE_CATEGORIES,
@@ -412,7 +413,7 @@ export function Composer({
             uploadUrl: string;
           };
 
-        // 2. Send the bytes straight to R2. Going direct is what allows files
+        // 2. Send the bytes straight to the bucket. Going direct is what allows files
         //    past the ~4.5 MB cap on requests routed through a function.
         //    A CORS failure rejects the fetch outright, hence the catch.
         const put = await fetch(uploadUrl, {
@@ -422,7 +423,7 @@ export function Composer({
         }).catch(() => null);
         if (!put?.ok) {
           throw new Error(
-            `Could not upload ${file.name} to storage${put ? ` (${put.status})` : ""}. If this keeps happening, check the R2 bucket's CORS policy.`,
+            `Could not upload ${file.name} to storage${put ? ` (${put.status})` : ""}. If this keeps happening, an admin can test the connection in Settings, under Media storage.`,
           );
         }
 
@@ -901,6 +902,7 @@ export function Composer({
                             alt=""
                             width={96}
                             height={96}
+                            unoptimized={!canOptimizeMedia(m.url)}
                             className="size-24 rounded-xl object-cover shadow-[0_0_0_1px_var(--border)]"
                           />
                         ) : (

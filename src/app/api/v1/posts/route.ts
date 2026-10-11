@@ -14,7 +14,7 @@ import {
 } from "@/lib/posts";
 
 export const dynamic = "force-dynamic";
-// `action: "now"` publishes inline: the video is pulled from R2, then uploaded
+// `action: "now"` publishes inline: the video is pulled from storage, then uploaded
 // to YouTube with a resumable PUT (~30 MB for a Short). That needs far longer
 // than the default function budget.
 export const maxDuration = 300;

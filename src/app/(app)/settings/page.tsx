@@ -1,9 +1,15 @@
 import { getCurrentUser } from "@/lib/auth";
-import { getApiKeys, getUsers, getWorkspace } from "@/lib/data";
+import {
+  getApiKeys,
+  getStorageSummary,
+  getUsers,
+  getWorkspace,
+} from "@/lib/data";
 import { ProfileForm } from "@/components/profile-form";
 import { WorkspaceForm } from "@/components/workspace-form";
 import { TeamManager } from "@/components/team-manager";
 import { ApiKeysManager } from "@/components/api-keys-manager";
+import { StorageManager } from "@/components/storage-manager";
 import { ThemePicker } from "@/components/theme-picker";
 import { Kbd, PageHeader } from "@/components/page-header";
 import { navItems } from "@/components/nav-items";
@@ -36,10 +42,11 @@ function Section({
 }
 
 export default async function SettingsPage() {
-  const [user, users, workspace] = await Promise.all([
+  const [user, users, workspace, storage] = await Promise.all([
     getCurrentUser(),
     getUsers(),
     getWorkspace(),
+    getStorageSummary(),
   ]);
   const isAdmin = user?.role === "ADMIN";
   // Admin-only: getApiKeys() itself refuses non-admins, so don't ask.
@@ -49,6 +56,7 @@ export default async function SettingsPage() {
     { id: "account", label: "Account" },
     { id: "workspace", label: "Workspace" },
     { id: "team", label: "Team" },
+    { id: "storage", label: "Media storage" },
     ...(isAdmin ? [{ id: "api-keys", label: "API keys" }] : []),
     { id: "appearance", label: "Appearance" },
     { id: "shortcuts", label: "Shortcuts" },
@@ -69,7 +77,7 @@ export default async function SettingsPage() {
             Make it <em>yours.</em>
           </>
         }
-        description="Your account, the workspace, who's on the team, and how Cue looks."
+        description="Your account, the workspace, who's on the team, where media lives, and how Cue looks."
       />
 
       <div className="grid gap-8 lg:grid-cols-[11rem_1fr]">
@@ -131,6 +139,18 @@ export default async function SettingsPage() {
               currentUserId={user?.id ?? ""}
               isAdmin={isAdmin}
             />
+          </Section>
+
+          <Section
+            id="storage"
+            title="Media storage"
+            description={
+              isAdmin
+                ? "Where uploaded images, videos and documents are kept. Cue's storage, or your own bucket."
+                : "Where uploaded images, videos and documents are kept."
+            }
+          >
+            <StorageManager summary={storage} isAdmin={isAdmin} />
           </Section>
 
           {isAdmin && (

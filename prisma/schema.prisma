@@ -23,6 +23,35 @@ model Workspace {
   users   User[]
   clients Client[]
   apiKeys ApiKey[]
+  storage StorageConfig?
+}
+
+// A workspace's own bucket for media uploads ("bring your own storage"). One
+// per workspace; when there is none, uploads go to Cue's default R2 bucket
+// (the R2_* env vars). Saved only after a live test passes, so a broken
+// config can't quietly break uploads or publishing.
+model StorageConfig {
+  id              String          @id @default(cuid())
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId     String          @unique
+  provider        StorageProvider
+  accountId       String? // R2: the Cloudflare account ID
+  jurisdiction    String? // R2: null (default), "eu" or "fedramp"
+  endpoint        String? // S3: the API endpoint; null means AWS S3 itself
+  region          String // "auto" for R2
+  bucket          String
+  forcePathStyle  Boolean         @default(false)
+  accessKeyId     String
+  secretAccessKey String // encrypted (src/lib/crypto.ts); never sent to the browser
+  publicUrl       String // base URL objects are publicly readable at, no trailing slash
+  verifiedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+enum StorageProvider {
+  R2
+  S3
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +217,7 @@ model MediaAsset {
   post       Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
   postId     String
   type       MediaType
-  url        String // public Cloudflare R2 URL
+  url        String // public URL in the workspace's storage (Cue's R2 or its own bucket)
   storageKey String // R2 object key (deleted on cleanup)
   title      String? // display filename, used for DOCUMENT posts
   createdAt  DateTime  @default(now())

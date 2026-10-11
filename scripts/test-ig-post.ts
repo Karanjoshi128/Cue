@@ -3,7 +3,7 @@
  * the real Instagram adapter using the R2 public URL.
  * Run: npx tsx --env-file=.env scripts/test-ig-post.ts
  */
-import { uploadToR2 } from "../src/lib/r2";
+import { defaultStorage, putObject } from "../src/lib/storage";
 import { instagramAdapter } from "../src/lib/platforms/instagram";
 
 async function main() {
@@ -23,7 +23,7 @@ async function main() {
 
   console.log("2/3  Uploading to Cloudflare R2…");
   const key = `posts/test-${Date.now()}.jpg`;
-  const url = await uploadToR2(key, bytes, "image/jpeg");
+  const url = await putObject(defaultStorage(), key, bytes, "image/jpeg");
   console.log("     R2 public URL:", url);
 
   console.log("3/3  Publishing to Instagram (image hosted on R2)…");

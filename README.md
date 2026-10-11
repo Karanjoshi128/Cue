@@ -67,6 +67,11 @@ operator managing many clients:
 - **Clients** - add clients, connect their LinkedIn / Instagram accounts via OAuth, and monitor
   connection health.
 - **Settings** - account details and integration-readiness checks.
+- **Bring your own storage** - per workspace, an admin can connect a Cloudflare R2 or any
+  S3-compatible bucket (Amazon S3, Backblaze B2, DigitalOcean Spaces, Wasabi, Supabase,
+  MinIO) in Settings, under Media storage. Cue tests it live (write, public read, browser
+  upload/CORS, cleanup) before saving; keys are encrypted with `TOKEN_ENC_KEY`. Workspaces
+  without one use Cue's R2 bucket.
 - **Scheduling engine** - atomically claims due targets, publishes per account, retries up to
   3×, rolls each post up to an overall status, and writes a permanent `PostHistory` record.
 - **Publish adapters** - LinkedIn Posts API and Instagram Graph API (via **Instagram Login** -
@@ -182,7 +187,7 @@ cp .env.example .env
 | -------------------- | --------------------------------------------------------------------------------------------- |
 | **Database**         | `DATABASE_URL` (pooled, 6543) · `DIRECT_URL` (direct, 5432)                                   |
 | **Supabase Auth**    | `NEXT_PUBLIC_SUPABASE_URL` · `NEXT_PUBLIC_SUPABASE_ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY`    |
-| **Cloudflare R2**    | `R2_ACCOUNT_ID` · `R2_ACCESS_KEY_ID` · `R2_SECRET_ACCESS_KEY` · `R2_BUCKET` · `R2_PUBLIC_URL` |
+| **Cloudflare R2**    | `R2_ACCOUNT_ID` · `R2_ACCESS_KEY_ID` · `R2_SECRET_ACCESS_KEY` · `R2_BUCKET` · `R2_PUBLIC_URL` (default storage) |
 | **Security**         | `TOKEN_ENC_KEY` (32 bytes) · `CRON_SECRET` (shared with GitHub Actions)                       |
 | **LinkedIn**         | `LINKEDIN_CLIENT_ID` · `LINKEDIN_CLIENT_SECRET`                                               |
 | **Meta / Instagram** | `META_APP_ID` · `META_APP_SECRET`                                                             |
@@ -203,6 +208,9 @@ node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"   # CRO
    `DIRECT_URL` (port 5432), and the `NEXT_PUBLIC_SUPABASE_*` + `SUPABASE_SERVICE_ROLE_KEY`.
 2. **Secrets** - generate `TOKEN_ENC_KEY` and `CRON_SECRET` (commands above).
 3. **Cloudflare R2** - create a bucket and an API token, enable public access, fill `R2_*`.
+   This is the default storage for every workspace that hasn't connected its own. The bucket's
+   CORS policy must allow `PUT` with a `Content-Type` header from `APP_URL`, because the
+   composer uploads straight to it.
 4. **LinkedIn & Meta apps** - create dev apps, set the redirect URIs to
    `<APP_URL>/api/oauth/{linkedin,instagram}/callback`, and fill the client id/secret pairs.
 5. **Push schema + seed:**
@@ -245,7 +253,8 @@ src/
    ├─ platforms/             # linkedin + instagram adapters (+ shared types)
    ├─ publish.ts             # scheduling engine
    ├─ crypto.ts              # token encryption
-   ├─ r2.ts · prisma.ts · auth.ts · cron-auth.ts
+   ├─ storage.ts             # S3 client per workspace (own bucket or Cue's R2)
+   ├─ prisma.ts · auth.ts · cron-auth.ts
    └─ supabase/              # ssr client + server helpers
 prisma/   schema.prisma · seed.ts
 docs/     PLAN.md · future_Scope.md

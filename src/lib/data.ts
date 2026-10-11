@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireWorkspaceId } from "@/lib/auth";
+import { requireAdmin, requireUser, requireWorkspaceId } from "@/lib/auth";
 
 // Every function here self-scopes to the caller's workspace via
 // requireWorkspaceId(), so a page can never accidentally read another tenant's
@@ -30,6 +30,44 @@ export async function getApiKeys() {
     },
   });
 }
+
+/**
+ * The workspace's own media bucket, if one is connected, for Settings. The
+ * secret never leaves the server; members who aren't admins also don't see
+ * the full access key ID.
+ */
+export async function getStorageSummary() {
+  const user = await requireUser();
+  const cfg = await prisma.storageConfig.findUnique({
+    where: { workspaceId: user.workspaceId },
+    select: {
+      provider: true,
+      accountId: true,
+      jurisdiction: true,
+      endpoint: true,
+      region: true,
+      bucket: true,
+      forcePathStyle: true,
+      accessKeyId: true,
+      publicUrl: true,
+      verifiedAt: true,
+      updatedAt: true,
+    },
+  });
+  if (!cfg) return null;
+  const isAdmin = user.role === "ADMIN";
+  return {
+    ...cfg,
+    accountId: isAdmin ? cfg.accountId : null,
+    accessKeyId: isAdmin ? cfg.accessKeyId : `…${cfg.accessKeyId.slice(-4)}`,
+    verifiedAt: cfg.verifiedAt?.toISOString() ?? null,
+    updatedAt: cfg.updatedAt.toISOString(),
+  };
+}
+
+export type StorageSummary = NonNullable<
+  Awaited<ReturnType<typeof getStorageSummary>>
+>;
 
 export async function getUsers() {
   const workspaceId = await requireWorkspaceId();

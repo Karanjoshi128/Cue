@@ -20,10 +20,25 @@ model Workspace {
   name      String
   createdAt DateTime @default(now())
 
+  // Set by the platform admin panel (src/app/admin). Defaults leave every
+  // workspace exactly as it was: no limits, every feature on, not suspended.
+  plan             Plan      @default(UNLIMITED)
+  disabledFeatures String[]  @default([]) // feature keys from src/lib/plans.ts
+  suspendedAt      DateTime? // set = members locked out, API refused, nothing publishes
+  suspendedReason  String?
+
   users   User[]
   clients Client[]
   apiKeys ApiKey[]
   storage StorageConfig?
+}
+
+// Limits for each plan live in src/lib/plans.ts.
+enum Plan {
+  FREE
+  PRO
+  AGENCY
+  UNLIMITED
 }
 
 // A workspace's own bucket for media uploads ("bring your own storage"). One
@@ -65,6 +80,10 @@ model User {
   role      Role     @default(MANAGER)
   createdAt DateTime @default(now())
 
+  lastSeenAt   DateTime? // last request in the app, written at most every few minutes
+  bannedAt     DateTime? // set = this person can't use Cue at all
+  bannedReason String?
+
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
 
@@ -91,6 +110,7 @@ model ApiKey {
   prefix      String // first 12 chars, for display only
   hash        String    @unique // sha256 of the full key; the key itself is never stored
   lastUsedAt  DateTime?
+  useCount    Int       @default(0) // successful authentications, for usage
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
 }
@@ -220,6 +240,7 @@ model MediaAsset {
   url        String // public URL in the workspace's storage (Cue's R2 or its own bucket)
   storageKey String // R2 object key (deleted on cleanup)
   title      String? // display filename, used for DOCUMENT posts
+  sizeBytes  Int? // as declared at upload; null for media uploaded before this was recorded
   createdAt  DateTime  @default(now())
 }
 
@@ -259,4 +280,47 @@ model PostHistory {
   reach          Int?
   clicks         Int?
   lastSyncedAt   DateTime?
+}
+
+// ---------------------------------------------------------------------------
+// Platform administration (src/app/admin)
+// ---------------------------------------------------------------------------
+
+// Every action taken in the admin panel. No foreign keys on purpose: the log
+// must outlive the workspaces, users and posts it describes.
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorEmail  String
+  action      String // e.g. "workspace.suspend"
+  targetType  String // workspace | user | post | apiKey | account | storage | platform
+  targetId    String?
+  workspaceId String?
+  reason      String?
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([workspaceId])
+}
+
+// One row ("global") of platform-wide switches.
+model PlatformSettings {
+  id               String    @id @default("global")
+  publishingPaused Boolean   @default(false)
+  pausedReason     String?
+  announcement     String? // shown to every signed-in user while set
+  announcementTone String    @default("info") // info | warning
+  announcementAt   DateTime? // changes when the text changes, so dismissals reset
+  updatedBy        String?
+  updatedAt        DateTime  @updatedAt
+}
+
+// The last run of each scheduled job, so the admin panel can tell whether the
+// publisher (Supabase pg_cron, every 5 minutes) is actually running.
+model CronHeartbeat {
+  name      String   @id // "publish"
+  lastRunAt DateTime
+  ok        Boolean
+  summary   Json?
+  error     String?
 }

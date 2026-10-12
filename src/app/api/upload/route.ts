@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireWritableUser } from "@/lib/auth";
+import { limitProblem } from "@/lib/plans";
 import { getWorkspaceStorage, putObject } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,13 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   let workspaceId: string;
   try {
-    ({ workspaceId } = await requireUser());
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    ({ workspaceId } = await requireWritableUser());
+  } catch (e) {
+    const readOnly = e instanceof Error && e.message !== "UNAUTHENTICATED";
+    return NextResponse.json(
+      { error: readOnly ? e.message : "Unauthorized" },
+      { status: readOnly ? 403 : 401 },
+    );
   }
 
   const form = await req.formData();
@@ -27,10 +32,16 @@ export async function POST(req: NextRequest) {
   const key = `posts/${crypto.randomUUID()}.${ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
+  const storage = await getWorkspaceStorage(workspaceId);
+  if (!storage.custom) {
+    const overLimit = await limitProblem(workspaceId, "storageBytes", bytes.length);
+    if (overLimit) return NextResponse.json({ error: overLimit }, { status: 403 });
+  }
+
   let url: string;
   try {
     url = await putObject(
-      await getWorkspaceStorage(workspaceId),
+      storage,
       key,
       bytes,
       file.type || "application/octet-stream",
@@ -61,5 +72,6 @@ export async function POST(req: NextRequest) {
     type,
     // Original filename - LinkedIn requires a title for document posts.
     title: isDoc ? file.name : undefined,
+    sizeBytes: bytes.length,
   });
 }

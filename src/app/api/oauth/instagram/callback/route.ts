@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuth } from "@/lib/auth";
+import { connectingUser } from "@/lib/oauth-guard";
 import { encrypt } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
   ) as { clientId: string };
 
   // Defense-in-depth: `state` is unsigned, so re-verify workspace ownership.
-  const { user } = await getAuth();
-  if (!user) return NextResponse.redirect(new URL("/login", req.url));
+  const user = await connectingUser(req, "instagram");
+  if (user instanceof NextResponse) return user;
   const owned = await prisma.client.findFirst({
     where: { id: clientId, workspaceId: user.workspaceId },
     select: { id: true },

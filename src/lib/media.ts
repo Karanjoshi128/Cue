@@ -1,5 +1,6 @@
 import { ApiError } from "@/lib/api";
 import { getWorkspaceStorage, objectUrl, presignPut } from "@/lib/storage";
+import { limitProblem } from "@/lib/plans";
 
 // Ceiling so a presigned URL can't be used to dump arbitrarily large objects.
 const MAX_BYTES = 512 * 1024 * 1024; // 512 MB
@@ -10,6 +11,8 @@ export interface PresignResult {
   url: string;
   type: "IMAGE" | "VIDEO" | "DOCUMENT";
   title?: string;
+  /** Pass back in the post's media item, so it counts toward storage. */
+  sizeBytes: number;
 }
 
 /**
@@ -62,6 +65,11 @@ export async function presignMediaUpload(
   const type = isDoc ? "DOCUMENT" : mime.startsWith("video") ? "VIDEO" : "IMAGE";
 
   const storage = await getWorkspaceStorage(workspaceId);
+  // Plans cap what's kept in Cue's bucket; a workspace's own bucket is theirs.
+  if (!storage.custom) {
+    const overLimit = await limitProblem(workspaceId, "storageBytes", size);
+    if (overLimit) throw new ApiError(403, overLimit);
+  }
   return {
     uploadUrl: await presignPut(storage, key, mime),
     storageKey: key,
@@ -69,5 +77,6 @@ export async function presignMediaUpload(
     type,
     // Original filename - LinkedIn requires a title for document posts.
     title: isDoc ? filename : undefined,
+    sizeBytes: size,
   };
 }

@@ -10,6 +10,14 @@ import { WorkspaceForm } from "@/components/workspace-form";
 import { TeamManager } from "@/components/team-manager";
 import { ApiKeysManager } from "@/components/api-keys-manager";
 import { StorageManager } from "@/components/storage-manager";
+import {
+  formatBytes,
+  getWorkspaceUsage,
+  hasFeature,
+  LIMIT_LABELS,
+  PLANS,
+  type LimitKey,
+} from "@/lib/plans";
 import { ThemePicker } from "@/components/theme-picker";
 import { Kbd, PageHeader } from "@/components/page-header";
 import { navItems } from "@/components/nav-items";
@@ -49,13 +57,17 @@ export default async function SettingsPage() {
     getStorageSummary(),
   ]);
   const isAdmin = user?.role === "ADMIN";
+  const apiAllowed = !workspace || hasFeature(workspace, "api");
   // Admin-only: getApiKeys() itself refuses non-admins, so don't ask.
-  const apiKeys = isAdmin ? await getApiKeys() : [];
+  const apiKeys = isAdmin && apiAllowed ? await getApiKeys() : [];
+  const usage = workspace ? await getWorkspaceUsage(workspace.id) : null;
+  const plan = PLANS[workspace?.plan ?? "UNLIMITED"];
 
   const sections = [
     { id: "account", label: "Account" },
     { id: "workspace", label: "Workspace" },
     { id: "team", label: "Team" },
+    { id: "plan", label: "Plan and usage" },
     { id: "storage", label: "Media storage" },
     ...(isAdmin ? [{ id: "api-keys", label: "API keys" }] : []),
     { id: "appearance", label: "Appearance" },
@@ -142,6 +154,33 @@ export default async function SettingsPage() {
           </Section>
 
           <Section
+            id="plan"
+            title="Plan and usage"
+            description={`Your workspace is on the ${plan.label} plan. To change it, contact Cue support.`}
+          >
+            {usage && (
+              <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+                {(Object.keys(LIMIT_LABELS) as LimitKey[]).map((key) => {
+                  const limit = plan.limits[key];
+                  const fmt = (n: number) =>
+                    key === "storageBytes" ? formatBytes(n) : String(n);
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-4">
+                      <dt className="text-muted-foreground">{LIMIT_LABELS[key]}</dt>
+                      <dd className="font-mono text-xs tabular-nums">
+                        {fmt(usage[key])}
+                        <span className="text-muted-foreground">
+                          {" "}/ {limit === null ? "no limit" : fmt(limit)}
+                        </span>
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            )}
+          </Section>
+
+          <Section
             id="storage"
             title="Media storage"
             description={
@@ -150,7 +189,11 @@ export default async function SettingsPage() {
                 : "Where uploaded images, videos and documents are kept."
             }
           >
-            <StorageManager summary={storage} isAdmin={isAdmin} />
+            <StorageManager
+              summary={storage}
+              isAdmin={isAdmin}
+              customAllowed={!workspace || hasFeature(workspace, "custom_storage")}
+            />
           </Section>
 
           {isAdmin && (
@@ -159,6 +202,12 @@ export default async function SettingsPage() {
               title="API keys"
               description="Let scripts and automations create and schedule posts through the API."
             >
+              {!apiAllowed ? (
+                <p className="text-muted-foreground text-sm">
+                  API access is turned off for this workspace. Contact Cue
+                  support if you need it.
+                </p>
+              ) : (
               <ApiKeysManager
                 keys={apiKeys.map((k) => ({
                   id: k.id,
@@ -170,6 +219,7 @@ export default async function SettingsPage() {
                   createdBy: k.user.name ?? k.user.email,
                 }))}
               />
+              )}
             </Section>
           )}
 

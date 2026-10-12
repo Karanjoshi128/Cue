@@ -9,6 +9,7 @@ import { getAuth, requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
 import { generateApiKey } from "@/lib/api";
 import { encrypt } from "@/lib/crypto";
+import { limitProblem, workspaceHasFeature } from "@/lib/plans";
 import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
 import {
   BROWSER_TEST_KEY,
@@ -95,6 +96,8 @@ export async function inviteMember(input: z.infer<typeof inviteSchema>) {
   // Email is globally unique - a person can belong to one workspace.
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error("That email already has an account.");
+  const overLimit = await limitProblem(admin.workspaceId, "members");
+  if (overLimit) throw new Error(overLimit);
 
   // Pre-create the member row in THIS workspace so their role + tenant are set
   // when they first sign in (auth.ts returns the existing row on sign-in, so
@@ -167,6 +170,11 @@ const apiKeyNameSchema = z.string().trim().min(1).max(60);
 export async function createApiKey(name: string): Promise<{ key: string }> {
   const admin = await requireAdmin();
   const label = apiKeyNameSchema.parse(name);
+  if (!(await workspaceHasFeature(admin.workspaceId, "api"))) {
+    throw new Error("API access is turned off for this workspace.");
+  }
+  const overLimit = await limitProblem(admin.workspaceId, "apiKeys");
+  if (overLimit) throw new Error(overLimit);
   const { key, prefix, hash } = generateApiKey();
 
   await prisma.apiKey.create({
@@ -207,6 +215,9 @@ export async function testStorageConnection(
   input: unknown,
 ): Promise<StorageTestResult> {
   const admin = await requireAdmin();
+  if (!(await workspaceHasFeature(admin.workspaceId, "custom_storage"))) {
+    return { ok: false, checks: [], error: OWN_STORAGE_OFF };
+  }
   const existing = await prisma.storageConfig.findUnique({
     where: { workspaceId: admin.workspaceId },
   });
@@ -269,6 +280,9 @@ export async function saveStorageConfig(
   input: unknown,
 ): Promise<StorageTestResult> {
   const admin = await requireAdmin();
+  if (!(await workspaceHasFeature(admin.workspaceId, "custom_storage"))) {
+    return { ok: false, checks: [], error: OWN_STORAGE_OFF };
+  }
   const existing = await prisma.storageConfig.findUnique({
     where: { workspaceId: admin.workspaceId },
   });
@@ -319,6 +333,9 @@ export async function removeStorageConfig() {
   revalidatePath("/settings");
 }
 
+const OWN_STORAGE_OFF =
+  "Connecting your own storage is turned off for this workspace. Contact Cue support.";
+
 function errorMessage(e: unknown): string {
   if (e instanceof Error && e.name === "StorageError") return e.message;
   console.error("[storage] unexpected error:", e);
@@ -337,6 +354,8 @@ const clientSchema = z.object({
 export async function createClient(input: z.infer<typeof clientSchema>) {
   const user = await requireUser();
   const data = clientSchema.parse(input);
+  const overLimit = await limitProblem(user.workspaceId, "clients");
+  if (overLimit) throw new Error(overLimit);
   const client = await prisma.client.create({
     data: { ...data, workspaceId: user.workspaceId },
   });

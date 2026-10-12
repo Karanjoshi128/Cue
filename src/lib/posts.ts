@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { publishPostNow } from "@/lib/publish";
 import { ApiError } from "@/lib/api";
 import { cleanYoutubeTags, youtubeTagsProblem } from "@/lib/youtube-tags";
+import { limitProblem } from "@/lib/plans";
+import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 
 // Post creation shared by the composer's server actions and POST /api/v1/posts.
 //
@@ -66,6 +68,8 @@ export const postSchema = z
           url: z.string(),
           storageKey: z.string(),
           title: z.string().optional(),
+          // From the presign response; feeds storage usage on the plan.
+          sizeBytes: z.number().int().nonnegative().optional(),
         }),
       )
       .optional(),
@@ -221,6 +225,7 @@ export function mediaCreate(data: PostData) {
           url: m.url,
           storageKey: m.storageKey,
           title: m.title,
+          sizeBytes: m.sizeBytes,
         })),
       }
     : undefined;
@@ -296,6 +301,12 @@ export async function createPostForUser(
 
   const accounts = await resolveAccounts(user, data);
   assertPostIsPublishable(accounts, data);
+
+  if (data.action === "now" && (await isPublishingPaused())) {
+    throw new ApiError(503, PAUSED_MESSAGE);
+  }
+  const overLimit = await limitProblem(user.workspaceId, "postsPerMonth");
+  if (overLimit) throw new ApiError(403, overLimit);
 
   let post: Post;
   try {

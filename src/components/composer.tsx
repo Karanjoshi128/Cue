@@ -80,6 +80,8 @@ type MediaItem = {
   url: string;
   storageKey: string;
   title?: string;
+  /** From the presign response; counts toward the plan's storage. */
+  sizeBytes?: number;
 };
 type PollDuration = "ONE_DAY" | "THREE_DAYS" | "SEVEN_DAYS" | "FOURTEEN_DAYS";
 type LinkData = { url: string; title?: string; description?: string };

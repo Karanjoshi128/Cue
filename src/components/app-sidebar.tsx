@@ -35,6 +35,7 @@ import {
   Moon,
   Plus,
   Settings2,
+  ShieldCheck,
   Sun,
 } from "lucide-react";
 
@@ -52,6 +53,8 @@ export interface ShellUser {
   name: string | null;
   email: string;
   role: string;
+  /** Runs the whole platform: gets a link to /admin. */
+  isPlatformAdmin?: boolean;
 }
 
 export function initialsOf(user: ShellUser) {
@@ -271,6 +274,11 @@ export function UserMenu({
         <DropdownMenuItem render={<Link href="/settings" />}>
           <Settings2 /> Settings
         </DropdownMenuItem>
+        {user.isPlatformAdmin && (
+          <DropdownMenuItem render={<Link href="/admin" />}>
+            <ShieldCheck /> Admin panel
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           <DropdownMenuLabel>Theme</DropdownMenuLabel>

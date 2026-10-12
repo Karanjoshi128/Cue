@@ -3,31 +3,37 @@ import { format } from "date-fns";
 import type { Platform } from "@prisma/client";
 import { AppSidebar, type NextCueData } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
+import { AppBanners } from "@/components/app-banners";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getAuth } from "@/lib/auth";
 import { getClientOptions, getNextCue, getWorkspace } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
 import { getTimeZone } from "@/lib/timezone-server";
 import { zoned } from "@/lib/timezone";
+import { getPlatformSettings } from "@/lib/platform-settings";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, needsOnboarding } = await getAuth();
+  const { user, email, needsOnboarding, blocked, viewAs } = await getAuth();
 
+  // Banned, or the workspace is suspended: a notice, not a login loop.
+  if (blocked) redirect("/locked");
   if (!user) {
     // Authenticated but no workspace yet → onboarding; otherwise → login.
     redirect(needsOnboarding ? "/onboarding" : "/login");
   }
 
   const scopeClientId = await getScopeClientId();
-  const [clients, workspace, cue, timeZone] = await Promise.all([
+  const [clients, workspace, cue, timeZone, platform] = await Promise.all([
     getClientOptions(),
     getWorkspace(),
     getNextCue(scopeClientId),
     getTimeZone(),
+    getPlatformSettings(),
   ]);
 
   const nextCue: NextCueData | null =
@@ -47,7 +53,13 @@ export default async function AppLayout({
         }
       : null;
 
-  const shellUser = { name: user.name, email: user.email, role: user.role };
+  const shellUser = {
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    // Hidden while viewing a workspace: the shell is showing someone else.
+    isPlatformAdmin: !viewAs && isPlatformAdminEmail(email),
+  };
   const workspaceName = workspace?.name ?? "Workspace";
 
   return (
@@ -65,6 +77,19 @@ export default async function AppLayout({
             id="app-panel"
             className="bg-background flex min-h-dvh flex-col shell:h-[calc(100dvh-1rem)] shell:min-h-0 shell:overflow-y-auto shell:rounded-2xl shell:shadow-[0_0_0_1px_var(--border),0_1px_3px_0_rgb(20_20_40/0.04),0_12px_32px_-12px_rgb(20_20_40/0.08)]"
           >
+            <AppBanners
+              viewAs={viewAs ? { workspaceName: viewAs.workspaceName, expiresAt: viewAs.expiresAt } : null}
+              paused={platform.publishingPaused}
+              announcement={
+                platform.announcement && platform.announcementAt
+                  ? {
+                      text: platform.announcement,
+                      tone: platform.announcementTone,
+                      at: platform.announcementAt.toISOString(),
+                    }
+                  : null
+              }
+            />
             <AppTopbar
               user={shellUser}
               workspaceName={workspaceName}

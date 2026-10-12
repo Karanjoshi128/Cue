@@ -58,6 +58,7 @@ export default async function ComposerPage({
           url: m.url,
           storageKey: m.storageKey,
           title: m.title ?? undefined,
+          sizeBytes: m.sizeBytes ?? undefined,
         })),
         overrides: Object.fromEntries(
           post.targets

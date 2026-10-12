@@ -116,17 +116,35 @@ export async function requireApiUser(req: Request): Promise<User> {
 
   const key = await prisma.apiKey.findUnique({
     where: { hash: hashApiKey(token) },
-    include: { user: true },
+    include: {
+      user: true,
+      workspace: { select: { suspendedAt: true, disabledFeatures: true } },
+    },
   });
   if (!key || key.revokedAt) throw unauthorized();
   // A key belongs to one workspace. If its user ever ended up elsewhere, the
   // key must not become a way into that other tenant.
   if (key.user.workspaceId !== key.workspaceId) throw unauthorized();
 
-  // Telemetry for the Settings list. Best effort: a failed write here is not a
-  // reason to refuse an otherwise valid request.
+  // Switches from the platform admin panel. These say why, since the caller
+  // holds a valid key and the fix is a conversation, not a new key.
+  if (key.workspace.suspendedAt) {
+    throw new ApiError(403, "This workspace is suspended. Contact Cue support.");
+  }
+  if (key.user.bannedAt) {
+    throw new ApiError(403, "The account this key acts as is suspended. Contact Cue support.");
+  }
+  if (key.workspace.disabledFeatures.includes("api")) {
+    throw new ApiError(403, "API access is turned off for this workspace. Contact Cue support.");
+  }
+
+  // Telemetry for Settings and usage. Best effort: a failed write here is not
+  // a reason to refuse an otherwise valid request.
   await prisma.apiKey
-    .update({ where: { id: key.id }, data: { lastUsedAt: new Date() } })
+    .update({
+      where: { id: key.id },
+      data: { lastUsedAt: new Date(), useCount: { increment: 1 } },
+    })
     .catch(() => {});
 
   return key.user;

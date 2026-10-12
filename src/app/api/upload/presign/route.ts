@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/auth";
+import { requireWritableUser } from "@/lib/auth";
 import { apiErrorResponse, readJson } from "@/lib/api";
 import { presignMediaUpload } from "@/lib/media";
 
@@ -14,9 +14,13 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   let workspaceId: string;
   try {
-    ({ workspaceId } = await requireUser());
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    ({ workspaceId } = await requireWritableUser());
+  } catch (e) {
+    const readOnly = e instanceof Error && e.message !== "UNAUTHENTICATED";
+    return NextResponse.json(
+      { error: readOnly ? e.message : "Unauthorized" },
+      { status: readOnly ? 403 : 401 },
+    );
   }
 
   try {

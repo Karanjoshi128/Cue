@@ -116,12 +116,21 @@ export function settingsFromConfig(cfg: StorageConfig): StorageSettings {
   return { ...cfg, secretAccessKey: decrypt(cfg.secretAccessKey) };
 }
 
-/** Where this workspace's uploads go: its own bucket, else Cue's default. */
+/**
+ * Where this workspace's uploads go: its own bucket, else Cue's default. A
+ * platform admin switching "Own storage" off sends uploads back to Cue's.
+ */
 export async function getWorkspaceStorage(
   workspaceId: string,
 ): Promise<StorageTarget> {
-  const cfg = await prisma.storageConfig.findUnique({ where: { workspaceId } });
-  return cfg ? makeTarget(settingsFromConfig(cfg)) : defaultStorage();
+  const cfg = await prisma.storageConfig.findUnique({
+    where: { workspaceId },
+    include: { workspace: { select: { disabledFeatures: true } } },
+  });
+  if (!cfg || cfg.workspace.disabledFeatures.includes("custom_storage")) {
+    return defaultStorage();
+  }
+  return makeTarget(settingsFromConfig(cfg));
 }
 
 export function objectUrl(target: StorageTarget, key: string): string {

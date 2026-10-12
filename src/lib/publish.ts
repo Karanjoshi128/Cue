@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAdapter } from "@/lib/platforms";
 import { ensureFreshAccessToken } from "@/lib/tokens";
+import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import type { Post, PostTarget } from "@prisma/client";
 import type {
   PublishArticle,
@@ -8,7 +9,7 @@ import type {
   YouTubePrivacy,
 } from "@/lib/platforms/types";
 
-const MAX_ATTEMPTS = 3;
+export const MAX_ATTEMPTS = 3;
 
 // A target still PROCESSING this long after its post was due belongs to a run
 // that died mid-publish (function timeout or crash). Nothing else would ever
@@ -52,7 +53,14 @@ export async function publishDueTargets(now = new Date()): Promise<{
   processed: number;
   published: number;
   failed: number;
+  /** True when a platform admin has paused publishing; nothing was sent. */
+  paused?: boolean;
 }> {
+  // Paused from the admin panel: due posts stay SCHEDULED and go out on the
+  // first run after it resumes.
+  if (await isPublishingPaused()) {
+    return { processed: 0, published: 0, failed: 0, paused: true };
+  }
   const startedAt = Date.now();
   await releaseStaleTargets(now);
 
@@ -62,10 +70,12 @@ export async function publishDueTargets(now = new Date()): Promise<{
       attempts: { lt: MAX_ATTEMPTS },
       // Only publish posts that are due, approved, and not a lingering draft.
       // Posts in review (PENDING / CHANGES_REQUESTED) are held back.
+      // A suspended workspace's posts wait until it's unsuspended.
       post: {
         scheduledAt: { lte: now },
         approval: "APPROVED",
         status: { in: ["SCHEDULED", "PUBLISHING"] },
+        client: { workspace: { suspendedAt: null } },
       },
     },
     include: {
@@ -194,7 +204,7 @@ async function releaseStaleTargets(now: Date): Promise<void> {
   }
 }
 
-async function rollUpPostStatus(postId: string): Promise<void> {
+export async function rollUpPostStatus(postId: string): Promise<void> {
   const targets = await prisma.postTarget.findMany({ where: { postId } });
   if (targets.length === 0) return;
 
@@ -216,6 +226,7 @@ async function rollUpPostStatus(postId: string): Promise<void> {
 
 /** Publish a single post immediately ("Post now"). */
 export async function publishPostNow(postId: string): Promise<void> {
+  if (await isPublishingPaused()) throw new Error(PAUSED_MESSAGE);
   // Never bypass the approval gate - otherwise the post flips to PUBLISHING but
   // publishDueTargets skips it, leaving it stuck with no recovery in the UI.
   const post = await prisma.post.findUnique({

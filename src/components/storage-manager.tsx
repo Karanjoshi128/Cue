@@ -501,9 +501,12 @@ type Mode = "view" | "pick" | "form";
 export function StorageManager({
   summary,
   isAdmin,
+  customAllowed = true,
 }: {
   summary: StorageSummary | null;
   isAdmin: boolean;
+  /** False when Cue support has switched own storage off for the workspace. */
+  customAllowed?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("view");
   const [form, setForm] = useState<FormState>(() => formFrom("R2", summary));
@@ -531,6 +534,7 @@ export function StorageManager({
     <StorageStatus
       summary={summary}
       isAdmin={isAdmin}
+      customAllowed={customAllowed}
       onConnect={() => setMode("pick")}
       onEdit={() => {
         setForm(formFrom(summary?.provider ?? "R2", summary));
@@ -543,11 +547,13 @@ export function StorageManager({
 function StorageStatus({
   summary,
   isAdmin,
+  customAllowed,
   onConnect,
   onEdit,
 }: {
   summary: StorageSummary | null;
   isAdmin: boolean;
+  customAllowed: boolean;
   onConnect: () => void;
   onEdit: () => void;
 }) {
@@ -577,7 +583,12 @@ function StorageStatus({
             </p>
           </div>
         </div>
-        {isAdmin ? (
+        {isAdmin && !customAllowed ? (
+          <p className="text-muted-foreground text-sm">
+            Connecting your own bucket is turned off for this workspace. Contact
+            Cue support if you need it.
+          </p>
+        ) : isAdmin ? (
           <div className="bg-muted/40 flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center">
             <p className="text-muted-foreground flex-1 text-sm">
               Want uploads in your own bucket? Connect Cloudflare R2 or any
@@ -661,15 +672,25 @@ function StorageStatus({
               : "Never"}
           </dd>
         </dl>
+        {!customAllowed && (
+          <p className="text-standby-ink border-t px-4 py-3 text-xs">
+            Own storage is switched off for this workspace by Cue support, so
+            new uploads go to Cue&apos;s storage for now.
+          </p>
+        )}
         {isAdmin && (
           <div className="flex flex-wrap gap-2 border-t px-4 py-3">
-            <Button variant="outline" size="sm" onClick={retest} disabled={run.running}>
-              {run.running && <Loader2 className="animate-spin" />}
-              Test again
-            </Button>
-            <Button variant="outline" size="sm" onClick={onEdit} disabled={run.running}>
-              Edit
-            </Button>
+            {customAllowed && (
+              <>
+                <Button variant="outline" size="sm" onClick={retest} disabled={run.running}>
+                  {run.running && <Loader2 className="animate-spin" />}
+                  Test again
+                </Button>
+                <Button variant="outline" size="sm" onClick={onEdit} disabled={run.running}>
+                  Edit
+                </Button>
+              </>
+            )}
             <Button
               variant="ghost"
               size="sm"

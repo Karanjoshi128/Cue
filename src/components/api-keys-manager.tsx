@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { createApiKey, revokeApiKey } from "@/lib/actions";
+import { unwrap } from "@/lib/action-result";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -41,7 +42,7 @@ export function ApiKeysManager({ keys }: { keys: ApiKeyRow[] }) {
     const t = toast.loading("Creating key…");
     startTransition(async () => {
       try {
-        const { key } = await createApiKey(name.trim());
+        const { key } = unwrap(await createApiKey(name.trim()));
         setNewKey(key);
         setName("");
         toast.success("API key created", { id: t });

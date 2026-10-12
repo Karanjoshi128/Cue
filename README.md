@@ -72,6 +72,10 @@ operator managing many clients:
   MinIO) in Settings, under Media storage. Cue tests it live (write, public read, browser
   upload/CORS, cleanup) before saving; keys are encrypted with `TOKEN_ENC_KEY`. Workspaces
   without one use Cue's R2 bucket.
+- **Platform admin panel** (`/admin`) - for whoever runs Cue: every workspace, user, connected
+  account, post, API key and bucket in one place, with suspend, ban, plans and limits,
+  per-workspace feature switches, read-only "view as", a publishing pause, an announcement
+  banner and an audit log. See [`docs/admin-panel.md`](docs/admin-panel.md).
 - **Scheduling engine** - atomically claims due targets, publishes per account, retries up to
   3×, rolls each post up to an overall status, and writes a permanent `PostHistory` record.
 - **Publish adapters** - LinkedIn Posts API and Instagram Graph API (via **Instagram Login** -
@@ -192,6 +196,7 @@ cp .env.example .env
 | **LinkedIn**         | `LINKEDIN_CLIENT_ID` · `LINKEDIN_CLIENT_SECRET`                                               |
 | **Meta / Instagram** | `META_APP_ID` · `META_APP_SECRET`                                                             |
 | **App**              | `APP_URL`                                                                                     |
+| **Admin** (optional) | `PLATFORM_ADMIN_EMAILS` (comma-separated; defaults to the owner's email)                      |
 
 Generate the secrets:
 

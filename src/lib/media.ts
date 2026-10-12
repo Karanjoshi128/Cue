@@ -1,5 +1,12 @@
 import { ApiError } from "@/lib/api";
-import { getWorkspaceStorage, objectUrl, presignPut } from "@/lib/storage";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  cueMediaKey,
+  defaultStorage,
+  getWorkspaceStorage,
+  objectUrl,
+  presignPut,
+} from "@/lib/storage";
 import { limitProblem } from "@/lib/plans";
 
 // Ceiling so a presigned URL can't be used to dump arbitrarily large objects.
@@ -71,7 +78,8 @@ export async function presignMediaUpload(
     if (overLimit) throw new ApiError(403, overLimit);
   }
   return {
-    uploadUrl: await presignPut(storage, key, mime),
+    // The declared size is signed in, so it's also exactly what gets stored.
+    uploadUrl: await presignPut(storage, key, mime, 300, size),
     storageKey: key,
     url: objectUrl(storage, key),
     type,
@@ -79,4 +87,31 @@ export async function presignMediaUpload(
     title: isDoc ? filename : undefined,
     sizeBytes: size,
   };
+}
+
+/**
+ * The real size of each media item stored in Cue's own bucket, read from the
+ * bucket rather than taken from the caller, since it counts toward the plan.
+ * Items elsewhere (a workspace's own bucket) keep what they were given.
+ */
+export async function measureMedia<T extends { url: string; sizeBytes?: number }>(
+  items: T[] | undefined,
+): Promise<T[] | undefined> {
+  if (!items?.length) return items;
+  const cue = defaultStorage();
+  return Promise.all(
+    items.map(async (m) => {
+      const key = cueMediaKey(m.url);
+      if (!key) return m;
+      try {
+        const head = await cue.client.send(
+          new HeadObjectCommand({ Bucket: cue.bucket, Key: key }),
+        );
+        return { ...m, sizeBytes: head.ContentLength ?? undefined };
+      } catch {
+        // Not uploaded (or gone): nothing stored, so nothing to count.
+        return { ...m, sizeBytes: undefined };
+      }
+    }),
+  );
 }

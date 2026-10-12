@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { getAdapter } from "@/lib/platforms";
 import { ensureFreshAccessToken } from "@/lib/tokens";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
-import type { Post, PostTarget } from "@prisma/client";
+import { ApiError } from "@/lib/api";
+import type { Post, PostTarget, Prisma } from "@prisma/client";
 import type {
   PublishArticle,
   PublishPoll,
@@ -95,7 +96,7 @@ export async function publishDueTargets(now = new Date()): Promise<{
     // Claim the target (optimistic lock on status).
     const claim = await prisma.postTarget.updateMany({
       where: { id: target.id, status: "SCHEDULED" },
-      data: { status: "PROCESSING", attempts: { increment: 1 } },
+      data: { status: "PROCESSING", attempts: { increment: 1 }, claimedAt: new Date() },
     });
     if (claim.count === 0) continue; // someone else grabbed it
 
@@ -177,10 +178,7 @@ export async function publishDueTargets(now = new Date()): Promise<{
  * strands the post forever - it shows as "scheduled" and never publishes.
  */
 async function releaseStaleTargets(now: Date): Promise<void> {
-  const stale = {
-    status: "PROCESSING" as const,
-    post: { scheduledAt: { lt: new Date(now.getTime() - STALE_PROCESSING_MS) } },
-  };
+  const stale = staleProcessingWhere(now, STALE_PROCESSING_MS);
   const error = "A previous publish attempt did not finish.";
   const failed = await prisma.postTarget.findMany({
     where: { ...stale, attempts: { gte: MAX_ATTEMPTS } },
@@ -202,6 +200,24 @@ async function releaseStaleTargets(now: Date): Promise<void> {
   for (const postId of new Set(failed.map((t) => t.postId))) {
     await rollUpPostStatus(postId);
   }
+}
+
+/**
+ * PROCESSING targets claimed longer ago than `ageMs`. Judged by the claim
+ * time, not the due time: a post held back by a pause or a suspension is
+ * long overdue the moment a run picks it up, and must not look abandoned
+ * while that run is still uploading it. Targets claimed before claimedAt
+ * existed fall back to the due time.
+ */
+export function staleProcessingWhere(now: Date, ageMs: number): Prisma.PostTargetWhereInput {
+  const before = new Date(now.getTime() - ageMs);
+  return {
+    status: "PROCESSING",
+    OR: [
+      { claimedAt: { lt: before } },
+      { claimedAt: null, post: { scheduledAt: { lt: before } } },
+    ],
+  };
 }
 
 export async function rollUpPostStatus(postId: string): Promise<void> {
@@ -226,7 +242,7 @@ export async function rollUpPostStatus(postId: string): Promise<void> {
 
 /** Publish a single post immediately ("Post now"). */
 export async function publishPostNow(postId: string): Promise<void> {
-  if (await isPublishingPaused()) throw new Error(PAUSED_MESSAGE);
+  if (await isPublishingPaused()) throw new ApiError(503, PAUSED_MESSAGE);
   // Never bypass the approval gate - otherwise the post flips to PUBLISHING but
   // publishDueTargets skips it, leaving it stuck with no recovery in the UI.
   const post = await prisma.post.findUnique({
@@ -234,7 +250,8 @@ export async function publishPostNow(postId: string): Promise<void> {
     select: { approval: true },
   });
   if (post && post.approval !== "APPROVED") {
-    throw new Error(
+    throw new ApiError(
+      409,
       "This post is awaiting approval - approve it before publishing.",
     );
   }

@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api";
 import { cleanYoutubeTags, youtubeTagsProblem } from "@/lib/youtube-tags";
 import { limitProblem } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
+import { measureMedia } from "@/lib/media";
 
 // Post creation shared by the composer's server actions and POST /api/v1/posts.
 //
@@ -217,6 +218,11 @@ export function scheduledAtFor(data: PostData): Date | null {
   return data.action === "now" ? new Date() : null;
 }
 
+/** The post's data with media sizes read from storage (see measureMedia). */
+export async function withMeasuredMedia(data: PostData): Promise<PostData> {
+  return { ...data, media: await measureMedia(data.media) };
+}
+
 export function mediaCreate(data: PostData) {
   return data.media?.length
     ? {
@@ -307,6 +313,7 @@ export async function createPostForUser(
   }
   const overLimit = await limitProblem(user.workspaceId, "postsPerMonth");
   if (overLimit) throw new ApiError(403, overLimit);
+  const measured = await withMeasuredMedia(data);
 
   let post: Post;
   try {
@@ -321,7 +328,7 @@ export async function createPostForUser(
         link: data.link ?? undefined,
         poll: data.poll ?? undefined,
         scheduledAt: scheduledAtFor(data),
-        media: mediaCreate(data),
+        media: mediaCreate(measured),
         targets: { create: buildTargets(accounts, data) },
       },
     });

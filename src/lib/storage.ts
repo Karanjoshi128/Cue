@@ -12,6 +12,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { StorageConfig, StorageProvider } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
+import { OPTIMIZED_MEDIA_HOSTS } from "@/lib/media-hosts";
 
 // Media storage. Every workspace uploads to Cue's default Cloudflare R2 bucket
 // (the R2_* env vars) unless an admin has connected their own bucket in
@@ -133,19 +134,46 @@ export async function getWorkspaceStorage(
   return makeTarget(settingsFromConfig(cfg));
 }
 
+/**
+ * Every base URL Cue's own bucket has been served from: the current
+ * R2_PUBLIC_URL plus the known media hosts. Stored media URLs are absolute,
+ * so older rows can carry an older host.
+ */
+export function cueMediaBases(): string[] {
+  return [
+    ...new Set(
+      [
+        process.env.R2_PUBLIC_URL?.replace(/\/+$/, ""),
+        ...OPTIMIZED_MEDIA_HOSTS.map((h) => `https://${h}`),
+      ].filter((b): b is string => !!b),
+    ),
+  ];
+}
+
+/** The object key, when the URL is in Cue's own bucket; otherwise null. */
+export function cueMediaKey(url: string): string | null {
+  for (const base of cueMediaBases()) {
+    if (url.startsWith(`${base}/`)) return decodeURIComponent(url.slice(base.length + 1));
+  }
+  return null;
+}
+
 export function objectUrl(target: StorageTarget, key: string): string {
   return `${target.publicUrl}/${key}`;
 }
 
 /**
- * A short-lived URL the browser can PUT one object to. Only `host` is signed,
- * so the uploader may send any Content-Type.
+ * A short-lived URL the browser can PUT one object to. Content-Type isn't
+ * signed, so the uploader may send any. With `contentLength`, the length is
+ * signed: the upload must be exactly the size that was declared (and checked
+ * against the plan), or the bucket refuses it.
  */
 export function presignPut(
   target: StorageTarget,
   key: string,
   contentType: string,
   expiresIn = 300,
+  contentLength?: number,
 ): Promise<string> {
   return getSignedUrl(
     target.client,
@@ -153,8 +181,11 @@ export function presignPut(
       Bucket: target.bucket,
       Key: key,
       ContentType: contentType,
+      ContentLength: contentLength,
     }),
-    { expiresIn },
+    contentLength === undefined
+      ? { expiresIn }
+      : { expiresIn, signableHeaders: new Set(["content-length"]) },
   );
 }
 

@@ -9,6 +9,7 @@ import {
   updateMemberRole,
   removeMember,
 } from "@/lib/actions";
+import { unwrap } from "@/lib/action-result";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -69,7 +70,7 @@ export function TeamManager({
   function invite() {
     if (!email.trim()) return toast.error("Enter an email");
     run(async () => {
-      await inviteMember({ email: email.trim(), role });
+      unwrap(await inviteMember({ email: email.trim(), role }));
       setEmail("");
       setRole("MANAGER");
     }, "Invite added");

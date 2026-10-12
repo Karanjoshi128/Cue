@@ -5,7 +5,7 @@ import { requirePlatformAdmin } from "@/lib/admin-guard";
 import { getWorkspaceUsage } from "@/lib/plans";
 import { getPlatformSettings } from "@/lib/platform-settings";
 import { platformAdminEmails } from "@/lib/platform-admin";
-import { MAX_ATTEMPTS } from "@/lib/publish";
+import { MAX_ATTEMPTS, staleProcessingWhere } from "@/lib/publish";
 
 // Read side of the platform admin panel. Every loader checks for a platform
 // admin itself (not just the layout), and selects fields explicitly so tokens
@@ -16,6 +16,8 @@ const DAY = 24 * 60 * MIN;
 export const PAGE_SIZE = 25;
 /** A due post the publisher hasn't taken after this long is "overdue". */
 const OVERDUE_AFTER_MS = 10 * MIN;
+/** A claimed target older than this belongs to a run that died. */
+export const STUCK_AFTER_MS = 10 * MIN;
 /** The publisher runs every 5 minutes; silence past this is a problem. */
 export const HEARTBEAT_STALE_MS = 15 * MIN;
 
@@ -454,11 +456,9 @@ function overdueWhere(now: Date, publishable: boolean): Prisma.PostTargetWhereIn
   };
 }
 
+/** Claimed over 10 minutes ago; a publisher run is cut off after 5. */
 function stuckWhere(now: Date): Prisma.PostTargetWhereInput {
-  return {
-    status: "PROCESSING",
-    post: { scheduledAt: { lt: new Date(now.getTime() - OVERDUE_AFTER_MS) } },
-  };
+  return staleProcessingWhere(now, STUCK_AFTER_MS);
 }
 
 const targetRowSelect = {

@@ -1,6 +1,6 @@
 import type { Plan, Workspace } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { OPTIMIZED_MEDIA_HOSTS } from "@/lib/media-hosts";
+import { cueMediaBases } from "@/lib/storage";
 
 // Plans, limits and per-workspace feature switches. The platform admin panel
 // assigns a plan and switches features off; everything else in the app asks
@@ -116,17 +116,6 @@ function startOfMonthUtc(now = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
-/** Media rows stored in Cue's own bucket (not a workspace's own one). */
-function cueHostedMedia() {
-  const bases = new Set(
-    [
-      process.env.R2_PUBLIC_URL?.replace(/\/+$/, ""),
-      ...OPTIMIZED_MEDIA_HOSTS.map((h) => `https://${h}`),
-    ].filter(Boolean) as string[],
-  );
-  return { OR: [...bases].map((b) => ({ url: { startsWith: `${b}/` } })) };
-}
-
 export interface WorkspaceUsage {
   clients: number;
   members: number;
@@ -146,13 +135,19 @@ const USAGE: Record<LimitKey, (workspaceId: string) => Promise<number>> = {
     }),
   apiKeys: (workspaceId) =>
     prisma.apiKey.count({ where: { workspaceId, revokedAt: null } }),
-  storageBytes: async (workspaceId) =>
-    (
-      await prisma.mediaAsset.aggregate({
-        _sum: { sizeBytes: true },
-        where: { post: { client: { workspaceId } }, ...cueHostedMedia() },
-      })
-    )._sum.sizeBytes ?? 0,
+  // Only what's in Cue's own bucket. Summed as bigint: an Int sum would
+  // overflow once a workspace passes about 2 GB.
+  storageBytes: async (workspaceId) => {
+    const patterns = cueMediaBases().map((b) => `${b}/%`);
+    if (!patterns.length) return 0;
+    const [row] = await prisma.$queryRaw<{ total: bigint }[]>`
+      SELECT COALESCE(SUM(m."sizeBytes"), 0)::bigint AS total
+      FROM "MediaAsset" m
+      JOIN "Post" p ON p.id = m."postId"
+      JOIN "Client" c ON c.id = p."clientId"
+      WHERE c."workspaceId" = ${workspaceId} AND m.url LIKE ANY(${patterns})`;
+    return Number(row?.total ?? 0);
+  },
 };
 
 export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceUsage> {

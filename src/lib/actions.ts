@@ -2,14 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuth, requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
-import { generateApiKey } from "@/lib/api";
+import { ApiError, generateApiKey } from "@/lib/api";
+import type { ActionResult } from "@/lib/action-result";
 import { encrypt } from "@/lib/crypto";
 import { limitProblem, workspaceHasFeature } from "@/lib/plans";
+import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
 import {
   BROWSER_TEST_KEY,
@@ -26,9 +28,27 @@ import {
   resolveAccounts,
   scheduledAtFor,
   statusFor,
+  withMeasuredMedia,
   youtubeColumns,
   type PostInput,
 } from "@/lib/posts";
+
+/**
+ * Runs an action body and returns its failure as a value when it's one the
+ * user should read (ApiError or a validation error), so the message survives
+ * a production build. Anything unexpected is rethrown and stays private.
+ */
+async function toResult<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (e) {
+    if (e instanceof ApiError) return { ok: false, error: e.message };
+    if (e instanceof ZodError) {
+      return { ok: false, error: e.issues[0]?.message ?? "Check the form." };
+    }
+    throw e;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Workspace
@@ -88,16 +108,19 @@ const inviteSchema = z.object({
   role: z.enum(["ADMIN", "MANAGER"]),
 });
 
-export async function inviteMember(input: z.infer<typeof inviteSchema>) {
+export async function inviteMember(
+  input: z.infer<typeof inviteSchema>,
+): Promise<ActionResult> {
+  return toResult(async () => {
   const admin = await requireAdmin();
   const data = inviteSchema.parse(input);
   const email = data.email.toLowerCase();
 
   // Email is globally unique - a person can belong to one workspace.
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new Error("That email already has an account.");
+  if (existing) throw new ApiError(409, "That email already has an account.");
   const overLimit = await limitProblem(admin.workspaceId, "members");
-  if (overLimit) throw new Error(overLimit);
+  if (overLimit) throw new ApiError(403, overLimit);
 
   // Pre-create the member row in THIS workspace so their role + tenant are set
   // when they first sign in (auth.ts returns the existing row on sign-in, so
@@ -111,6 +134,7 @@ export async function inviteMember(input: z.infer<typeof inviteSchema>) {
     },
   });
   revalidatePath("/settings");
+  });
 }
 
 export async function updateMemberRole(id: string, role: "ADMIN" | "MANAGER") {
@@ -167,14 +191,17 @@ const apiKeyNameSchema = z.string().trim().min(1).max(60);
  * the plaintext exactly once. Only its hash is stored, so if it's lost the
  * answer is to revoke it and make another - nobody can recover it.
  */
-export async function createApiKey(name: string): Promise<{ key: string }> {
+export async function createApiKey(
+  name: string,
+): Promise<ActionResult<{ key: string }>> {
+  return toResult(async () => {
   const admin = await requireAdmin();
   const label = apiKeyNameSchema.parse(name);
   if (!(await workspaceHasFeature(admin.workspaceId, "api"))) {
-    throw new Error("API access is turned off for this workspace.");
+    throw new ApiError(403, "API access is turned off for this workspace.");
   }
   const overLimit = await limitProblem(admin.workspaceId, "apiKeys");
-  if (overLimit) throw new Error(overLimit);
+  if (overLimit) throw new ApiError(403, overLimit);
   const { key, prefix, hash } = generateApiKey();
 
   await prisma.apiKey.create({
@@ -188,6 +215,7 @@ export async function createApiKey(name: string): Promise<{ key: string }> {
   });
   revalidatePath("/settings");
   return { key };
+  });
 }
 
 /** Revokes immediately. Kept rather than deleted, so the list shows history. */
@@ -352,15 +380,17 @@ const clientSchema = z.object({
 });
 
 export async function createClient(input: z.infer<typeof clientSchema>) {
-  const user = await requireUser();
-  const data = clientSchema.parse(input);
-  const overLimit = await limitProblem(user.workspaceId, "clients");
-  if (overLimit) throw new Error(overLimit);
-  const client = await prisma.client.create({
-    data: { ...data, workspaceId: user.workspaceId },
+  return toResult(async () => {
+    const user = await requireUser();
+    const data = clientSchema.parse(input);
+    const overLimit = await limitProblem(user.workspaceId, "clients");
+    if (overLimit) throw new ApiError(403, overLimit);
+    const client = await prisma.client.create({
+      data: { ...data, workspaceId: user.workspaceId },
+    });
+    revalidatePath("/clients");
+    return client;
   });
-  revalidatePath("/clients");
-  return client;
 }
 
 export async function updateClient(
@@ -411,32 +441,43 @@ export async function disconnectAccount(accountId: string) {
 // revalidation.
 
 export async function savePost(input: PostInput) {
-  const user = await requireUser();
-  const data = postSchema.parse(input);
-  const { post } = await createPostForUser(user, data);
+  return toResult(async () => {
+    const user = await requireUser();
+    const data = postSchema.parse(input);
+    const { post } = await createPostForUser(user, data);
 
-  revalidatePath("/queue");
-  revalidatePath("/calendar");
-  revalidatePath("/dashboard");
-  return post;
+    revalidatePath("/queue");
+    revalidatePath("/calendar");
+    revalidatePath("/dashboard");
+    return post;
+  });
 }
 
-export async function updatePost(id: string, input: PostInput) {
+export async function updatePost(
+  id: string,
+  input: PostInput,
+): Promise<ActionResult> {
+  return toResult(async () => {
   const user = await requireUser();
   const data = postSchema.parse(input);
 
   const existing = await prisma.post.findFirst({
     where: { id, client: { workspaceId: user.workspaceId } },
   });
-  if (!existing) throw new Error("Post not found.");
+  if (!existing) throw new ApiError(404, "Post not found.");
   // Only drafts and not-yet-published scheduled posts can be edited.
   if (existing.status !== "DRAFT" && existing.status !== "SCHEDULED") {
-    throw new Error("Only drafts and scheduled posts can be edited.");
+    throw new ApiError(409, "Only drafts and scheduled posts can be edited.");
   }
 
   // Same account + platform rules as creating a post.
   const accounts = await resolveAccounts(user, data);
   assertPostIsPublishable(accounts, data);
+  // Before the edit is written: a paused "now" must leave the post as it was.
+  if (data.action === "now" && (await isPublishingPaused())) {
+    throw new ApiError(503, PAUSED_MESSAGE);
+  }
+  const measured = await withMeasuredMedia(data);
 
   // Replace media + targets wholesale - safe because nothing has published yet.
   await prisma.$transaction([
@@ -455,7 +496,7 @@ export async function updatePost(id: string, input: PostInput) {
         link: data.link ?? Prisma.DbNull,
         poll: data.poll ?? Prisma.DbNull,
         scheduledAt: scheduledAtFor(data),
-        media: mediaCreate(data),
+        media: mediaCreate(measured),
         targets: { create: buildTargets(accounts, data) },
       },
     }),
@@ -468,6 +509,7 @@ export async function updatePost(id: string, input: PostInput) {
   revalidatePath("/queue");
   revalidatePath("/calendar");
   revalidatePath("/dashboard");
+  });
 }
 
 export async function deletePost(id: string) {
@@ -529,17 +571,21 @@ export async function deleteComment(id: string) {
   revalidatePath("/queue");
 }
 
-export async function retryPost(id: string) {
-  const user = await requireUser();
-  const owned = await prisma.post.findFirst({
-    where: { id, client: { workspaceId: user.workspaceId } },
-    select: { id: true },
+export async function retryPost(id: string): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    const owned = await prisma.post.findFirst({
+      where: { id, client: { workspaceId: user.workspaceId } },
+      select: { id: true },
+    });
+    if (!owned) throw new ApiError(404, "Post not found.");
+    // Before resetting anything, so a paused retry leaves the post as it was.
+    if (await isPublishingPaused()) throw new ApiError(503, PAUSED_MESSAGE);
+    await prisma.postTarget.updateMany({
+      where: { postId: id, status: "FAILED" },
+      data: { status: "SCHEDULED", attempts: 0, error: null },
+    });
+    await publishPostNow(id);
+    revalidatePath("/queue");
   });
-  if (!owned) throw new Error("Post not found.");
-  await prisma.postTarget.updateMany({
-    where: { postId: id, status: "FAILED" },
-    data: { status: "SCHEDULED", attempts: 0, error: null },
-  });
-  await publishPostNow(id);
-  revalidatePath("/queue");
 }

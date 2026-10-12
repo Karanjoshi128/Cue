@@ -223,6 +223,7 @@ model PostTarget {
   permalink      String?
   error          String?
   attempts       Int           @default(0)
+  claimedAt      DateTime? // when a publisher run last took it; how "stuck" is judged
 }
 
 enum TargetStatus {

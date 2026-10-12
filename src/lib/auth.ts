@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { isPlatformAdminEmail, readViewAsCookie } from "@/lib/platform-admin";
+import { ApiError } from "@/lib/api";
 import type { User } from "@prisma/client";
 
 export interface ViewAsState {
@@ -166,10 +167,23 @@ const READ_ONLY_MESSAGE =
 export async function requireUser(): Promise<User> {
   const auth = await getAuth();
   if (!auth.user) throw new Error("UNAUTHENTICATED");
-  if (auth.viewAs && (await headers()).has("next-action")) {
-    throw new Error(READ_ONLY_MESSAGE);
+  if (auth.viewAs && (await isActionRequest())) {
+    throw new ApiError(403, READ_ONLY_MESSAGE);
   }
   return auth.user;
+}
+
+/**
+ * A Server Action call, by either route Next accepts: the Next-Action header
+ * (client calls), or a form post (a form submitted before the page has
+ * hydrated carries the action in its body, with no header). Page renders are
+ * GETs and carry neither.
+ */
+async function isActionRequest(): Promise<boolean> {
+  const h = await headers();
+  if (h.has("next-action")) return true;
+  const type = h.get("content-type") ?? "";
+  return type.includes("multipart/form-data") || type.includes("application/x-www-form-urlencoded");
 }
 
 /**
@@ -180,7 +194,7 @@ export async function requireUser(): Promise<User> {
 export async function requireWritableUser(): Promise<User> {
   const auth = await getAuth();
   if (!auth.user) throw new Error("UNAUTHENTICATED");
-  if (auth.viewAs) throw new Error(READ_ONLY_MESSAGE);
+  if (auth.viewAs) throw new ApiError(403, READ_ONLY_MESSAGE);
   return auth.user;
 }
 

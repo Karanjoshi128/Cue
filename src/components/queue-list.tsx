@@ -19,6 +19,7 @@ import {
   retryPost,
   setApproval,
 } from "@/lib/actions";
+import { unwrap } from "@/lib/action-result";
 import { POST_FILTERS, type PostFilter } from "@/lib/post-filters";
 import { zoned } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
@@ -205,7 +206,7 @@ export function QueueList({
     const t = toast.loading("Retrying…");
     startTransition(async () => {
       try {
-        await retryPost(id);
+        unwrap(await retryPost(id));
         toast.success("Retrying…", { id: t });
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Retry failed", { id: t });

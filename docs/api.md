@@ -56,8 +56,10 @@ Every error has the same body:
 | --- | --- |
 | 400 | Invalid body, query or header. Read `error` (and `details`). |
 | 401 | Missing, unknown or revoked API key. |
+| 403 | Allowed key, but refused: the workspace is suspended, API access is switched off for it, or a plan limit would be exceeded. `error` says which. |
 | 404 | Not found, **or belongs to another workspace**. The two are deliberately indistinguishable. |
 | 409 | The post's state doesn't allow this (for example, deleting a published post). |
+| 503 | `action: "now"` while Cue has publishing paused. Schedule the post instead; it goes out when publishing resumes. |
 | 500 | Unexpected server error. The body never includes internals; safe to retry with the same `Idempotency-Key`. |
 
 ---
@@ -130,12 +132,15 @@ curl -s -X POST "$CUE/media/presign" \
   "uploadUrl": "https://<bucket endpoint>/posts/2f0c...e1.mp4?X-Amz-Signature=...",
   "storageKey": "posts/2f0c...e1.mp4",
   "url": "https://.../posts/2f0c...e1.mp4",
-  "type": "VIDEO"
+  "type": "VIDEO",
+  "sizeBytes": 31457280
 }
 ```
 
 Then `PUT` the raw bytes to `uploadUrl`, with the **same `Content-Type`** you
-declared, so the file is served with the right type:
+declared, so the file is served with the right type. The link is locked to the
+`size` you declared: the body must be exactly that many bytes, or storage
+answers `403`. Most HTTP clients set `Content-Length` from the file for you.
 
 ```bash
 curl -s -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @short.mp4
@@ -143,7 +148,13 @@ curl -s -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @short.m
 
 `type` is derived from the content type: `VIDEO`, `IMAGE`, or `DOCUMENT` (PDF,
 PPT, DOC). Documents also get a `title` (the original filename). Pass
-`{ type, url, storageKey, title? }` from this response as a `media` item.
+`{ type, url, storageKey, title?, sizeBytes }` from this response as a `media`
+item; `sizeBytes` is optional. For files in Cue's storage, Cue reads the real
+size from storage when the post is saved, and that is what counts toward the
+workspace's storage allowance.
+
+On a plan with a storage allowance, a presign that would take Cue-hosted media
+past it is refused with `403`. A workspace's own bucket isn't counted.
 
 ### `POST /posts`
 

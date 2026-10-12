@@ -8,11 +8,12 @@ const DEFAULT_ADMINS = ["joshikaran0008@gmail.com"];
 
 /**
  * Platform admins: PLATFORM_ADMIN_EMAILS (comma-separated) when set, else the
- * default above. They get /admin; nobody else can tell it exists.
+ * default above. Set but empty means nobody: the panel is switched off. They
+ * get /admin; nobody else can tell it exists.
  */
 export function platformAdminEmails(): string[] {
   const raw = process.env.PLATFORM_ADMIN_EMAILS;
-  return (raw ? raw.split(",") : DEFAULT_ADMINS)
+  return (raw !== undefined ? raw.split(",") : DEFAULT_ADMINS)
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 }

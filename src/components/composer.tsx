@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Platform } from "@prisma/client";
 import { savePost, updatePost } from "@/lib/actions";
+import { unwrap } from "@/lib/action-result";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -563,8 +564,8 @@ export function Composer({
     );
     startTransition(async () => {
       try {
-        if (editing && initial) await updatePost(initial.id, payload);
-        else await savePost(payload);
+        if (editing && initial) unwrap(await updatePost(initial.id, payload));
+        else unwrap(await savePost(payload));
         toast.success(
           action === "now"
             ? "Publishing…"

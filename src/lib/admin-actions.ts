@@ -15,8 +15,9 @@ import {
 } from "@/lib/platform-admin";
 import { isFeatureKey, PLANS } from "@/lib/plans";
 import { updatePlatformSettings } from "@/lib/platform-settings";
-import { MAX_ATTEMPTS, rollUpPostStatus } from "@/lib/publish";
-import { defaultStorage, deleteObjects, settingsFromConfig } from "@/lib/storage";
+import { MAX_ATTEMPTS, rollUpPostStatus, staleProcessingWhere } from "@/lib/publish";
+import { STUCK_AFTER_MS } from "@/lib/admin-data";
+import { cueMediaKey, defaultStorage, deleteObjects, settingsFromConfig } from "@/lib/storage";
 import { testStorage, type StorageTestResult } from "@/lib/storage-config";
 
 // Write side of the platform admin panel. Every action re-checks that the
@@ -143,11 +144,12 @@ export async function deleteWorkspace(workspaceId: string, confirmName: string, 
       return { ok: false, error: "A platform admin belongs to this workspace. Remove them from it first." };
     }
 
-    const base = defaultStorage().publicUrl;
+    // Every object it kept in Cue's own bucket, whichever host it was served from.
     const media = await prisma.mediaAsset.findMany({
-      where: { post: { client: { workspaceId: ws.id } }, url: { startsWith: `${base}/` } },
-      select: { storageKey: true },
+      where: { post: { client: { workspaceId: ws.id } } },
+      select: { url: true },
     });
+    const keys = [...new Set(media.map((m) => cueMediaKey(m.url)).filter((k): k is string => !!k))];
     const counts = await prisma.$transaction(async (tx) => {
       const history = await tx.postHistory.deleteMany({ where: { workspaceId: ws.id } });
       // Clients cascade to their posts, targets, media rows and comments.
@@ -156,7 +158,7 @@ export async function deleteWorkspace(workspaceId: string, confirmName: string, 
       // API keys and the storage config cascade with the workspace.
       await tx.workspace.delete({ where: { id: ws.id } });
       return { history: history.count, clients: clients.count, users: users.count };
-    });
+    }, { maxWait: 10_000, timeout: 120_000 });
     await audit({
       actor,
       action: "workspace.delete",
@@ -164,11 +166,11 @@ export async function deleteWorkspace(workspaceId: string, confirmName: string, 
       targetId: ws.id,
       workspaceId: ws.id,
       reason: why,
-      details: { name: ws.name, ...counts, mediaObjects: media.length },
+      details: { name: ws.name, ...counts, mediaObjects: keys.length },
     });
     // After the commit, and best effort: a stray object is harmless, a
     // half-deleted workspace is not.
-    await deleteObjects(defaultStorage(), media.map((m) => m.storageKey)).catch((e) =>
+    await deleteObjects(defaultStorage(), keys).catch((e) =>
       console.error("[admin] media cleanup failed:", e),
     );
     revalidatePath("/admin", "layout");
@@ -362,7 +364,12 @@ export async function cancelTarget(targetId: string, reason: string): Promise<Ad
       data: { status: "FAILED", attempts: MAX_ATTEMPTS, error: `Cancelled by Cue support: ${why}` },
     });
     if (res.count === 0) return { ok: false, error: "It started publishing just now, so it couldn't be cancelled." };
-    await rollUpPostStatus(t.postId);
+    // Only settle the post once nothing else is waiting: a post with other
+    // accounts still to go keeps its status (and stays editable if future).
+    const pending = await prisma.postTarget.count({
+      where: { postId: t.postId, status: { in: ["SCHEDULED", "PROCESSING"] } },
+    });
+    if (pending === 0) await rollUpPostStatus(t.postId);
     await audit({ actor, action: "target.cancel", targetType: "target", targetId: t.id, workspaceId: t.post.client.workspaceId, reason: why, details: { postId: t.postId, platform: t.platform } });
     return done("Cancelled.");
   } catch (e) {
@@ -377,10 +384,14 @@ export async function releaseStuckTarget(targetId: string, reason?: string): Pro
   try {
     const t = await targetForAction(targetId);
     if (t.status !== "PROCESSING") return { ok: false, error: "It isn't stuck any more." };
-    await prisma.postTarget.updateMany({
-      where: { id: t.id, status: "PROCESSING" },
+    // Releasing one a live run still holds would publish it twice.
+    const res = await prisma.postTarget.updateMany({
+      where: { id: t.id, ...staleProcessingWhere(new Date(), STUCK_AFTER_MS) },
       data: { status: "SCHEDULED", error: "Released by Cue support after a publish attempt stalled." },
     });
+    if (res.count === 0) {
+      return { ok: false, error: "A publisher run picked it up under 10 minutes ago and may still be uploading. Try again later." };
+    }
     await rollUpPostStatus(t.postId);
     await audit({ actor, action: "target.release", targetType: "target", targetId: t.id, workspaceId: t.post.client.workspaceId, reason: optionalReason.parse(reason), details: { postId: t.postId, platform: t.platform } });
     return done("Released. The publisher retries it within 5 minutes.");

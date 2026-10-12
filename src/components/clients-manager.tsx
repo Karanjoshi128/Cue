@@ -11,6 +11,7 @@ import {
   deleteClient,
   disconnectAccount,
 } from "@/lib/actions";
+import { unwrap } from "@/lib/action-result";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -203,7 +204,7 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
           await updateClient(editingId, { name, color });
           toast.success("Client updated", { id: t });
         } else {
-          await createClient({ name, color });
+          unwrap(await createClient({ name, color }));
           toast.success("Client added", { id: t });
         }
         setFormOpen(false);

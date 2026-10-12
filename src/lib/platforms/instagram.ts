@@ -6,6 +6,15 @@ import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
 // endpoints (/media, /media_publish) live under this host.
 const GRAPH = "https://graph.instagram.com/v21.0";
 
+// How long to wait for a media container to finish before publishing it.
+// Images are ready within seconds. A video is transcoded first, and a one-minute
+// Reel regularly takes longer than 30 s ("IG media processing timed out" on every
+// attempt); Meta's guidance is to keep polling for up to five minutes. 180 s
+// keeps a whole publish inside the 300 s function limit, since publish.ts stops
+// claiming new targets once a run has used 200 s.
+const IMAGE_WAIT = { attempts: 10, intervalMs: 3_000 };
+const VIDEO_WAIT = { attempts: 30, intervalMs: 6_000 };
+
 /**
  * Publishes to Instagram via the Graph API content-publishing flow.
  * `externalId` is the IG professional account id; `accessToken` is its token.
@@ -22,6 +31,7 @@ export const instagramAdapter: PlatformAdapter = {
     }
 
     let creationId: string;
+    let isVideo = false;
 
     if (images.length >= 2) {
       // Carousel: an item container per image, then a parent CAROUSEL container.
@@ -67,6 +77,7 @@ export const instagramAdapter: PlatformAdapter = {
         access_token: accessToken,
       });
       if (media.type === "VIDEO") {
+        isVideo = true;
         containerParams.set("media_type", "REELS");
         containerParams.set("video_url", media.url);
       } else {
@@ -88,7 +99,11 @@ export const instagramAdapter: PlatformAdapter = {
     //    video, but images can also race ahead (IG fetches the remote image
     //    asynchronously) and return code 9007 "media is not ready" - so poll
     //    for both. waitForContainer returns as soon as status is FINISHED.
-    await waitForContainer(creationId, accessToken);
+    await waitForContainer(
+      creationId,
+      accessToken,
+      isVideo ? VIDEO_WAIT : IMAGE_WAIT,
+    );
 
     const publishParams = new URLSearchParams({
       creation_id: creationId,
@@ -126,18 +141,28 @@ export const instagramAdapter: PlatformAdapter = {
 async function waitForContainer(
   creationId: string,
   accessToken: string,
-  attempts = 10,
+  { attempts, intervalMs } = IMAGE_WAIT,
 ): Promise<void> {
+  let last = "no status yet";
   for (let i = 0; i < attempts; i++) {
     const res = await fetch(
-      `${GRAPH}/${creationId}?fields=status_code&access_token=${accessToken}`,
+      `${GRAPH}/${creationId}?fields=status_code,status&access_token=${accessToken}`,
     );
     if (res.ok) {
-      const { status_code } = (await res.json()) as { status_code: string };
+      const { status_code, status } = (await res.json()) as {
+        status_code: string;
+        status?: string;
+      };
       if (status_code === "FINISHED") return;
-      if (status_code === "ERROR") throw new Error("IG media processing error");
+      // `status` carries Instagram's reason, e.g. an unsupported video format.
+      if (status_code === "ERROR") {
+        throw new Error(`IG media processing error${status ? `: ${status}` : ""}`);
+      }
+      last = status_code;
     }
-    await new Promise((r) => setTimeout(r, 3000));
+    await new Promise((r) => setTimeout(r, intervalMs));
   }
-  throw new Error("IG media processing timed out");
+  throw new Error(
+    `IG media processing timed out after ${Math.round((attempts * intervalMs) / 1000)} s (${last})`,
+  );
 }

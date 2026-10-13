@@ -13,6 +13,7 @@ import { encrypt } from "@/lib/crypto";
 import { limitProblem, workspaceHasFeature } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
+import { removeUnusedMedia } from "@/lib/media";
 import {
   BROWSER_TEST_KEY,
   settingsFromInput,
@@ -416,7 +417,12 @@ export async function deleteClient(id: string) {
     select: { id: true },
   });
   if (!owned) throw new Error("Client not found.");
+  const media = await prisma.mediaAsset.findMany({
+    where: { post: { clientId: id } },
+    select: { url: true },
+  });
   await prisma.client.delete({ where: { id } });
+  await removeUnusedMedia(media.map((m) => m.url));
   revalidatePath("/clients");
 }
 
@@ -516,10 +522,11 @@ export async function deletePost(id: string) {
   const user = await requireUser();
   const owned = await prisma.post.findFirst({
     where: { id, client: { workspaceId: user.workspaceId } },
-    select: { id: true },
+    select: { id: true, media: { select: { url: true } } },
   });
   if (!owned) throw new Error("Post not found.");
   await prisma.post.delete({ where: { id } });
+  await removeUnusedMedia(owned.media.map((m) => m.url));
   revalidatePath("/queue");
   revalidatePath("/calendar");
 }

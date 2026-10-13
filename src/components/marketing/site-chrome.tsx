@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ArrowRight } from "lucide-react";
 
-export const CONTACT_EMAIL = "joshikaran0008@gmail.com";
+export const CONTACT_EMAIL = "karan@trycue.space";
 
 const NAV = [
   { href: "/#product", label: "Product" },

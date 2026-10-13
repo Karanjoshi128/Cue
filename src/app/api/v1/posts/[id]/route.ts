@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ApiError, apiErrorResponse, requireApiUser } from "@/lib/api";
 import { apiPostDetailSelect } from "@/lib/posts";
+import { removeUnusedMedia } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,10 @@ export async function DELETE(req: Request, { params }: Ctx) {
     // cron could otherwise claim the post between the two. A SCHEDULED post
     // can already have a target mid-upload (PROCESSING), so that's excluded
     // too - deleting under it would strand a live upload.
+    const media = await prisma.mediaAsset.findMany({
+      where: { postId: id, post: { client: { workspaceId: user.workspaceId } } },
+      select: { url: true },
+    });
     const { count } = await prisma.post.deleteMany({
       where: {
         id,
@@ -49,7 +54,10 @@ export async function DELETE(req: Request, { params }: Ctx) {
         targets: { none: { status: "PROCESSING" } },
       },
     });
-    if (count === 1) return NextResponse.json({ id, deleted: true });
+    if (count === 1) {
+      await removeUnusedMedia(media.map((m) => m.url));
+      return NextResponse.json({ id, deleted: true });
+    }
 
     // Nothing was deleted - find out why, to answer 404 vs 409.
     const post = await prisma.post.findFirst({

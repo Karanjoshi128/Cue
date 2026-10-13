@@ -1,8 +1,10 @@
 import { ApiError } from "@/lib/api";
 import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { prisma } from "@/lib/prisma";
 import {
   cueMediaKey,
   defaultStorage,
+  deleteObjects,
   getWorkspaceStorage,
   objectUrl,
   presignPut,
@@ -114,4 +116,42 @@ export async function measureMedia<T extends { url: string; sizeBytes?: number }
       }
     }),
   );
+}
+
+/**
+ * Removes files from Cue's own bucket once no post uses them. Call it after
+ * deleting posts, with the URLs their media rows had, so the privacy policy's
+ * "deleting a post or client removes its media" holds.
+ *
+ * Media URLs come from the caller (the token API accepts any), so two posts
+ * can share a file, and a crafted post must never delete a file another post
+ * or workspace still uses: a file goes only when no remaining row points at
+ * it. Files in a workspace's own bucket are left to that workspace. Best
+ * effort, like the admin workspace delete: a stray object is harmless, a
+ * failed action is not.
+ */
+export async function removeUnusedMedia(urls: string[]): Promise<void> {
+  const keys = [
+    ...new Set(urls.map(cueMediaKey).filter((k): k is string => !!k)),
+  ];
+  if (!keys.length) return;
+  try {
+    // One object can be served from more than one host, so match on the key.
+    const used = new Set<string | null>();
+    for (let i = 0; i < keys.length; i += 200) {
+      const rows = await prisma.mediaAsset.findMany({
+        where: {
+          OR: keys.slice(i, i + 200).map((k) => ({ url: { endsWith: `/${k}` } })),
+        },
+        select: { url: true },
+      });
+      for (const r of rows) used.add(cueMediaKey(r.url));
+    }
+    await deleteObjects(
+      defaultStorage(),
+      keys.filter((k) => !used.has(k)),
+    );
+  } catch (e) {
+    console.error("[media] cleanup failed:", e);
+  }
 }

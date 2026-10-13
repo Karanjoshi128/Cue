@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { LegalShell } from "@/components/marketing/site-chrome";
+import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -10,9 +10,8 @@ export const metadata: Metadata = {
 // Operating entity: Karan Joshi (individual). Governing law: India.
 // Describes Cue's actual data practices for Meta / LinkedIn / Google review.
 // The YouTube API Services section is required for Google OAuth verification.
-const UPDATED = "October 11, 2026";
+const UPDATED = "October 13, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
-const CONTACT = "joshikaran0008@gmail.com";
 
 export default function PrivacyPage() {
   return (
@@ -41,9 +40,12 @@ export default function PrivacyPage() {
                 When you connect a LinkedIn, Instagram, or YouTube account, we
                 receive and store an access token (and, where provided, a
                 refresh token) plus that account&apos;s platform id, username,
-                and display name. Tokens are{" "}
+                and display name. When you connect a LinkedIn Company Page, we
+                receive the list of Pages you administer so you can choose one,
+                and store only the chosen Page&apos;s id and name. Tokens are{" "}
                 <strong className="text-foreground">encrypted at rest</strong>{" "}
-                and used only to publish on your behalf.
+                and used only to identify the connected account, keep the
+                connection active, and publish on your behalf.
               </li>
               <li>
                 <strong className="text-foreground">Content you create.</strong>{" "}
@@ -88,21 +90,39 @@ export default function PrivacyPage() {
               >
                 Meta Platform Terms
               </a>{" "}
-              and Developer Policies. We also rely on these processors:
+              and Developer Policies, and our use of LinkedIn&apos;s APIs
+              complies with the{" "}
+              <a
+                className="text-primary underline"
+                href="https://www.linkedin.com/legal/l/api-terms-of-use"
+                target="_blank"
+                rel="noreferrer"
+              >
+                LinkedIn API Terms of Use
+              </a>
+              . We also rely on these processors:
             </p>
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong className="text-foreground">Supabase</strong> —
+                <strong className="text-foreground">Supabase</strong> -
                 authentication and database.
               </li>
               <li>
-                <strong className="text-foreground">Cloudflare R2</strong> —
+                <strong className="text-foreground">Cloudflare R2</strong> -
                 storage for the media you upload, unless your workspace
                 connects its own storage.
               </li>
               <li>
                 <strong className="text-foreground">Vercel</strong> - application
                 hosting.
+              </li>
+              <li>
+                <strong className="text-foreground">Resend</strong> - delivers
+                the sign-in code emails.
+              </li>
+              <li>
+                <strong className="text-foreground">Zoho Mail</strong> - our
+                business email, for messages you send us.
               </li>
             </ul>
           </Section>
@@ -188,8 +208,10 @@ export default function PrivacyPage() {
                 date) is also kept for your history.
               </li>
               <li>
+                Deleting a post removes its media from Cue&apos;s storage.
                 Deleting a client or workspace removes its accounts, posts, and
-                media.
+                media. Files in storage your workspace connected itself stay in
+                your bucket, under your control.
               </li>
             </ul>
           </Section>

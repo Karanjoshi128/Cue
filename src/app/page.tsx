@@ -16,7 +16,7 @@ import {
   YoutubeIcon,
 } from "@/components/platform-icons";
 import { getAuth } from "@/lib/auth";
-import { SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
+import { CONTACT_EMAIL, SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
 import { HeroStage } from "@/components/marketing/hero-stage";
 import {
   ProductShot,
@@ -600,7 +600,7 @@ export default async function HomePage() {
                   <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
                 </Button>
                 <Button
-                  render={<a href="mailto:joshikaran0008@gmail.com" />}
+                  render={<a href={`mailto:${CONTACT_EMAIL}`} />}
                   size="xl"
                   variant="ghost"
                   className="rounded-full px-6 text-white/80 hover:bg-white/10 hover:text-white"

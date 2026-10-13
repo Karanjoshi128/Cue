@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { LegalShell } from "@/components/marketing/site-chrome";
+import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
 
 export const metadata: Metadata = {
   title: "Data Deletion",
   description: "How to delete your data from Cue.",
 };
 
-const CONTACT = "joshikaran0008@gmail.com";
 
 // Meta requires a public Data Deletion Instructions URL for app review.
 export default function DataDeletionPage() {
@@ -28,8 +27,10 @@ export default function DataDeletionPage() {
               connected LinkedIn, Instagram, or YouTube account, and click the{" "}
               <strong className="text-foreground">disconnect</strong> (unplug)
               icon. This immediately deletes the stored access token and stops
-              Cue from accessing that account. Deleting a client removes its
-              connected accounts, posts, and uploaded media.
+              Cue from accessing that account. Deleting a post removes its
+              uploaded media, and deleting a client removes its connected
+              accounts, posts, and uploaded media. (Files in storage your
+              workspace connected itself stay in your own bucket.)
             </p>
           </section>
 
@@ -71,8 +72,10 @@ export default function DataDeletionPage() {
           <p>
             You can also revoke Cue&apos;s access directly from the platform: in
             Instagram, remove Cue under{" "}
-            <em>Settings → Apps and Websites</em>; in LinkedIn, under{" "}
-            <em>Settings → Data privacy → Permitted services</em>; and for a
+            <em>Settings and activity → Website permissions → Apps and websites</em>;
+            in LinkedIn, under{" "}
+            <em>Settings → Data privacy → Other applications → Permitted services</em>;
+            and for a
             YouTube channel, remove Cue from your{" "}
             <a
               className="text-primary underline"

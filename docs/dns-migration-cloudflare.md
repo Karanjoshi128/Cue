@@ -31,6 +31,9 @@ Nameservers today: `pixel.dns-parking.com`, `byte.dns-parking.com` (Hostinger).
 | TXT   | `_dmarc.trycue.space`            | `v=DMARC1; p=none;`                                                     | DMARC               |
 
 There is **no MX on the apex** - that is correct, Cue does not receive mail.
+(Exception: if a trycue.space mailbox has been set up for LinkedIn's business
+email check, `linkedin-pages-access.md` §4.1, its apex MX and SPF records must be
+copied across too, or that inbox stops receiving.)
 
 What breaks if each is lost:
 

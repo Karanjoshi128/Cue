@@ -1,15 +1,14 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { LegalShell } from "@/components/marketing/site-chrome";
+import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
   description: "The terms governing your use of Cue.",
 };
 
-const UPDATED = "July 6, 2026";
+const UPDATED = "October 13, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
-const CONTACT = "joshikaran0008@gmail.com";
 const GOVERNING = "India";
 
 export default function TermsPage() {

@@ -40,6 +40,10 @@ export async function GET(req: NextRequest) {
     "instagram_business_basic,instagram_business_content_publish",
   );
   url.searchParams.set("state", state);
+  // Always show the Instagram login screen, even if the browser is already
+  // signed in. An agency connects many clients' accounts from one browser, so
+  // without this the next connect silently reuses whichever account is open.
+  url.searchParams.set("force_reauth", "true");
 
   return NextResponse.redirect(url.toString());
 }

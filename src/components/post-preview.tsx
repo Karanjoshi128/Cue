@@ -43,6 +43,8 @@ interface PreviewPoll {
 }
 interface PreviewProps {
   name: string;
+  /** The connected account's handle (e.g. "@brand"); falls back to one made from `name`. */
+  handle?: string;
   color?: string | null;
   body: string;
   title?: string; // YouTube video title
@@ -417,12 +419,15 @@ export function LinkedInPreview({
 /** Approximates how a post looks in the Instagram feed. */
 export function InstagramPreview({
   name,
+  handle,
   color,
   body,
   images,
   videoUrl,
 }: PreviewProps) {
-  const username = name.toLowerCase().replace(/\s+/g, "_");
+  const username = handle
+    ? handle.replace(/^@/, "")
+    : name.toLowerCase().replace(/\s+/g, "_");
   return (
     <div className="bg-card overflow-hidden rounded-xl border">
       <div className="flex items-center gap-2.5 p-3">

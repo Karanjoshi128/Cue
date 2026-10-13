@@ -1457,6 +1457,7 @@ export function Composer({
                 <ExpandablePreview
                   platform={shownPlatform}
                   name={client?.name ?? "Client"}
+                  handle={shownAccount?.displayName}
                   color={client?.color}
                   body={shownAccount ? bodyFor(shownAccount.id) : body}
                   title={title}

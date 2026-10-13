@@ -17,6 +17,18 @@ There are **two independent processes**. Do them in this order.
 
 ---
 
+## Status
+
+| Step | State |
+| ---- | ----- |
+| Cloud project | **shorts-automation-509405** (number 12824634376), shared with the youtubechannel1 tools. Console: [Audience](https://console.cloud.google.com/auth/audience?project=shorts-automation-509405), [Branding](https://console.cloud.google.com/auth/branding?project=shorts-automation-509405), [Verification Center](https://console.cloud.google.com/auth/verification?project=shorts-automation-509405). |
+| Publishing status | **In production, unverified** since 7 Oct 2026, which ended the 7-day token expiry. Unverified apps show a "Google hasn't verified this app" warning and are capped at 100 users. |
+| Logo | Bare blue C rejected ("does not uniquely identify your brand"). Replaced by `cue-app-icon-wordmark-1024.png`. |
+| Brand + sensitive-scope verification | Unknown as of 13 Oct 2026; check the Verification Center. |
+| Quota extension | Not requested. |
+
+---
+
 ## 0. Two things that bite early
 
 **Testing mode expires refresh tokens after 7 days.** While the OAuth app is in
@@ -121,8 +133,8 @@ Extension Form"**, linked from Google's YouTube API compliance audit docs.
 
 | Field                | Value                                                     |
 | -------------------- | --------------------------------------------------------- |
-| Google Cloud project | `cuePostingProject`                                       |
-| Project number       | `887582754693` (numeric prefix of the OAuth client id)    |
+| Google Cloud project | `shorts-automation-509405`                                |
+| Project number       | `12824634376` (numeric prefix of the OAuth client id)     |
 | API                  | YouTube Data API v3                                       |
 | Scope requested      | `youtube.upload` only                                     |
 | Methods called       | `videos.insert` (resumable upload), and nothing else      |

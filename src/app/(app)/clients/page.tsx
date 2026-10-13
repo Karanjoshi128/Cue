@@ -1,5 +1,6 @@
 import { getClients } from "@/lib/data";
 import { ClientsManager } from "@/components/clients-manager";
+import { isLinkedInPage, linkedinPagesConfigured } from "@/lib/linkedin-pages";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,10 @@ export default async function ClientsPage() {
       displayName: a.displayName,
       tokenExpires: a.tokenExpires?.toISOString() ?? null,
       renewable: a.refreshToken !== null,
+      isPage: isLinkedInPage(a.externalId),
     })),
   }));
-  return <ClientsManager clients={plain} />;
+  return (
+    <ClientsManager clients={plain} linkedinPages={linkedinPagesConfigured()} />
+  );
 }

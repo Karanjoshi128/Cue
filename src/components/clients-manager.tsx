@@ -37,11 +37,11 @@ import {
 import {
   ClientMonogram,
   PlatformIcon,
-  PLATFORM_META,
 } from "@/components/post-bits";
 import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
 import {
+  Building2,
   Check,
   MoreHorizontal,
   Pencil,
@@ -57,6 +57,8 @@ interface AccountLite {
   displayName: string;
   tokenExpires: string | null;
   renewable: boolean;
+  /** A LinkedIn Company Page rather than a member's profile. */
+  isPage: boolean;
 }
 interface ClientLite {
   id: string;
@@ -86,6 +88,13 @@ const CONNECT_ERRORS: Record<string, string> = {
   instagram_token:
     "Instagram couldn't be connected. It must be a Business or Creator account.",
   linkedin_profile: "Couldn't read that LinkedIn profile. Please try again.",
+  linkedin_pages_not_configured: "LinkedIn Pages aren't set up on the server yet.",
+  linkedin_page_denied: "LinkedIn Page connection was cancelled.",
+  linkedin_page_expired: "That LinkedIn sign-in expired. Please try again.",
+  linkedin_page_token: "LinkedIn didn't return a valid token. Please try again.",
+  linkedin_page_list: "Couldn't read your LinkedIn Pages. Please try again.",
+  linkedin_no_pages:
+    "That LinkedIn account isn't an admin or content admin of any Page, so there's nothing to connect.",
   instagram_profile:
     "Couldn't read that Instagram profile. It must be a Business or Creator account.",
   youtube_not_configured: "YouTube isn't set up on the server yet.",
@@ -110,12 +119,50 @@ const SWATCHES = [
   "#5b6070",
 ];
 
-const CONNECTABLE: Platform[] = ["LINKEDIN", "INSTAGRAM", "YOUTUBE"];
-const CONNECT_HINT: Record<Platform, string> = {
-  LINKEDIN: "Personal profile",
-  INSTAGRAM: "Business or Creator account",
-  YOUTUBE: "YouTube channel",
-};
+/**
+ * The Connect buttons, keyed by their /api/oauth/{route}/start route. A
+ * LinkedIn Page is a LINKEDIN account too, connected through a separate app,
+ * so it gets its own button (shown once that app is configured).
+ */
+interface ConnectOption {
+  route: string;
+  platform: Platform;
+  label: string;
+  hint: string;
+  another: string;
+  page?: boolean;
+}
+const CONNECT_OPTIONS: ConnectOption[] = [
+  {
+    route: "linkedin",
+    platform: "LINKEDIN",
+    label: "LinkedIn profile",
+    hint: "Personal profile",
+    another: "Add another LinkedIn profile",
+  },
+  {
+    route: "linkedin-page",
+    platform: "LINKEDIN",
+    label: "LinkedIn Page",
+    hint: "Company Page",
+    another: "Add another LinkedIn Page",
+    page: true,
+  },
+  {
+    route: "instagram",
+    platform: "INSTAGRAM",
+    label: "Instagram",
+    hint: "Business or Creator account",
+    another: "Add another Instagram account",
+  },
+  {
+    route: "youtube",
+    platform: "YOUTUBE",
+    label: "YouTube",
+    hint: "YouTube channel",
+    another: "Add another YouTube channel",
+  },
+];
 
 /** Health of a connected account based on its token expiry. */
 function tokenHealth(account: AccountLite): {
@@ -145,7 +192,14 @@ const TONE = {
 };
 const DOT = { ok: "text-live", warn: "text-standby", bad: "text-fault" };
 
-export function ClientsManager({ clients }: { clients: ClientLite[] }) {
+export function ClientsManager({
+  clients,
+  linkedinPages,
+}: {
+  clients: ClientLite[];
+  /** Whether the Company Pages app is configured, so its button can show. */
+  linkedinPages: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
@@ -166,7 +220,12 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
     const connected = params.get("connected");
     const error = params.get("error");
     if (!connected && !error) return;
-    if (connected) {
+    if (connected === "linkedin_page") {
+      const count = Number(params.get("count")) || 1;
+      toast.success(
+        count === 1 ? "LinkedIn Page connected" : `${count} LinkedIn Pages connected`,
+      );
+    } else if (connected) {
       const label =
         connected === "instagram"
           ? "Instagram"
@@ -230,11 +289,11 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
     });
   }
 
-  function connect(clientId: string, platform: Platform) {
-    window.location.assign(
-      `/api/oauth/${platform.toLowerCase()}/start?clientId=${clientId}`,
-    );
+  function connect(clientId: string, route: string) {
+    window.location.assign(`/api/oauth/${route}/start?clientId=${clientId}`);
   }
+
+  const connectOptions = CONNECT_OPTIONS.filter((o) => !o.page || linkedinPages);
 
   const accountCount = clients.reduce((n, c) => n + c.accounts.length, 0);
   const q = query.trim().toLowerCase();
@@ -310,7 +369,10 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <AnimatePresence initial={false}>
             {shown.map((c) => {
-              const connected = new Set(c.accounts.map((a) => a.platform));
+              const has = (o: ConnectOption) =>
+                c.accounts.some(
+                  (a) => a.platform === o.platform && a.isPage === Boolean(o.page),
+                );
               return (
                 <motion.article
                   key={c.id}
@@ -392,6 +454,11 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                               <span className="min-w-0 flex-1 truncate text-sm">
                                 {a.displayName}
                               </span>
+                              {a.isPage && (
+                                <span className="text-muted-foreground shrink-0 rounded border px-1.5 text-[0.625rem] font-medium">
+                                  Page
+                                </span>
+                              )}
                               <span
                                 className={cn(
                                   "flex shrink-0 items-center gap-1.5 text-[0.6875rem] font-medium",
@@ -430,27 +497,27 @@ export function ClientsManager({ clients }: { clients: ClientLite[] }) {
                     <span className="label-caps mr-auto">
                       {c.accounts.length ? "Add account" : "Connect"}
                     </span>
-                    {CONNECTABLE.map((p) => (
-                      <Tooltip key={p}>
+                    {connectOptions.map((o) => (
+                      <Tooltip key={o.route}>
                         <TooltipTrigger
                           render={
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => connect(c.id, p)}
-                              aria-label={`Connect ${PLATFORM_META[p].label} for ${c.name}`}
+                              onClick={() => connect(c.id, o.route)}
+                              aria-label={`Connect ${o.label} for ${c.name}`}
                               className="relative w-11 gap-1 px-0"
                             />
                           }
                         >
-                          <PlatformIcon platform={p} brand className="size-3.5" />
-                          <Plus className="text-muted-foreground size-3" />
+                          <PlatformIcon platform={o.platform} brand className="size-3.5" />
+                          {o.page ? (
+                            <Building2 className="text-muted-foreground size-3" />
+                          ) : (
+                            <Plus className="text-muted-foreground size-3" />
+                          )}
                         </TooltipTrigger>
-                        <TooltipContent>
-                          {connected.has(p)
-                            ? `Add another ${PLATFORM_META[p].label} account`
-                            : CONNECT_HINT[p]}
-                        </TooltipContent>
+                        <TooltipContent>{has(o) ? o.another : o.hint}</TooltipContent>
                       </Tooltip>
                     ))}
                   </div>

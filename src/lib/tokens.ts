@@ -1,6 +1,7 @@
 import type { Platform, SocialAccount } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { linkedinCredentials } from "@/lib/linkedin-pages";
 
 export interface RefreshedToken {
   accessToken: string;
@@ -24,20 +25,23 @@ const YOUTUBE_RECONNECT =
  * except a dead YouTube refresh token, which throws ReconnectRequiredError.
  * Shared by the keepalive cron (proactive, ~5-day cycle) and publish-time
  * refresh (YouTube's Google tokens live ~1h, so they're renewed here).
+ * `externalId` picks the LinkedIn app: Pages use the Community Management app.
  */
 export async function refreshAccessToken(
   platform: Platform,
   refreshToken: string,
+  externalId?: string,
 ): Promise<RefreshedToken | null> {
   if (platform === "LINKEDIN") {
+    const app = linkedinCredentials(externalId);
     const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,
-        client_id: process.env.LINKEDIN_CLIENT_ID ?? "",
-        client_secret: process.env.LINKEDIN_CLIENT_SECRET ?? "",
+        client_id: app.clientId,
+        client_secret: app.clientSecret,
       }),
     });
     if (!res.ok) return null;
@@ -109,7 +113,7 @@ export async function refreshAccessToken(
 
 type RefreshableAccount = Pick<
   SocialAccount,
-  "id" | "platform" | "accessToken" | "refreshToken" | "tokenExpires"
+  "id" | "platform" | "externalId" | "accessToken" | "refreshToken" | "tokenExpires"
 >;
 
 /**
@@ -144,6 +148,7 @@ export async function ensureFreshAccessToken(
       next = await refreshAccessToken(
         account.platform,
         decrypt(account.refreshToken),
+        account.externalId,
       );
     } catch (err) {
       if (err instanceof ReconnectRequiredError) {

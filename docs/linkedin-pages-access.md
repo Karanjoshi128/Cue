@@ -19,9 +19,9 @@ pages (checked 13 Oct 2026).
 | Applying entity | **Karan Joshi (Udyam MSME)**, decided 13 Oct 2026. Matches the privacy policy, terms and the Meta submission. |
 | Cue LinkedIn Page | Exists; Karan is super admin. |
 | Business mailbox on trycue.space | **Done, 13 Oct 2026.** `karan@trycue.space` on Zoho Mail (Forever Free, India DC); MX + SPF set in Hostinger DNS; test mail received. Legal pages and site contact switched to it. |
-| New developer app for Pages | Not created |
-| Community Management API, Development tier | Not requested |
-| Page connect flow in Cue | Not built (see §6) |
+| New developer app for Pages | Created as `Cue`, linked to the Cue Page (company 142914285). The old `post Auto` app (Google for Startups Page, not verified) still powers personal-profile posting. |
+| Community Management API, Development tier | **Submitted 13 Oct 2026** as legal name **Karan Joshi**, use case **Page Management only**, app verified by the Cue Page. Waiting on: the Microsoft Vetting Services email to `karan@trycue.space` (click to verify), any document request (send the Udyam certificate), and a possible vetting survey in the Developer Portal (21-day limit). |
+| Page connect flow in Cue | **Built 13 Oct 2026**, hidden until the new app's keys are set in Vercel (see §6). |
 
 ---
 
@@ -176,25 +176,55 @@ and show. Personal-profile posting stays on the existing app.
 
 ---
 
-## 6. Code changes (build once approved, or ahead of it)
+## 6. The Page connect flow (built 13 Oct 2026, off until approval)
 
-Only the connect flow moves:
+Built ahead of approval and **hidden until the new app's keys are set**, so
+nothing changes for users before then.
 
-1. **New env vars** for the new app: `LINKEDIN_PAGES_CLIENT_ID`,
-   `LINKEDIN_PAGES_CLIENT_SECRET`. The existing `LINKEDIN_CLIENT_ID` app keeps
-   powering personal-profile posting.
-2. **`/api/oauth/linkedin-page/start`**: scopes `rw_organization_admin
-   w_organization_social`, using the new app's client ID.
-3. **`/api/oauth/linkedin-page/callback`**: exchange the code, then call
-   `GET /rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED`
-   to list the Pages this member administers, and look up each organization's
-   name. One GET per Page: Development tier has no BATCH_GET.
-4. **Page picker**: a member may administer several Pages, so land on a small
-   selection screen, then store `urn:li:organization:{id}` as `externalId` and
-   the Page name as `displayName`.
-5. **Token refresh** uses the new app's credentials for Page accounts.
-6. **Nothing else.** The adapter, composer, scheduler and publish engine are
-   URN-agnostic.
+### How it works
+
+1. **Clients → a client card → LinkedIn Page button** (LinkedIn icon with a
+   building). It only appears when `LINKEDIN_PAGES_CLIENT_ID` and
+   `LINKEDIN_PAGES_CLIENT_SECRET` are set.
+2. **`/api/oauth/linkedin-page/start`** sends the user to LinkedIn on the new app
+   with scopes `rw_organization_admin w_organization_social`. A nonce in a
+   cookie is checked on return, so a forged callback can't inject Pages.
+3. **`/api/oauth/linkedin-page/callback`** exchanges the code, lists every Page
+   the member is an approved **Administrator or Content admin** of
+   (`/rest/organizationAcls?q=roleAssignee&state=APPROVED`), looks up each name
+   with single GETs (Development tier has no BATCH_GET), and holds the token and
+   list in two encrypted, 15-minute cookies. Nothing is saved yet.
+4. **`/clients/linkedin-pages`** shows every Page with a client dropdown. One
+   consent connects **all** clients' Pages at once, which keeps setup inside
+   the Development tier's 100 calls per member per day. Dropdowns are
+   preselected: a Page already connected to a client (so reconnecting is one
+   click), then a client whose name matches the Page, then the card the
+   connect began from if only one Page came back.
+5. **Connect** saves each chosen Page as a LINKEDIN account:
+   `externalId = urn:li:organization:{id}`, `displayName` = Page name. Page ids
+   are checked against the encrypted list, not the form.
+6. **Token refresh** (publish time and the keepalive cron) uses the Pages app's
+   keys for any `urn:li:organization:` account.
+7. Publishing needed no change: the adapter posts with `author: externalId`.
+
+Code: `src/lib/linkedin-pages.ts`, `src/lib/linkedin-page-actions.ts`,
+`src/app/api/oauth/linkedin-page/*`, `src/app/(app)/clients/linkedin-pages/`,
+`src/components/linkedin-page-picker.tsx`.
+
+Content admins: LinkedIn's single Page lookup is admin-only, so for a Page
+where the member is only a Content admin the name may show as
+"LinkedIn Page {id}". It still connects and publishes.
+
+### Switching it on, once LinkedIn approves
+
+1. The `Cue` app → **Auth** tab: confirm the redirect URL
+   `https://trycue.space/api/oauth/linkedin-page/callback` is listed; copy the
+   **Client ID** and **Client Secret** (never paste the secret in chat).
+2. **Vercel → cue → Settings → Environment Variables** (Production): add
+   `LINKEDIN_PAGES_CLIENT_ID` and `LINKEDIN_PAGES_CLIENT_SECRET`, then redeploy.
+3. Clients → any card → **LinkedIn Page** → approve → match each Page to its
+   client → Connect.
+4. Publish a test post to the **Cue** Page first, then the clients'.
 
 `@@unique([clientId, platform, externalId])` keys on the URN, so a client can hold
 both a Page and a personal profile without conflict.

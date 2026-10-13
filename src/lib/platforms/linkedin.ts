@@ -1,8 +1,9 @@
 import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
 
 // YYYYMM LinkedIn-Version header. 202506 is sunset - keep this current.
-const LINKEDIN_VERSION = "202606";
-const REST = "https://api.linkedin.com/rest";
+export const LINKEDIN_VERSION = "202606";
+export const LINKEDIN_REST = "https://api.linkedin.com/rest";
+const REST = LINKEDIN_REST;
 
 function jsonHeaders(accessToken: string) {
   return {
@@ -15,7 +16,8 @@ function jsonHeaders(accessToken: string) {
 
 /**
  * Publishes to LinkedIn via the Posts API (/rest/posts). `externalId` is the
- * author URN (urn:li:person:… for member posts). Content type is chosen by what
+ * author URN: urn:li:person:… for a member's profile, urn:li:organization:…
+ * for a Company Page (see src/lib/linkedin-pages.ts). Content type is chosen by what
  * the post carries, in this precedence:
  *   poll → article/link → document(PDF) → multi-image (2+) → single image → text.
  */

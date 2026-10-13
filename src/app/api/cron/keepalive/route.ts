@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
       const next = await refreshAccessToken(
         account.platform,
         decrypt(account.refreshToken!),
+        account.externalId,
       );
       if (next) {
         await prisma.socialAccount.update({

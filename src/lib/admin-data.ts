@@ -657,9 +657,11 @@ export async function listAudit(opts: { q?: string; page?: number }) {
 
 export async function getPlatformPage() {
   await requirePlatformAdmin();
-  const [settings, heartbeat] = await Promise.all([
+  const [settings, heartbeat, automationsHeartbeat] = await Promise.all([
     getPlatformSettings(),
     prisma.cronHeartbeat.findUnique({ where: { name: "publish" } }),
+    // Instagram comment automations' every-minute job (only runs while the flag is on).
+    prisma.cronHeartbeat.findUnique({ where: { name: "automations" } }),
   ]);
-  return { settings, heartbeat, admins: platformAdminEmails() };
+  return { settings, heartbeat, automationsHeartbeat, admins: platformAdminEmails() };
 }

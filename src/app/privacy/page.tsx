@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
+import { automationsEnabled } from "@/lib/automations/config";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -14,6 +15,9 @@ const UPDATED = "October 13, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 
 export default function PrivacyPage() {
+  // Comment automations are described only once they're switched on, so the
+  // policy matches what's live (and what Meta is reviewing).
+  const automations = automationsEnabled();
   return (
     <LegalShell title="Privacy Policy" updated={UPDATED}>
         <div className="text-muted-foreground space-y-10 text-[1rem] leading-[1.75] [&_a]:underline-offset-2 [&_li]:pl-1 [&_strong]:font-medium">
@@ -54,6 +58,20 @@ export default function PrivacyPage() {
                 Cloudflare R2, or in the storage provider your workspace
                 connects in Settings.
               </li>
+              {automations && (
+                <li>
+                  <strong className="text-foreground">
+                    Instagram comment automations.
+                  </strong>{" "}
+                  If your workspace sets up an automation, Cue reads new
+                  comments on that Instagram account&apos;s posts. For each
+                  comment that matches a keyword you chose, we store the
+                  comment&apos;s id and text, the commenter&apos;s Instagram
+                  username and Instagram-scoped id, and whether Cue&apos;s reply
+                  and direct message were sent. Comments that don&apos;t match
+                  are read and discarded, not stored.
+                </li>
+              )}
             </ul>
           </Section>
 
@@ -66,6 +84,14 @@ export default function PrivacyPage() {
                 YouTube accounts you connect, at the times you set.
               </li>
               <li>Show publishing status, history, and account health.</li>
+              {automations && (
+                <li>
+                  Reply to comments, and send the direct message you wrote, when
+                  someone comments a keyword you chose on an Instagram account
+                  you connect. Cue only messages a person in reply to their own
+                  comment, once per comment, as Instagram allows.
+                </li>
+              )}
             </ul>
             <p>
               We do <strong className="text-foreground">not</strong> sell your
@@ -213,6 +239,13 @@ export default function PrivacyPage() {
                 media. Files in storage your workspace connected itself stay in
                 your bucket, under your control.
               </li>
+              {automations && (
+                <li>
+                  Records of comments an automation acted on are deleted after
+                  30 days. Deleting the automation, disconnecting the account, or
+                  deleting the client removes them straight away.
+                </li>
+              )}
             </ul>
           </Section>
 

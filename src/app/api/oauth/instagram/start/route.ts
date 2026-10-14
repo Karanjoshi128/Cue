@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectingUser } from "@/lib/oauth-guard";
+import { connectingUser, returnPage } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
+import { instagramScopes } from "@/lib/automations/config";
 
 export const dynamic = "force-dynamic";
 
@@ -29,21 +30,22 @@ export async function GET(req: NextRequest) {
   }
 
   const redirectUri = `${process.env.APP_URL ?? req.nextUrl.origin}/api/oauth/instagram/callback`;
-  // ?comments=1 also asks for instagram_business_manage_comments, which first
-  // comments need. Opt-in, so a default connect asks only for what App Review
-  // covers.
+  // Opt-in extras, so a default connect asks only for what App Review covers:
+  // ?comments=1 adds comment access (first comments, Reply Desk), and
+  // ?automations=1 adds comments plus messages (comment automations, while
+  // NEXT_PUBLIC_IG_AUTOMATIONS is on).
   const comments = req.nextUrl.searchParams.get("comments") === "1";
-  const state = Buffer.from(JSON.stringify({ clientId, comments })).toString("base64url");
+  const automations = req.nextUrl.searchParams.get("automations") === "1";
+  const next = returnPage(req.nextUrl.searchParams.get("next"));
+  const state = Buffer.from(
+    JSON.stringify({ clientId, comments, automations, next }),
+  ).toString("base64url");
 
   const url = new URL("https://www.instagram.com/oauth/authorize");
   url.searchParams.set("client_id", process.env.META_APP_ID);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set(
-    "scope",
-    "instagram_business_basic,instagram_business_content_publish" +
-      (comments ? ",instagram_business_manage_comments" : ""),
-  );
+  url.searchParams.set("scope", instagramScopes({ comments, automations }).join(","));
   url.searchParams.set("state", state);
   // Always show the Instagram login screen, even if the browser is already
   // signed in. An agency connects many clients' accounts from one browser, so

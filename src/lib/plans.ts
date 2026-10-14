@@ -71,6 +71,10 @@ export const FEATURES = {
     label: "YouTube",
     description: "Connecting YouTube channels.",
   },
+  ig_automations: {
+    label: "Instagram automations",
+    description: "Replying to comments and sending DMs when a comment matches a keyword.",
+  },
 } as const;
 
 export type FeatureKey = keyof typeof FEATURES;

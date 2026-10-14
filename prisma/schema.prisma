@@ -129,8 +129,9 @@ model Client {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   workspaceId String
 
-  accounts SocialAccount[]
-  posts    Post[]
+  accounts        SocialAccount[]
+  posts           Post[]
+  automationRules AutomationRule[]
 }
 
 model SocialAccount {
@@ -146,7 +147,14 @@ model SocialAccount {
   scopes       String?
   createdAt    DateTime  @default(now())
 
-  targets PostTarget[]
+  // Instagram comment automations (src/lib/automations). When Cue subscribed
+  // the account to Meta's comment webhooks, and when it last read its comments
+  // itself (the every-minute check that stands in until webhooks are approved).
+  webhooksSubscribedAt DateTime?
+  commentsCheckedAt    DateTime?
+
+  targets         PostTarget[]
+  automationRules AutomationRule[]
 
   @@unique([clientId, platform, externalId])
 }
@@ -185,9 +193,10 @@ model Post {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
-  media    MediaAsset[]
-  targets  PostTarget[]
-  comments Comment[]
+  media           MediaAsset[]
+  targets         PostTarget[]
+  comments        Comment[]
+  automationRules AutomationRule[]
 
   // Postgres treats NULLs as distinct, so posts made without a key never clash.
   @@unique([clientId, idempotencyKey])
@@ -289,6 +298,118 @@ model PostHistory {
   reach          Int?
   clicks         Int?
   lastSyncedAt   DateTime?
+}
+
+// ---------------------------------------------------------------------------
+// Instagram comment automations (src/lib/automations)
+// ---------------------------------------------------------------------------
+
+// "Comment LINK and we'll DM it to you": when a comment on one of the
+// account's posts matches, Cue replies to the comment publicly and sends the
+// commenter a private reply (Instagram's one DM per comment). Hidden behind
+// NEXT_PUBLIC_IG_AUTOMATIONS until Meta grants comment and message access.
+model AutomationRule {
+  id          String        @id @default(cuid())
+  client      Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId    String
+  account     SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId   String
+  name        String
+  enabled     Boolean       @default(true)
+  // Only comments made after this count. Reset when the rule is switched back
+  // on, so it doesn't DM everyone who commented while it was off.
+  activeSince DateTime      @default(now())
+
+  // ANY_POST watches every post. ONE_POST watches mediaId, which is either
+  // picked from the account's posts or filled in when `post` (a Cue post that
+  // hadn't published yet) goes live. SetNull, not Cascade: retention or a
+  // user deleting the Cue post must not delete a rule that's already working.
+  scope          AutomationScope @default(ANY_POST)
+  mediaId        String?
+  mediaPermalink String?
+  mediaCaption   String?
+  mediaThumbUrl  String?
+  post           Post?           @relation(fields: [postId], references: [id], onDelete: SetNull)
+  postId         String?
+
+  keywords      String[]     @default([]) // lowercased; empty only for ANY_COMMENT
+  matchMode     KeywordMatch @default(WORD)
+  // A rule does one or both: a public reply and a DM. {username} in either
+  // becomes the commenter's handle.
+  replies       String[]     @default([]) // public reply variants, one picked at random; empty = no public reply
+  dmText        String? // null = no DM
+  dmButtonLabel String? // optional link button under the DM
+  dmButtonUrl   String?
+  oncePerPerson Boolean      @default(true)
+
+  // Lifetime totals. The per-comment log below is deleted after 30 days.
+  matchedCount    Int       @default(0)
+  dmSentCount     Int       @default(0)
+  replyCount      Int       @default(0)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  runs AutomationRun[]
+
+  @@index([accountId])
+}
+
+enum AutomationScope {
+  ANY_POST
+  ONE_POST
+}
+
+enum KeywordMatch {
+  WORD // the keyword as a whole word or phrase: "link" matches "LINK please", not "linked"
+  CONTAINS // anywhere in the comment
+  ANY_COMMENT // every comment, no keyword
+}
+
+// One comment a rule acted on. commentId is unique because Instagram allows a
+// single private reply per comment, and Meta re-sends webhooks for up to 36 h.
+model AutomationRun {
+  id                String              @id @default(cuid())
+  rule              AutomationRule      @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  ruleId            String
+  commentId         String              @unique
+  mediaId           String
+  commenterId       String // Instagram-scoped id
+  commenterUsername String?
+  commentText       String
+  commentedAt       DateTime
+  source            AutomationSource
+  status            AutomationRunStatus @default(QUEUED)
+  // Each part is done once it has an id or an error. The errors are final;
+  // a failure that's worth retrying goes in lastError and the run stays QUEUED.
+  replyId           String?
+  replyError        String?
+  dmMessageId       String?
+  dmError           String?
+  lastError         String?
+  attempts          Int                 @default(0)
+  // QUEUED runs are taken when this has passed (null = right away). Taking a
+  // run pushes it forward, so two workers can't send the same DM.
+  nextAttemptAt     DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([ruleId, commenterId])
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+}
+
+enum AutomationSource {
+  WEBHOOK
+  POLL
+}
+
+enum AutomationRunStatus {
+  QUEUED // waiting to send, or to retry
+  SENT // the DM went, and the public reply too when the rule has one
+  PARTIAL // one of the two went
+  FAILED
+  SKIPPED // this person already got this rule's DM
 }
 
 // ---------------------------------------------------------------------------

@@ -10,7 +10,7 @@ import type {
 // NOT graph.facebook.com. Using the Facebook host yields a code-190
 // "Cannot parse access token" error. The IG user id and content-publishing
 // endpoints (/media, /media_publish) live under this host.
-const GRAPH = "https://graph.instagram.com/v21.0";
+export const GRAPH = "https://graph.instagram.com/v21.0";
 
 // How long to wait for a media container to finish before publishing it.
 // Images are ready within seconds. A video is transcoded first, and a one-minute

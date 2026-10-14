@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { z, ZodError } from "zod";
+import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAuth, requireUser, requireAdmin } from "@/lib/auth";
 import { publishPostNow } from "@/lib/publish";
 import { ApiError, generateApiKey } from "@/lib/api";
 import type { ActionResult } from "@/lib/action-result";
+import { toResult } from "@/lib/to-result";
 import { encrypt } from "@/lib/crypto";
 import { limitProblem, workspaceHasFeature } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
@@ -33,23 +34,6 @@ import {
   youtubeColumns,
   type PostInput,
 } from "@/lib/posts";
-
-/**
- * Runs an action body and returns its failure as a value when it's one the
- * user should read (ApiError or a validation error), so the message survives
- * a production build. Anything unexpected is rethrown and stays private.
- */
-async function toResult<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
-  try {
-    return { ok: true, data: await fn() };
-  } catch (e) {
-    if (e instanceof ApiError) return { ok: false, error: e.message };
-    if (e instanceof ZodError) {
-      return { ok: false, error: e.issues[0]?.message ?? "Check the form." };
-    }
-    throw e;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Workspace

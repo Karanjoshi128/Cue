@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
+import { automationsEnabled } from "@/lib/automations/config";
 
 export const metadata: Metadata = {
   title: "Data Deletion",
@@ -31,6 +32,8 @@ export default function DataDeletionPage() {
               uploaded media, and deleting a client removes its connected
               accounts, posts, and uploaded media. (Files in storage your
               workspace connected itself stay in your own bucket.)
+              {automationsEnabled() &&
+                " Deleting an Instagram comment automation, or disconnecting its account, also deletes the record of the comments it acted on."}
             </p>
           </section>
 

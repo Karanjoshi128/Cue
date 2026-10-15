@@ -76,7 +76,7 @@ export default async function QueuePage({
             Every post, <em>in order.</em>
           </>
         }
-        description="Newest first. Approve, edit, or retry anything here, and leave notes for your team."
+        description="What needs you comes first, then everything on standby, day by day. Approve, edit or retry anything here, and leave notes for your team."
         actions={
           <Button render={<Link href="/composer" />}>
             <Plus /> New post

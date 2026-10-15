@@ -92,6 +92,103 @@ const FILTER_LABEL: Record<Filter, string> = {
   FAILED: "Failed",
 };
 
+type DateCtx = { in: ReturnType<typeof zoned> };
+
+type QueueRow =
+  | { kind: "header"; key: string; title: string; hint: string; tone: string; count: number }
+  | { kind: "post"; post: PostLite; timeOnly: boolean };
+
+function needsAttention(p: PostLite) {
+  if (p.status === "FAILED" || p.status === "PARTIAL") return true;
+  return (
+    (p.status === "DRAFT" || p.status === "SCHEDULED") &&
+    (p.approval === "PENDING" || p.approval === "CHANGES_REQUESTED")
+  );
+}
+
+const byTime = (dir: 1 | -1) => (a: PostLite, b: PostLite) =>
+  dir * ((a.scheduledAt ? Date.parse(a.scheduledAt) : Infinity) -
+    (b.scheduledAt ? Date.parse(b.scheduledAt) : Infinity));
+
+/**
+ * The queue as sections, in the order a manager works through them: what
+ * needs them, then what's going out (day by day, soonest first), drafts, and
+ * what already went out (latest first). Drafts keep the incoming order,
+ * which is newest first.
+ */
+function arrangeQueue(posts: PostLite[], ctx: DateCtx): QueueRow[] {
+  const rows: QueueRow[] = [];
+  const add = (
+    key: string,
+    title: string,
+    hint: string,
+    tone: string,
+    list: PostLite[],
+    timeOnly = false,
+  ) => {
+    if (!list.length) return;
+    rows.push({ kind: "header", key, title, hint, tone, count: list.length });
+    for (const post of list) rows.push({ kind: "post", post, timeOnly });
+  };
+
+  const attention = posts.filter(needsAttention);
+  const rest = posts.filter((p) => !needsAttention(p));
+  // "Post now" can be PUBLISHING without a time; it belongs under today.
+  const upcoming = rest
+    .filter((p) => (p.status === "SCHEDULED" && p.scheduledAt) || p.status === "PUBLISHING")
+    .sort(byTime(1));
+
+  add(
+    "attention",
+    "Needs attention",
+    "Failed, partly sent, or waiting on approval",
+    "text-fault",
+    [...attention].sort(
+      (a, b) =>
+        Number(b.status === "FAILED" || b.status === "PARTIAL") -
+          Number(a.status === "FAILED" || a.status === "PARTIAL") || byTime(1)(a, b),
+    ),
+  );
+
+  const today = format(new Date(), "yyyy-MM-dd", ctx);
+  const days = new Map<string, PostLite[]>();
+  for (const p of upcoming) {
+    const key = p.scheduledAt ? format(new Date(p.scheduledAt), "yyyy-MM-dd", ctx) : today;
+    // Still on standby after its day has passed, e.g. while publishing was paused.
+    const bucket = key < today ? "overdue" : key;
+    days.set(bucket, [...(days.get(bucket) ?? []), p]);
+  }
+  for (const [key, list] of days) {
+    const d = list[0].scheduledAt ? new Date(list[0].scheduledAt) : new Date();
+    const date = format(d, "EEE d MMM", ctx);
+    if (key === "overdue") {
+      add("overdue", "Overdue", "Still on standby past its time", "text-standby", list);
+    } else if (isToday(d, ctx)) {
+      add(key, "Today", date, "text-standby", list, true);
+    } else if (isTomorrow(d, ctx)) {
+      add(key, "Tomorrow", date, "text-standby", list, true);
+    } else {
+      add(key, date, "", "text-standby", list, true);
+    }
+  }
+
+  add(
+    "drafts",
+    "Drafts",
+    "Not scheduled to go out",
+    "text-muted-foreground/50",
+    rest.filter((p) => p.status === "DRAFT" || (p.status === "SCHEDULED" && !p.scheduledAt)),
+  );
+  add(
+    "published",
+    "Published",
+    "Latest first",
+    "text-live",
+    rest.filter((p) => p.status === "PUBLISHED").sort(byTime(-1)),
+  );
+  return rows;
+}
+
 const approvalMeta: Record<
   ApprovalStatus,
   { label: string; className: string } | null
@@ -142,6 +239,7 @@ export function QueueList({
         p.body.toLowerCase().includes(q) ||
         p.clientName.toLowerCase().includes(q)),
   );
+  const rows = arrangeQueue(shown, ctx);
 
   function when(iso: string) {
     const d = new Date(iso);
@@ -305,7 +403,7 @@ export function QueueList({
               ? "Try a client name or a word from the caption."
               : filter === "FAILED"
                 ? "No failed posts. Everything went out as planned."
-                : "Posts you write show up here, newest first."}
+                : "Posts you write show up here."}
           </p>
           {!q && (
             <Button render={<Link href="/composer" />} className="relative mt-5">
@@ -316,7 +414,28 @@ export function QueueList({
       ) : (
         <ul className="space-y-3">
           <AnimatePresence initial={false}>
-            {shown.map((post) => {
+            {rows.map((row) => {
+              if (row.kind === "header") {
+                return (
+                  <li
+                    key={`h-${row.key}`}
+                    className="flex items-center gap-2.5 pt-5 pb-0.5 first:pt-0"
+                  >
+                    <span className={cn("tally size-1.5", row.tone)} />
+                    <h2 className="text-[0.8125rem] font-semibold tracking-tight">
+                      {row.title}
+                    </h2>
+                    <span className="text-muted-foreground font-mono text-[0.6875rem] tabular-nums">
+                      {row.count}
+                    </span>
+                    <span aria-hidden className="bg-border h-px flex-1" />
+                    {row.hint && (
+                      <span className="label-caps hidden sm:inline">{row.hint}</span>
+                    )}
+                  </li>
+                );
+              }
+              const { post, timeOnly } = row;
               const t = post.scheduledAt ? when(post.scheduledAt) : null;
               const err = post.targets.find((x) => x.error)?.error;
               const editable =
@@ -341,7 +460,12 @@ export function QueueList({
                   <div className="grid gap-4 p-5 sm:grid-cols-[7.5rem_1fr]">
                     {/* Time column */}
                     <div className="flex items-center gap-3 sm:block">
-                      {t ? (
+                      {t && timeOnly ? (
+                        // The section header already says which day.
+                        <div className="font-mono text-[0.8125rem] font-medium tracking-wide tabular-nums uppercase">
+                          {t.time}
+                        </div>
+                      ) : t ? (
                         <>
                           <div className="font-mono text-[0.6875rem] tracking-wide uppercase">
                             {t.day}

@@ -15,7 +15,8 @@ export default function NotFound() {
         className="bg-grid pointer-events-none absolute inset-0 mask-[radial-gradient(ellipse_at_center,black,transparent_65%)]"
       />
       <Link href="/" aria-label="Cue home" className="relative mb-14">
-        <Logo className="h-9 w-auto" />
+        {/* Centred: trim the right padding too (Logo already trims the left). */}
+        <Logo className="-mr-3.5 h-9 w-auto" />
       </Link>
       <div className="relative font-mono text-[0.6875rem] tracking-[0.2em] text-muted-foreground uppercase">
         Cue 404 <span className="text-border mx-2">/</span> Not on the sheet

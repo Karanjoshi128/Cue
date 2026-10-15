@@ -46,6 +46,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
   Unplug,
@@ -293,6 +294,18 @@ export function ClientsManager({
     window.location.assign(`/api/oauth/${route}/start?clientId=${clientId}`);
   }
 
+  /**
+   * The connect flow that renews an account. Connecting the same account
+   * again updates it in place (same client, platform and id), so this is the
+   * whole of "reconnect". Null for a Company Page while that app is off.
+   */
+  function reconnectRoute(a: AccountLite): string | null {
+    if (a.platform === "INSTAGRAM") return "instagram";
+    if (a.platform === "YOUTUBE") return "youtube";
+    if (a.isPage) return linkedinPages ? "linkedin-page" : null;
+    return "linkedin";
+  }
+
   const connectOptions = CONNECT_OPTIONS.filter((o) => !o.page || linkedinPages);
 
   const accountCount = clients.reduce((n, c) => n + c.accounts.length, 0);
@@ -459,18 +472,46 @@ export function ClientsManager({
                                   Page
                                 </span>
                               )}
-                              <span
-                                className={cn(
-                                  "flex shrink-0 items-center gap-1.5 text-[0.6875rem] font-medium",
-                                  TONE[h.tone],
-                                )}
-                              >
+                              {h.tone !== "ok" && reconnectRoute(a) ? (
+                                // Expiring or expired: the status itself reconnects.
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <button
+                                        type="button"
+                                        onClick={() => connect(c.id, reconnectRoute(a)!)}
+                                        aria-label={`Reconnect ${a.displayName} (${h.label.toLowerCase()})`}
+                                        className={cn(
+                                          "-my-1 flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.6875rem] font-medium shadow-hairline transition-colors",
+                                          TONE[h.tone],
+                                          h.tone === "bad" ? "hover:bg-fault/10" : "hover:bg-standby/12",
+                                        )}
+                                      />
+                                    }
+                                  >
+                                    <span
+                                      className={cn("tally size-1.5", DOT[h.tone])}
+                                      data-live="true"
+                                    />
+                                    {h.label}
+                                    <RefreshCw className="size-3" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>Reconnect</TooltipContent>
+                                </Tooltip>
+                              ) : (
                                 <span
-                                  className={cn("tally size-1.5", DOT[h.tone])}
-                                  data-live={h.tone !== "ok" ? "true" : undefined}
-                                />
-                                {h.label}
-                              </span>
+                                  className={cn(
+                                    "flex shrink-0 items-center gap-1.5 text-[0.6875rem] font-medium",
+                                    TONE[h.tone],
+                                  )}
+                                >
+                                  <span
+                                    className={cn("tally size-1.5", DOT[h.tone])}
+                                    data-live={h.tone !== "ok" ? "true" : undefined}
+                                  />
+                                  {h.label}
+                                </span>
+                              )}
                               <button
                                 type="button"
                                 aria-label={`Disconnect ${a.displayName}`}

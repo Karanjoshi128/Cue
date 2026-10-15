@@ -75,7 +75,8 @@ function PostChip({ p, ctx }: { p: CalPost; ctx: Ctx }) {
       <span className="min-w-0 flex-1 truncate font-medium">
         {p.title || p.body}
       </span>
-      <span className="text-muted-foreground hidden shrink-0 items-center gap-0.5 xl:flex">
+      {/* Wide screens only: on a laptop the title needs the room more. */}
+      <span className="text-muted-foreground hidden shrink-0 items-center gap-0.5 2xl:flex">
         {platforms.map((pl) => (
           <PlatformIcon key={pl} platform={pl} className="size-2.5" />
         ))}

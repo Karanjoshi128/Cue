@@ -13,19 +13,22 @@ export function Logo({ className }: { className?: string }) {
     // doesn't trip Next's "modified one dimension" warning.
     style: { width: "auto", height: "auto" } as const,
   };
+  // The PNGs carry transparent padding (11.6% on the left, so 14px at the
+  // 120px they render at); pull them left so the mark lines up with the text
+  // under it.
   return (
     <>
       <Image
         {...shared}
         alt="Cue"
         src="/brand/cue-logo-horizontal.png"
-        className={cn("dark:hidden", className)}
+        className={cn("-ml-3.5 dark:hidden", className)}
       />
       <Image
         {...shared}
         alt="Cue"
         src="/brand/cue-logo-horizontal-dark.png"
-        className={cn("hidden dark:block", className)}
+        className={cn("-ml-3.5 hidden dark:block", className)}
       />
     </>
   );

@@ -20,6 +20,7 @@ import {
 } from "@/lib/plans";
 import { ThemePicker } from "@/components/theme-picker";
 import { Kbd, PageHeader } from "@/components/page-header";
+import { SettingsNav } from "@/components/settings-nav";
 import { navItems } from "@/components/nav-items";
 
 export const dynamic = "force-dynamic";
@@ -97,18 +98,7 @@ export default async function SettingsPage() {
           aria-label="Settings sections"
           className="hidden lg:sticky lg:top-24 lg:block lg:self-start"
         >
-          <ul className="border-border space-y-0.5 border-l">
-            {sections.map((s) => (
-              <li key={s.id}>
-                <a
-                  href={`#${s.id}`}
-                  className="text-muted-foreground hover:text-foreground hover:border-foreground -ml-px block border-l border-transparent py-1.5 pl-4 text-sm transition-colors"
-                >
-                  {s.label}
-                </a>
-              </li>
-            ))}
-          </ul>
+          <SettingsNav sections={sections} />
         </nav>
 
         <div className="min-w-0 space-y-6">

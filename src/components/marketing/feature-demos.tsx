@@ -31,13 +31,12 @@ const DEMO_LIMITS = { LINKEDIN: 3000, INSTAGRAM: 2200 } as const;
 type DemoNet = keyof typeof DEMO_LIMITS;
 
 export function ComposeDemo() {
+  // Long enough that LinkedIn (200) and Instagram (125) cut it at different
+  // places, which is the point of previewing per network.
   const [text, setText] = useState(
-    "Riverside Library opens Monday. One roof, eighty skylights, and daylight at every reading table. Come and find your seat.",
+    "Riverside Library opens Monday.\n\nOne roof, eighty skylights, and daylight at every reading table. We spent two years shaping a building you can read in all afternoon without switching on a lamp.\n\nCome and find your seat. Doors open at 9.\n\n#architecture #daylight #libraries",
   );
   const [net, setNet] = useState<DemoNet>("LINKEDIN");
-  const limit = DEMO_LIMITS[net];
-  const r = 9;
-  const c = 2 * Math.PI * r;
 
   return (
     <div className="grid h-full gap-4 md:grid-cols-[1fr_minmax(0,19rem)]">
@@ -56,24 +55,30 @@ export function ComposeDemo() {
           aria-label="Try writing a caption"
           className="min-h-36 flex-1 resize-none bg-transparent px-3.5 py-3 text-sm leading-relaxed outline-none"
         />
-        <div className="flex items-center justify-between border-t px-3.5 py-2">
+        {/* How the caption fits each network, live as you type. */}
+        <div className="space-y-2.5 border-t px-3.5 py-3">
+          {(Object.keys(DEMO_LIMITS) as DemoNet[]).map((p) => (
+            <div key={p} className="flex items-center gap-2.5 text-xs">
+              <PlatformIcon platform={p} brand className="size-3.5 shrink-0" />
+              <span className={cn("w-16 shrink-0", p === net ? "font-medium" : "text-muted-foreground")}>
+                {PLATFORM_META[p].label}
+              </span>
+              <span className="bg-muted h-1 flex-1 overflow-hidden rounded-full">
+                <span
+                  className="bg-primary block h-full rounded-full transition-[width] duration-300"
+                  style={{ width: `${Math.min(text.length / DEMO_LIMITS[p], 1) * 100}%` }}
+                />
+              </span>
+              <span className="text-muted-foreground w-20 shrink-0 text-right font-mono tabular-nums">
+                {text.length}/{DEMO_LIMITS[p].toLocaleString("en-US")}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="border-t px-3.5 py-2">
           <span className="text-muted-foreground text-xs">
             Type here. The preview updates as you go.
           </span>
-          <svg viewBox="0 0 24 24" className="size-5 -rotate-90" aria-hidden>
-            <circle cx="12" cy="12" r={r} fill="none" strokeWidth="2.5" className="stroke-border" />
-            <circle
-              cx="12"
-              cy="12"
-              r={r}
-              fill="none"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray={c}
-              strokeDashoffset={c * (1 - Math.min(text.length / limit, 1))}
-              className="stroke-primary transition-[stroke-dashoffset] duration-300"
-            />
-          </svg>
         </div>
       </div>
       <div className="min-w-0">

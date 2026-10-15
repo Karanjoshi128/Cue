@@ -327,8 +327,12 @@ function ActionButton({
       onClick={() => setOn((v) => !v)}
       aria-pressed={on}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-md transition-colors",
-        label ? "px-2 py-1.5 text-sm font-medium" : "p-1",
+        "inline-flex items-center rounded-md transition-colors",
+        // Labelled buttons size to their bar (an @container), so all four fit
+        // in a phone-width preview instead of the last one being cut off.
+        label
+          ? "gap-1 px-1.5 py-1.5 text-xs font-medium @[22rem]:gap-1.5 @[22rem]:px-2 @[22rem]:text-sm"
+          : "gap-1.5 p-1",
         on
           ? activeClass
           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -390,7 +394,7 @@ export function LinkedInPreview({
         <VideoBlock url={videoUrl} />
       ) : null}
 
-      <div className="text-muted-foreground flex items-center justify-around border-t px-1 py-0.5">
+      <div className="text-muted-foreground @container flex items-center justify-around border-t px-1 py-0.5">
         <ActionButton
           icon={ThumbsUp}
           label="Like"

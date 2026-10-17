@@ -70,6 +70,9 @@ export async function GET(req: NextRequest) {
 
   const displayName = me.name ?? me.email ?? "YouTube";
   const tokenExpires = new Date(Date.now() + token.expires_in * 1000);
+  // Written on reconnect too: publish.ts reads it to tell an account
+  // connected before comment access was requested.
+  const scopes = "youtube.upload youtube.force-ssl openid email profile";
 
   await prisma.socialAccount.upsert({
     where: {
@@ -88,6 +91,7 @@ export async function GET(req: NextRequest) {
         : {}),
       tokenExpires,
       displayName,
+      scopes,
     },
     create: {
       clientId,
@@ -97,7 +101,7 @@ export async function GET(req: NextRequest) {
       accessToken: encrypt(token.access_token),
       refreshToken: token.refresh_token ? encrypt(token.refresh_token) : null,
       tokenExpires,
-      scopes: "youtube.upload openid email profile",
+      scopes,
     },
   });
 

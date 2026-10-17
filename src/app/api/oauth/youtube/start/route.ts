@@ -35,9 +35,11 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
+  // youtube.force-ssl is for posting a post's first comment
+  // (commentThreads.insert); youtube.upload doesn't cover comments.
   url.searchParams.set(
     "scope",
-    "https://www.googleapis.com/auth/youtube.upload openid email profile",
+    "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.force-ssl openid email profile",
   );
   // offline + consent so Google returns a refresh token for scheduled uploads.
   url.searchParams.set("access_type", "offline");

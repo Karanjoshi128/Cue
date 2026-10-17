@@ -43,7 +43,23 @@ export interface PublishResult {
   permalink?: string;
 }
 
+export interface CommentInput {
+  // Same token + account id as PublishInput.
+  accessToken: string;
+  externalId: string;
+  // The published post's id (PublishResult.externalPostId).
+  postExternalId: string;
+  text: string;
+}
+
+export interface CommentResult {
+  commentId: string;
+}
+
 export interface PlatformAdapter {
   platform: Platform;
   publish(input: PublishInput): Promise<PublishResult>;
+  // Posts the first comment under a post this account published. Absent for
+  // platforms where Cue doesn't support comments.
+  comment?(input: CommentInput): Promise<CommentResult>;
 }

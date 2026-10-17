@@ -8,6 +8,16 @@ Cue requests one sensitive scope:
 - `https://www.googleapis.com/auth/youtube.upload` (plus `openid`, `email`,
   `profile`, which are non-sensitive)
 
+> **Since first comments (branch `feat/first-comment`), Cue also requests
+> `https://www.googleapis.com/auth/youtube.force-ssl`.** It is used only for
+> `commentThreads.insert`, to post the first comment the user wrote under the
+> video Cue just uploaded for them. It is a second sensitive scope, not covered
+> by the `youtube.upload` verification, so any verification submission must
+> declare it, justify it and show it in the demo video. The texts in §3.2 and
+> §4 predate it (they say Cue doesn't use force-ssl): update them before
+> submitting. Until it is verified, Google may show the unverified-app screen
+> again when a channel is connected.
+
 There are **two independent processes**. Do them in this order.
 
 | #   | Process                                          | Unlocks                      |

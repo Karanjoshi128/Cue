@@ -35,9 +35,10 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("client_id", process.env.META_APP_ID);
   url.searchParams.set("redirect_uri", redirectUri);
   url.searchParams.set("response_type", "code");
+  // instagram_business_manage_comments is for posting a post's first comment.
   url.searchParams.set(
     "scope",
-    "instagram_business_basic,instagram_business_content_publish",
+    "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments",
   );
   url.searchParams.set("state", state);
   // Always show the Instagram login screen, even if the browser is already

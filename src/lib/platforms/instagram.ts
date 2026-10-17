@@ -1,4 +1,10 @@
-import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
+import type {
+  CommentInput,
+  CommentResult,
+  PlatformAdapter,
+  PublishInput,
+  PublishResult,
+} from "./types";
 
 // Instagram API with Instagram Login issues tokens scoped to graph.instagram.com,
 // NOT graph.facebook.com. Using the Facebook host yields a code-190
@@ -14,6 +20,9 @@ const GRAPH = "https://graph.instagram.com/v21.0";
 // claiming new targets once a run has used 200 s.
 const IMAGE_WAIT = { attempts: 10, intervalMs: 3_000 };
 const VIDEO_WAIT = { attempts: 30, intervalMs: 6_000 };
+
+// A stalled comment call throws instead of eating the rest of the run.
+const COMMENT_TIMEOUT_MS = 30_000;
 
 /**
  * Publishes to Instagram via the Graph API content-publishing flow.
@@ -135,6 +144,26 @@ export const instagramAdapter: PlatformAdapter = {
     }
 
     return { externalPostId: mediaId, permalink };
+  },
+
+  /**
+   * Comments on the account's own media as that account. Needs the
+   * instagram_business_manage_comments permission. Sent as a form body rather
+   * than in the query string: a comment can be up to 2200 characters.
+   */
+  async comment(input: CommentInput): Promise<CommentResult> {
+    const { accessToken, postExternalId, text } = input;
+    const res = await fetch(`${GRAPH}/${postExternalId}/comments`, {
+      method: "POST",
+      body: new URLSearchParams({ message: text, access_token: accessToken }),
+      signal: AbortSignal.timeout(COMMENT_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      throw new Error(`IG comment failed (${res.status}): ${await res.text()}`);
+    }
+    const { id } = (await res.json()) as { id?: string };
+    if (!id) throw new Error("IG comment returned no comment id");
+    return { commentId: id };
   },
 };
 

@@ -68,6 +68,11 @@ export async function GET(req: NextRequest) {
   }
   const me = (await meRes.json()) as { user_id: string; username: string };
 
+  // Written on reconnect too: publish.ts reads it to tell an account
+  // connected before comment access was requested.
+  const scopes =
+    "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments";
+
   await prisma.socialAccount.upsert({
     where: {
       clientId_platform_externalId: {
@@ -81,6 +86,7 @@ export async function GET(req: NextRequest) {
       refreshToken: encrypt(long.access_token), // IG refreshes the same token
       tokenExpires: new Date(Date.now() + long.expires_in * 1000),
       displayName: `@${me.username}`,
+      scopes,
     },
     create: {
       clientId,
@@ -90,7 +96,7 @@ export async function GET(req: NextRequest) {
       accessToken: encrypt(long.access_token),
       refreshToken: encrypt(long.access_token),
       tokenExpires: new Date(Date.now() + long.expires_in * 1000),
-      scopes: "instagram_business_basic,instagram_business_content_publish",
+      scopes,
     },
   });
 

@@ -1,10 +1,19 @@
 import { DEFAULT_YOUTUBE_CATEGORY } from "@/lib/youtube-tags";
-import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
+import type {
+  CommentInput,
+  CommentResult,
+  PlatformAdapter,
+  PublishInput,
+  PublishResult,
+} from "./types";
 
 // Resumable upload endpoint for videos.insert. `part` lists the resource parts
 // we send: snippet (title/description/category) + status (privacy).
 const UPLOAD_URL =
   "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status";
+// commentThreads.insert: a new top-level comment on a video.
+const COMMENT_URL =
+  "https://www.googleapis.com/youtube/v3/commentThreads?part=snippet";
 
 // Every network call gets a deadline. A stalled connection otherwise hangs until
 // the function is killed, which leaves the target stuck in PROCESSING; a timeout
@@ -12,6 +21,7 @@ const UPLOAD_URL =
 const FETCH_VIDEO_TIMEOUT_MS = 60_000;
 const INIT_TIMEOUT_MS = 30_000;
 const UPLOAD_TIMEOUT_MS = 180_000;
+const COMMENT_TIMEOUT_MS = 30_000;
 
 /**
  * Publishes to YouTube via the Data API v3 `videos.insert` resumable flow.
@@ -107,6 +117,42 @@ export const youtubeAdapter: PlatformAdapter = {
       externalPostId: uploaded.id,
       permalink: `https://www.youtube.com/watch?v=${uploaded.id}`,
     };
+  },
+
+  /**
+   * Posts a top-level comment as the channel that uploaded the video. Needs
+   * the youtube.force-ssl scope; youtube.upload alone gets a 403.
+   *
+   * The Data API cannot pin a comment (there is no endpoint for it), so it
+   * appears as an ordinary comment. Pinning is only possible by hand in
+   * YouTube Studio or the YouTube app.
+   */
+  async comment(input: CommentInput): Promise<CommentResult> {
+    const { accessToken, postExternalId, text } = input;
+    const res = await fetch(COMMENT_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        snippet: {
+          videoId: postExternalId,
+          topLevelComment: { snippet: { textOriginal: text } },
+        },
+      }),
+      signal: AbortSignal.timeout(COMMENT_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      throw new Error(
+        `YouTube comment failed (${res.status}): ${await res.text()}`,
+      );
+    }
+    const thread = (await res.json()) as { id?: string };
+    if (!thread.id) {
+      throw new Error("YouTube comment returned no comment id");
+    }
+    return { commentId: thread.id };
   },
 };
 

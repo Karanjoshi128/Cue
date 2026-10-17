@@ -60,6 +60,8 @@ interface AccountLite {
   renewable: boolean;
   /** A LinkedIn Company Page rather than a member's profile. */
   isPage: boolean;
+  /** Connected with comment access, which a reconnect must ask for again. */
+  comments: boolean;
 }
 interface ClientLite {
   id: string;
@@ -290,14 +292,18 @@ export function ClientsManager({
     });
   }
 
-  function connect(clientId: string, route: string) {
-    window.location.assign(`/api/oauth/${route}/start?clientId=${clientId}`);
+  function connect(clientId: string, route: string, comments = false) {
+    window.location.assign(
+      `/api/oauth/${route}/start?clientId=${clientId}${comments ? "&comments=1" : ""}`,
+    );
   }
 
   /**
    * The connect flow that renews an account. Connecting the same account
    * again updates it in place (same client, platform and id), so this is the
-   * whole of "reconnect". Null for a Company Page while that app is off.
+   * whole of "reconnect". Null for a Company Page while that app is off. The
+   * callback rewrites the stored scopes, so an account with comment access is
+   * reconnected with &comments=1 (see the call site) to keep it.
    */
   function reconnectRoute(a: AccountLite): string | null {
     if (a.platform === "INSTAGRAM") return "instagram";
@@ -479,7 +485,7 @@ export function ClientsManager({
                                     render={
                                       <button
                                         type="button"
-                                        onClick={() => connect(c.id, reconnectRoute(a)!)}
+                                        onClick={() => connect(c.id, reconnectRoute(a)!, a.comments)}
                                         aria-label={`Reconnect ${a.displayName} (${h.label.toLowerCase()})`}
                                         className={cn(
                                           "-my-1 flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.6875rem] font-medium shadow-hairline transition-colors",

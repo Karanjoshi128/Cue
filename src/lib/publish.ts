@@ -37,7 +37,7 @@ const COMMENT_CLAIM_MS = 6 * 60 * 1000;
 // The scope each platform needs for comments, as SocialAccount.scopes records
 // it. Accounts connected before first comments existed lack it until they
 // reconnect, so their failures get RECONNECT_FOR_COMMENTS in front.
-const COMMENT_SCOPES: Partial<Record<Platform, string>> = {
+export const COMMENT_SCOPES: Partial<Record<Platform, string>> = {
   YOUTUBE: "youtube.force-ssl",
   INSTAGRAM: "instagram_business_manage_comments",
 };

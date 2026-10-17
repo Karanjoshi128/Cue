@@ -237,12 +237,17 @@ It also accepts the composer's LinkedIn-only fields, `link`, `poll` and
 - Up to **3 attempts**, on later sweeps. A failed comment **never changes the
   post's or the target's status**: the post stays `PUBLISHED`, and the
   target's `commentError` says what went wrong.
-- **Reconnect accounts once.** Comments need a permission Cue didn't ask for
-  before (YouTube `youtube.force-ssl`, Instagram
-  `instagram_business_manage_comments`), so an account connected before first
-  comments existed has to be reconnected in **Clients**, once. Until then its
-  comments fail, with a `commentError` that starts `Reconnect this account to
-  allow comments:`.
+- **Connect the account with comments on, once.** Comments need a permission
+  that a normal connect doesn't ask for: YouTube `youtube.force-ssl` and
+  Instagram `instagram_business_manage_comments`. Asking for them by default
+  would put Cue's Google-verified `youtube.upload` consent screen back behind
+  the "unverified app" warning for everyone. So it's opt-in: while signed in to
+  Cue, open
+  `/api/oauth/youtube/start?clientId=<client id>&comments=1` (and the same
+  with `instagram` in place of `youtube`). The client id comes from
+  `GET /clients`. That reconnects the account with the extra permission.
+  Until then its comments fail, with a `commentError` that starts
+  `Reconnect this account to allow comments:`.
 - On YouTube, each comment costs 50 units of the daily API quota (see
   [Limits](#retention)).
 

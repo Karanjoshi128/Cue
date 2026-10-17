@@ -172,6 +172,7 @@ curl -s -X POST "$CUE/posts" \
   "clientId": "cmg...",
   "accountIds": ["cmh..."],
   "body": "Full YouTube description. Up to 5000 characters for YouTube-only posts.",
+  "firstComment": "Shot on a phone over 6 hours. Full settings: https://example.com/timelapse",
   "title": "How a timelapse is made",
   "youtubePrivacy": "public",
   "youtubeTags": ["timelapse", "shorts", "behind the scenes"],
@@ -190,6 +191,7 @@ Response: `{ "id": "...", "status": "SCHEDULED" }`, with **201** when created an
 | `clientId` | string | From `GET /clients`. 404 if it isn't in your workspace. |
 | `accountIds` | string[] | At least one. **Every id must belong to `clientId`**, or the request is rejected (400) rather than posting to fewer accounts than asked. |
 | `body` | string | Caption / YouTube description. 1-5000 chars, but **3000 max if any target isn't YouTube**. |
+| `firstComment` | string? | Commented under the post once it's live, on YouTube and Instagram. Max 2200 chars after trimming; empty means none. See [below](#first-comment). |
 | `title` | string? | YouTube title, max 100. **Required when a YouTube account is targeted**, except for drafts. |
 | `youtubePrivacy` | `"public"` \| `"unlisted"` \| `"private"`? | Default `public`. |
 | `youtubeTags` | string[]? | See [YouTube tags](#youtube-tags). |
@@ -218,6 +220,37 @@ It also accepts the composer's LinkedIn-only fields, `link`, `poll` and
 `status` is one of `DRAFT`, `SCHEDULED`, `PUBLISHING`, `PUBLISHED`,
 `PARTIAL` (some targets published, some failed), `FAILED`.
 
+<a id="first-comment"></a>
+
+**`firstComment`:**
+
+- Posted by the same account, as a comment under the published post, on
+  **YouTube** and **Instagram**. LinkedIn targets ignore it.
+- It is posted by the **publish sweep**, the first one that runs at least
+  **a minute after the post went live** (YouTube needs a moment after an
+  upload). Expect it a few minutes after publishing, up to ~15 when GitHub
+  delays the sweep. The same goes for `action: "now"`: the request publishes
+  the post, and a later sweep adds the comment.
+- **YouTube can't pin it.** The YouTube Data API has no way to pin a comment,
+  so it appears as an ordinary comment. Pin it by hand in YouTube Studio if it
+  should stay on top.
+- Up to **3 attempts**, on later sweeps. A failed comment **never changes the
+  post's or the target's status**: the post stays `PUBLISHED`, and the
+  target's `commentError` says what went wrong.
+- **Connect the account with comments on, once.** Comments need a permission
+  that a normal connect doesn't ask for: YouTube `youtube.force-ssl` and
+  Instagram `instagram_business_manage_comments`. Asking for them by default
+  would put Cue's Google-verified `youtube.upload` consent screen back behind
+  the "unverified app" warning for everyone. So it's opt-in: while signed in to
+  Cue, open
+  `/api/oauth/youtube/start?clientId=<client id>&comments=1` (and the same
+  with `instagram` in place of `youtube`). The client id comes from
+  `GET /clients`. That reconnects the account with the extra permission.
+  Until then its comments fail, with a `commentError` that starts
+  `Reconnect this account to allow comments:`.
+- On YouTube, each comment costs 50 units of the daily API quota (see
+  [Limits](#retention)).
+
 ### `GET /posts/:id`
 
 A post with each target's result. This is what you poll.
@@ -232,6 +265,7 @@ curl -s "$CUE/posts/$POST_ID" -H "Authorization: Bearer $CUE_KEY"
   "status": "PUBLISHED",
   "scheduledAt": "2026-10-01T13:00:00.000Z",
   "title": "How a timelapse is made",
+  "firstComment": "Shot on a phone over 6 hours. Full settings: https://example.com/timelapse",
   "targets": [
     {
       "id": "cmj...",
@@ -240,7 +274,10 @@ curl -s "$CUE/posts/$POST_ID" -H "Authorization: Bearer $CUE_KEY"
       "permalink": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
       "externalPostId": "dQw4w9WgXcQ",
       "error": null,
-      "publishedAt": "2026-10-01T13:02:11.000Z"
+      "publishedAt": "2026-10-01T13:02:11.000Z",
+      "commentId": "UgzM3c...",
+      "commentError": null,
+      "commentedAt": "2026-10-01T13:05:04.000Z"
     }
   ]
 }
@@ -248,6 +285,12 @@ curl -s "$CUE/posts/$POST_ID" -H "Authorization: Bearer $CUE_KEY"
 
 Target `status` is `SCHEDULED`, `PROCESSING` (uploading now), `PUBLISHED` or
 `FAILED`. On failure, `error` holds the platform's message. Timestamps are UTC.
+
+`firstComment` is `null` when the post has none. On each target, `commentId`
+(YouTube's comment thread id, or Instagram's comment id) and `commentedAt` are
+set once the [first comment](#first-comment) is posted, and `commentError`
+holds the last failed attempt's message. All three stay `null` until then, and
+always on LinkedIn targets. The post's `status` doesn't wait for the comment.
 
 ### `GET /posts?clientId=&status=&limit=`
 
@@ -363,4 +406,5 @@ On a network error at step 3, just re-send it with the **same**
   whole project, and one upload costs 1,600. That's **about 6 uploads per day
   across every client**. Beyond that, uploads fail until the quota resets. An
   increase needs Google's quota extension (see
-  `docs/google-youtube-verification.md`).
+  `docs/google-youtube-verification.md`). A first comment costs 50 more, so
+  an upload with one costs 1,650.

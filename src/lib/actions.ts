@@ -494,6 +494,9 @@ export async function updatePost(
       data: {
         clientId: data.clientId,
         body: data.body,
+        // Written on every edit too, so removing the comment (or every
+        // account that takes one) clears it.
+        firstComment: data.firstComment ?? null,
         // Written on every edit, so dropping YouTube also clears its title,
         // visibility, tags and category.
         ...youtubeColumns(data),

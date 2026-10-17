@@ -12,9 +12,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/clients?error=instagram_denied", req.url));
   }
 
-  const { clientId } = JSON.parse(
+  const { clientId, comments } = JSON.parse(
     Buffer.from(state, "base64url").toString("utf8"),
-  ) as { clientId: string };
+  ) as { clientId: string; comments?: boolean };
 
   // Defense-in-depth: `state` is unsigned, so re-verify workspace ownership.
   const user = await connectingUser(req, "instagram");
@@ -68,6 +68,12 @@ export async function GET(req: NextRequest) {
   }
   const me = (await meRes.json()) as { user_id: string; username: string };
 
+  // Written on reconnect too: publish.ts reads it to tell an account
+  // connected before comment access was requested.
+  const scopes =
+    "instagram_business_basic,instagram_business_content_publish" +
+    (comments ? ",instagram_business_manage_comments" : "");
+
   await prisma.socialAccount.upsert({
     where: {
       clientId_platform_externalId: {
@@ -81,6 +87,7 @@ export async function GET(req: NextRequest) {
       refreshToken: encrypt(long.access_token), // IG refreshes the same token
       tokenExpires: new Date(Date.now() + long.expires_in * 1000),
       displayName: `@${me.username}`,
+      scopes,
     },
     create: {
       clientId,
@@ -90,7 +97,7 @@ export async function GET(req: NextRequest) {
       accessToken: encrypt(long.access_token),
       refreshToken: encrypt(long.access_token),
       tokenExpires: new Date(Date.now() + long.expires_in * 1000),
-      scopes: "instagram_business_basic,instagram_business_content_publish",
+      scopes,
     },
   });
 

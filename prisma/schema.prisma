@@ -168,6 +168,7 @@ model Post {
   author            User           @relation(fields: [authorId], references: [id])
   authorId          String
   body              String
+  firstComment      String? // posted under the live post (YouTube/Instagram) by the publish sweep
   title             String? // YouTube video title (unused by LinkedIn/Instagram)
   youtubePrivacy    String? // YouTube visibility: public | unlisted | private (null for non-YT)
   youtubeTags       String[]       @default([]) // YouTube tags, cleaned + within the 500-char budget
@@ -224,6 +225,13 @@ model PostTarget {
   error          String?
   attempts       Int           @default(0)
   claimedAt      DateTime? // when a publisher run last took it; how "stuck" is judged
+
+  // The post's first comment, once this target is PUBLISHED. A comment never
+  // changes the publish status above.
+  commentId       String? // the platform's id (YouTube: the comment thread)
+  commentError    String?
+  commentAttempts Int       @default(0)
+  commentedAt     DateTime?
 }
 
 enum TargetStatus {

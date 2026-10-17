@@ -94,6 +94,7 @@ export interface ComposerInitial {
   id: string;
   clientId: string;
   body: string;
+  firstComment: string; // "" when none
   title: string; // YouTube video title ("" when unused)
   youtubePrivacy: YtPrivacy | null;
   youtubeTags: string[];
@@ -120,6 +121,8 @@ const DEFAULT_LIMIT = 3000;
 // text - otherwise adding a LinkedIn account to a long YouTube description
 // would delete everything past 3000 on the next keystroke.
 const MAX_BODY = PLATFORM_LIMITS.YOUTUBE;
+// Same cap as postSchema's firstComment (Instagram's comment limit).
+const FIRST_COMMENT_MAX = 2200;
 
 const CONTENT_TYPES = [
   { key: "media", label: "Text & media", icon: Images },
@@ -286,6 +289,7 @@ export function Composer({
   );
   const [selected, setSelected] = useState<string[]>(initial?.accountIds ?? []);
   const [body, setBody] = useState(initial?.body ?? "");
+  const [firstComment, setFirstComment] = useState(initial?.firstComment ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [youtubePrivacy, setYoutubePrivacy] = useState<YtPrivacy>(
     initial?.youtubePrivacy ?? "public",
@@ -356,6 +360,8 @@ export function Composer({
 
   const igSelected = selectedPlatforms.has("INSTAGRAM");
   const ytSelected = selectedPlatforms.has("YOUTUBE");
+  // Only YouTube and Instagram take a first comment.
+  const commentable = contentType === "media" && (igSelected || ytSelected);
   const hasVideo = media.some((m) => m.type === "VIDEO");
   // Same cleaning + budget rules the server enforces (src/lib/youtube-tags.ts),
   // so the counter can't disagree with what gets accepted.
@@ -514,6 +520,8 @@ export function Composer({
     const payload = {
       clientId,
       body,
+      // Undefined when no account takes one, which clears it on edit.
+      firstComment: commentable ? firstComment : undefined,
       title: ytSelected ? title.trim() || undefined : undefined,
       youtubePrivacy: ytSelected ? youtubePrivacy : undefined,
       // Undefined when YouTube isn't targeted, which clears them on edit.
@@ -966,6 +974,30 @@ export function Composer({
                       : "Up to 512 MB per file."}
                   </span>
                 </button>
+              </div>
+            )}
+
+            {/* --- First comment (YouTube + Instagram) --- */}
+            {commentable && (
+              <div className="mt-4">
+                <div className="flex items-baseline justify-between">
+                  <FieldLabel>First comment</FieldLabel>
+                  <span className="text-muted-foreground font-mono text-[0.6875rem]">
+                    {firstComment.length}/{FIRST_COMMENT_MAX}
+                  </span>
+                </div>
+                <Textarea
+                  value={firstComment}
+                  maxLength={FIRST_COMMENT_MAX}
+                  onChange={(e) => setFirstComment(e.target.value)}
+                  placeholder="Optional. Posted under the post a few minutes after it goes live."
+                  aria-label="First comment"
+                  className="min-h-20 resize-none"
+                />
+                <p className="text-muted-foreground mt-1.5 text-xs">
+                  YouTube and Instagram only. YouTube doesn&apos;t let apps pin
+                  it.
+                </p>
               </div>
             )}
 

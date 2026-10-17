@@ -11,6 +11,14 @@ Cue uses the **Instagram API with Instagram Login** path with two permissions:
 
 Both need **Advanced Access**, which requires **App Review**.
 
+> **Since first comments (branch `feat/first-comment`), Cue also requests
+> `instagram_business_manage_comments`**, used only to post the first comment
+> the user wrote under the post Cue just published for them
+> (`POST /{media-id}/comments`). It needs Advanced Access too, so App Review
+> must cover it: its own use-case text in §2, and the screencast must show the
+> comment appearing. Check that it is listed under the app's Instagram use
+> case permissions before deploying, or the connect flow may reject the scope.
+
 ---
 
 ## 0. Status

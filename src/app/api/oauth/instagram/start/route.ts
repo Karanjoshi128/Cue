@@ -29,7 +29,11 @@ export async function GET(req: NextRequest) {
   }
 
   const redirectUri = `${process.env.APP_URL ?? req.nextUrl.origin}/api/oauth/instagram/callback`;
-  const state = Buffer.from(JSON.stringify({ clientId })).toString("base64url");
+  // ?comments=1 also asks for instagram_business_manage_comments, which first
+  // comments need. Opt-in, so a default connect asks only for what App Review
+  // covers.
+  const comments = req.nextUrl.searchParams.get("comments") === "1";
+  const state = Buffer.from(JSON.stringify({ clientId, comments })).toString("base64url");
 
   const url = new URL("https://www.instagram.com/oauth/authorize");
   url.searchParams.set("client_id", process.env.META_APP_ID);
@@ -37,7 +41,8 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("response_type", "code");
   url.searchParams.set(
     "scope",
-    "instagram_business_basic,instagram_business_content_publish",
+    "instagram_business_basic,instagram_business_content_publish" +
+      (comments ? ",instagram_business_manage_comments" : ""),
   );
   url.searchParams.set("state", state);
   // Always show the Instagram login screen, even if the browser is already

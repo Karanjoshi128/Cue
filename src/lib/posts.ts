@@ -20,6 +20,8 @@ import { measureMedia } from "@/lib/media";
 const YOUTUBE_BODY_MAX = 5000;
 /** LinkedIn's post limit; the ceiling for any target that isn't YouTube. */
 const DEFAULT_BODY_MAX = 3000;
+/** Instagram's comment limit (YouTube allows more), so one cap fits both. */
+const FIRST_COMMENT_MAX = 2200;
 
 // LinkedIn-only content types.
 const linkSchema = z.object({
@@ -51,6 +53,14 @@ export const postSchema = z
     // 5000 is YouTube's cap. Every other platform is held to 3000 in
     // assertPostIsPublishable(), once we know which accounts are targeted.
     body: z.string().min(1).max(YOUTUBE_BODY_MAX),
+    // Commented under the post once it's live, on YouTube and Instagram
+    // (LinkedIn ignores it). An empty string means none.
+    firstComment: z
+      .string()
+      .trim()
+      .max(FIRST_COMMENT_MAX)
+      .optional()
+      .transform((text) => text || undefined),
     // YouTube-only fields (ignored for other platforms).
     title: z.string().max(100).optional(),
     youtubePrivacy: z.enum(["public", "unlisted", "private"]).optional(),
@@ -250,6 +260,7 @@ export const apiPostSummarySelect = {
 
 export const apiPostDetailSelect = {
   ...apiPostSummarySelect,
+  firstComment: true,
   targets: {
     select: {
       id: true,
@@ -259,6 +270,9 @@ export const apiPostDetailSelect = {
       externalPostId: true,
       error: true,
       publishedAt: true,
+      commentId: true,
+      commentError: true,
+      commentedAt: true,
     },
   },
 } satisfies Prisma.PostSelect;
@@ -322,6 +336,7 @@ export async function createPostForUser(
         clientId: data.clientId,
         authorId: user.id,
         body: data.body,
+        firstComment: data.firstComment,
         ...youtubeColumns(data),
         idempotencyKey,
         status: statusFor(data.action),

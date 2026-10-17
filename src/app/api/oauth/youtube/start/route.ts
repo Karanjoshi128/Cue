@@ -29,7 +29,12 @@ export async function GET(req: NextRequest) {
   }
 
   const redirectUri = `${process.env.APP_URL ?? req.nextUrl.origin}/api/oauth/youtube/callback`;
-  const state = Buffer.from(JSON.stringify({ clientId })).toString("base64url");
+  // ?comments=1 also asks for youtube.force-ssl, which first comments need
+  // (commentThreads.insert). It's opt-in: Google verified the app for
+  // youtube.upload alone, and a default connect must stay on that verified
+  // scope set rather than show every client the unverified-app warning.
+  const comments = req.nextUrl.searchParams.get("comments") === "1";
+  const state = Buffer.from(JSON.stringify({ clientId, comments })).toString("base64url");
 
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID);
@@ -37,7 +42,9 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("response_type", "code");
   url.searchParams.set(
     "scope",
-    "https://www.googleapis.com/auth/youtube.upload openid email profile",
+    "https://www.googleapis.com/auth/youtube.upload" +
+      (comments ? " https://www.googleapis.com/auth/youtube.force-ssl" : "") +
+      " openid email profile",
   );
   // offline + consent so Google returns a refresh token for scheduled uploads.
   url.searchParams.set("access_type", "offline");

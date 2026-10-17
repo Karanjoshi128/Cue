@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { getAdapter } from "@/lib/platforms";
+import { COMMENT_PLATFORMS, getAdapter } from "@/lib/platforms";
 import { ensureFreshAccessToken } from "@/lib/tokens";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { ApiError } from "@/lib/api";
-import type { Post, PostTarget, Prisma } from "@prisma/client";
+import type { Platform, Post, PostTarget, Prisma } from "@prisma/client";
 import type {
   PublishArticle,
   PublishPoll,
@@ -20,6 +20,32 @@ const STALE_PROCESSING_MS = 20 * 60 * 1000;
 // Stop claiming new targets once a run has used this much of its time, so the
 // one in hand can finish and record its result before the function is killed.
 const RUN_BUDGET_MS = 200 * 1000;
+
+export const MAX_COMMENT_ATTEMPTS = 3;
+
+// A first comment waits this long after its post went live: YouTube can refuse
+// comments on a video it is still processing.
+const COMMENT_DELAY_MS = 60 * 1000;
+
+// A comment attempt claims its target by stamping claimedAt, which nothing
+// else reads once a target is PUBLISHED. Other runs leave a claimed target
+// alone for this long, longer than any run can live (300 s), so two
+// overlapping runs never post the same comment twice. A failed attempt is
+// retried once this has passed.
+const COMMENT_CLAIM_MS = 6 * 60 * 1000;
+
+// The scope each platform needs for comments, as SocialAccount.scopes records
+// it. Accounts connected before first comments existed lack it until they
+// reconnect, so their failures get RECONNECT_FOR_COMMENTS in front.
+const COMMENT_SCOPES: Partial<Record<Platform, string>> = {
+  YOUTUBE: "youtube.force-ssl",
+  INSTAGRAM: "instagram_business_manage_comments",
+};
+const RECONNECT_FOR_COMMENTS = "Reconnect this account to allow comments: ";
+// Google's 403 for a token without the scope, e.g. when the user unticked it
+// on the consent screen although the stored scopes list it.
+const MISSING_SCOPE_ERROR =
+  /insufficientPermissions|insufficient authentication scopes|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i;
 
 // The link/poll columns are JSON - normalize them into typed publish inputs.
 function linkToArticle(link: unknown): PublishArticle | undefined {
@@ -47,13 +73,21 @@ function jsonToPoll(poll: unknown): PublishPoll | undefined {
 
 /**
  * Core publishing engine. Finds due targets, publishes each, records results,
- * writes permanent PostHistory, and rolls up parent Post status.
+ * writes permanent PostHistory, and rolls up parent Post status. Then, with
+ * whatever is left of the run budget, posts first comments (postFirstComments)
+ * unless `firstComments` is false.
  * Idempotent: targets are flipped to PROCESSING before sending.
  */
-export async function publishDueTargets(now = new Date()): Promise<{
+export async function publishDueTargets(
+  now = new Date(),
+  { firstComments = true }: { firstComments?: boolean } = {},
+): Promise<{
   processed: number;
   published: number;
   failed: number;
+  /** First comments posted / failed; absent when the comment step didn't run. */
+  commented?: number;
+  commentsFailed?: number;
   /** True when a platform admin has paused publishing; nothing was sent. */
   paused?: boolean;
 }> {
@@ -169,7 +203,131 @@ export async function publishDueTargets(now = new Date()): Promise<{
     await rollUpPostStatus(postId);
   }
 
-  return { processed: due.length, published, failed };
+  // Comments come last and only on time to spare. Nothing they throw may
+  // escape: by now this run has published posts and must report them.
+  let comments: Awaited<ReturnType<typeof postFirstComments>> | undefined;
+  if (firstComments && Date.now() - startedAt < RUN_BUDGET_MS) {
+    try {
+      comments = await postFirstComments(startedAt + RUN_BUDGET_MS);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[publish] first comments: ${message}`);
+    }
+  }
+
+  return { processed: due.length, published, failed, ...comments };
+}
+
+/**
+ * Posts each published target's first comment (Post.firstComment), stopping
+ * once `deadline` (epoch ms) has passed. It runs at the end of every publish
+ * sweep, so a comment goes out on the first sweep at least COMMENT_DELAY_MS
+ * after its post went live.
+ *
+ * A target gets MAX_COMMENT_ATTEMPTS tries, across sweeps. A failure is only
+ * written to commentError: the target and its post stay PUBLISHED.
+ */
+export async function postFirstComments(
+  deadline = Date.now() + RUN_BUDGET_MS,
+): Promise<{ commented: number; commentsFailed: number }> {
+  const now = Date.now();
+  const due = await prisma.postTarget.findMany({
+    where: {
+      status: "PUBLISHED",
+      externalPostId: { not: null },
+      platform: { in: COMMENT_PLATFORMS },
+      commentedAt: null,
+      commentAttempts: { lt: MAX_COMMENT_ATTEMPTS },
+      publishedAt: { lte: new Date(now - COMMENT_DELAY_MS) },
+      // Never tried, or the last attempt's claim has run out. (A first
+      // attempt needs no claim check: the claim below can't succeed twice.)
+      OR: [
+        { commentAttempts: 0 },
+        { claimedAt: { lt: new Date(now - COMMENT_CLAIM_MS) } },
+      ],
+      // A suspended workspace's comments wait, like its posts.
+      post: {
+        firstComment: { not: null },
+        client: { workspace: { suspendedAt: null } },
+      },
+    },
+    include: { post: { select: { firstComment: true } }, account: true },
+    orderBy: { publishedAt: "asc" },
+    take: 50,
+  });
+
+  let commented = 0;
+  let commentsFailed = 0;
+
+  for (const target of due) {
+    if (Date.now() > deadline) break;
+    const adapter = getAdapter(target.platform);
+    const { externalPostId } = target;
+    const text = target.post.firstComment;
+    if (!adapter.comment || !externalPostId || !text) continue;
+
+    // Count the attempt before sending anything. Matching on the attempt
+    // count read above makes this the lock: if another run got here first,
+    // the count has moved on and this claims nothing.
+    const claim = await prisma.postTarget.updateMany({
+      where: {
+        id: target.id,
+        status: "PUBLISHED",
+        commentedAt: null,
+        commentAttempts: target.commentAttempts,
+      },
+      data: { commentAttempts: { increment: 1 }, claimedAt: new Date() },
+    });
+    if (claim.count === 0) continue;
+
+    let commentId: string;
+    try {
+      ({ commentId } = await adapter.comment({
+        accessToken: await ensureFreshAccessToken(target.account),
+        externalId: target.account.externalId,
+        postExternalId: externalPostId,
+        text,
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[publish] comment on target ${target.id} (${target.platform}): ${message}`,
+      );
+      await prisma.postTarget.update({
+        where: { id: target.id },
+        data: {
+          commentError: commentErrorFor(
+            target.platform,
+            target.account.scopes,
+            message,
+          ),
+        },
+      });
+      commentsFailed++;
+      continue;
+    }
+
+    await prisma.postTarget.update({
+      where: { id: target.id },
+      data: { commentId, commentedAt: new Date(), commentError: null },
+    });
+    commented++;
+  }
+
+  return { commented, commentsFailed };
+}
+
+/** The stored commentError: says to reconnect when a missing scope is why. */
+function commentErrorFor(
+  platform: Platform,
+  scopes: string | null,
+  message: string,
+): string {
+  const scope = COMMENT_SCOPES[platform];
+  const missingScope =
+    scope !== undefined &&
+    (!scopes?.includes(scope) || MISSING_SCOPE_ERROR.test(message));
+  return ((missingScope ? RECONNECT_FOR_COMMENTS : "") + message).slice(0, 500);
 }
 
 /**
@@ -265,7 +423,9 @@ export async function publishPostNow(postId: string): Promise<void> {
     where: { postId, status: { in: ["SCHEDULED", "FAILED"] } },
     data: { status: "SCHEDULED", attempts: 0, error: null },
   });
-  await publishDueTargets(new Date(Date.now() + 1000));
+  // No first comments here: this runs inside the user's request, and a post
+  // just published isn't due for one yet. The next cron sweep posts it.
+  await publishDueTargets(new Date(Date.now() + 1000), { firstComments: false });
 }
 
 export type DueTarget = PostTarget & { post: Post };

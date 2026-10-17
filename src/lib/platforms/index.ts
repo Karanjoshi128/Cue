@@ -16,4 +16,9 @@ export function getAdapter(platform: Platform): PlatformAdapter {
   return adapter;
 }
 
+/** Platforms whose adapter can post a first comment. */
+export const COMMENT_PLATFORMS = (Object.keys(adapters) as Platform[]).filter(
+  (p) => adapters[p].comment,
+);
+
 export * from "./types";

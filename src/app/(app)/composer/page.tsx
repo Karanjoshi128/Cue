@@ -39,6 +39,7 @@ export default async function ComposerPage({
         id: post.id,
         clientId: post.clientId,
         body: post.body,
+        firstComment: post.firstComment ?? "",
         title: post.title ?? "",
         youtubePrivacy:
           (post.youtubePrivacy as ComposerInitial["youtubePrivacy"]) ?? null,

@@ -1,8 +1,9 @@
 import { GRAPH } from "@/lib/platforms/instagram";
 
 // The Instagram API (Instagram Login, graph.instagram.com) calls behind
-// comment automations. Every call needs instagram_business_manage_comments;
-// the private reply also uses instagram_business_manage_messages.
+// comment automations. Comment calls need instagram_business_manage_comments;
+// messages (the private reply and everything after it) also use
+// instagram_business_manage_messages.
 // Docs: developers.facebook.com/docs/instagram-platform/private-replies and
 // .../comment-moderation.
 
@@ -45,7 +46,8 @@ function toError(status: number, body: unknown): InstagramApiError {
     message =
       "The Instagram connection expired or was revoked. Reconnect the account in Clients.";
   } else if (code === 10 && (sub === 2534022 || sub === 2018278)) {
-    message = "Instagram only allows this DM within 7 days of the comment.";
+    message =
+      "Outside Instagram's reply window: 7 days after a comment, or 24 hours after their last message or tap.";
   } else if (code === 10 || code === 200 || (code && code > 200 && code < 300)) {
     message = `Instagram refused: ${raw}. Reconnect the account and allow comment and message access.`;
   } else if (code === 100 && sub === 2534001) {
@@ -88,14 +90,15 @@ async function call<T>(
 }
 
 /**
- * Asks Meta to send this account's comment webhooks to Cue. Only `comments`:
- * Cue doesn't read the inbox, so it doesn't ask for message events. Meta only
- * delivers them once the app is Live with Advanced Access; until then this
- * still succeeds and nothing arrives.
+ * Asks Meta to send this account's webhooks to Cue: comments (triggers and
+ * the Reply Desk), messages (story replies, DM keywords, answers to a
+ * question) and postbacks (taps on "Send me the link"). Meta only delivers
+ * them once the app is Live with Advanced Access; until then this still
+ * succeeds and nothing arrives.
  */
-export async function subscribeToCommentWebhooks(token: string): Promise<void> {
+export async function subscribeToWebhooks(token: string): Promise<void> {
   await call<{ success: boolean }>(
-    `${GRAPH}/me/subscribed_apps?subscribed_fields=comments`,
+    `${GRAPH}/me/subscribed_apps?subscribed_fields=comments,messages,messaging_postbacks`,
     token,
     { method: "POST" },
   );
@@ -170,49 +173,58 @@ export async function replyToComment(
 }
 
 /**
- * The private reply: a DM tied to the comment, which is the only way a
- * business can message someone who hasn't messaged it first. One per comment,
- * within 7 days of it. With a link, it's sent as a button template; Meta
- * doesn't say whether templates are allowed on a private reply, so if that's
- * refused the link goes in the text instead.
+ * Who a message goes to. `comment_id` makes it the private reply: the only
+ * way a business can message someone who hasn't messaged it, once per
+ * comment, within 7 days. `id` (their Instagram-scoped id) works for 24 hours
+ * after they last messaged or tapped a button.
  */
-export async function sendPrivateReply(
+export type Recipient = { comment_id: string } | { id: string };
+
+/** A message: plain text, text with a link button, or text with a tap button. */
+export type OutgoingMessage =
+  | { text: string }
+  | { text: string; link: { label: string; url: string } }
+  | { text: string; tap: { label: string; payload: string } };
+
+/** What's added to the text when Instagram refuses a tap button. */
+export const TAP_FALLBACK = "Reply YES and I'll send it over.";
+
+/**
+ * Sends a DM. Buttons go as a button template; Meta doesn't say whether a
+ * template is allowed on a private reply, so if one is refused the message
+ * goes as text instead: the link in the text, or "reply YES" in place of a
+ * tap button (the conversation treats a reply as a tap).
+ */
+export async function sendMessage(
   token: string,
   igUserId: string,
-  commentId: string,
-  text: string,
-  button?: { label: string; url: string } | null,
-): Promise<string> {
+  recipient: Recipient,
+  msg: OutgoingMessage,
+): Promise<{ messageId: string; recipientId: string | null }> {
   const url = `${GRAPH}/${igUserId}/messages`;
-  const recipient = { comment_id: commentId };
-  const plain = () =>
-    call<{ message_id: string }>(url, token, {
+  const post = async (message: unknown) => {
+    const res = await call<{ message_id: string; recipient_id?: string }>(url, token, {
       method: "POST",
-      json: {
-        recipient,
-        message: { text: button ? `${text}\n\n${button.url}` : text },
-      },
+      json: { recipient, message },
     });
+    return { messageId: res.message_id, recipientId: res.recipient_id ?? null };
+  };
 
-  if (!button) return (await plain()).message_id;
+  const button =
+    "link" in msg
+      ? { type: "web_url", url: msg.link.url, title: msg.link.label }
+      : "tap" in msg
+        ? { type: "postback", payload: msg.tap.payload, title: msg.tap.label }
+        : null;
+  if (!button) return post({ text: msg.text });
+
   try {
-    const res = await call<{ message_id: string }>(url, token, {
-      method: "POST",
-      json: {
-        recipient,
-        message: {
-          attachment: {
-            type: "template",
-            payload: {
-              template_type: "button",
-              text,
-              buttons: [{ type: "web_url", url: button.url, title: button.label }],
-            },
-          },
-        },
+    return await post({
+      attachment: {
+        type: "template",
+        payload: { template_type: "button", text: msg.text, buttons: [button] },
       },
     });
-    return res.message_id;
   } catch (err) {
     // Throttling, auth and "can't message this person" would fail the same
     // way as text, so only a rejected template falls back.
@@ -222,8 +234,29 @@ export async function sendPrivateReply(
       err.code === 100 &&
       err.subcode !== 2534001
     ) {
-      return (await plain()).message_id;
+      const extra = "link" in msg ? msg.link.url : TAP_FALLBACK;
+      return post({ text: `${msg.text}\n\n${extra}` });
     }
     throw err;
   }
+}
+
+/**
+ * A person's username and whether they follow the account. Instagram only
+ * answers once they've messaged or tapped a button (their consent), which is
+ * exactly when the follow gate asks.
+ */
+export async function getUserProfile(
+  token: string,
+  igsid: string,
+): Promise<{ username: string | null; follows: boolean | null }> {
+  const res = await call<{ username?: string; is_user_follow_business?: boolean }>(
+    `${GRAPH}/${igsid}?fields=username,is_user_follow_business`,
+    token,
+  );
+  return {
+    username: res.username ?? null,
+    follows:
+      typeof res.is_user_follow_business === "boolean" ? res.is_user_follow_business : null,
+  };
 }

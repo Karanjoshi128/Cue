@@ -1,6 +1,11 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import { handleWebhookComments } from "@/lib/automations/engine";
-import { commentsFromWebhook, verifySignature } from "@/lib/automations/webhook";
+import { handleIncomingMessages } from "@/lib/automations/conversation";
+import {
+  commentsFromWebhook,
+  messagesFromWebhook,
+  verifySignature,
+} from "@/lib/automations/webhook";
 
 export const dynamic = "force-dynamic";
 // The DM and public reply go out after the 200, inside this budget.
@@ -26,9 +31,10 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Comment notifications. Answer 200 straight away (Meta retries anything
- * slower or non-200 for 36 hours) and do the work in after(). Duplicates are
- * harmless: each comment becomes at most one run.
+ * Comment, message and button-tap notifications. Answer 200 straight away
+ * (Meta retries anything slower or non-200 for 36 hours) and do the work in
+ * after(). Duplicates are harmless: each comment or message becomes at most
+ * one run, and a repeated tap just repeats the same step.
  */
 export async function POST(req: NextRequest) {
   const raw = await req.text();
@@ -44,12 +50,16 @@ export async function POST(req: NextRequest) {
   }
 
   const comments = commentsFromWebhook(payload);
-  if (comments.size > 0) {
-    after(() =>
-      handleWebhookComments(comments).catch((err) =>
-        console.error("[automations] webhook handling failed:", err),
-      ),
-    );
+  const messages = messagesFromWebhook(payload);
+  if (comments.size > 0 || messages.length > 0) {
+    after(async () => {
+      await handleWebhookComments(comments).catch((err) =>
+        console.error("[automations] comment webhook handling failed:", err),
+      );
+      await handleIncomingMessages(messages).catch((err) =>
+        console.error("[automations] message webhook handling failed:", err),
+      );
+    });
   }
   return NextResponse.json({ ok: true });
 }

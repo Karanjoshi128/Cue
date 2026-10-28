@@ -439,6 +439,7 @@ model AutomationRun {
   nextAttemptAt     DateTime?
 
   // The conversation after the first DM (follow gate, question, follow-up).
+  dmSentAt       DateTime? // the first DM went out; pacing counts these per hour
   recipientId    String? // their Instagram-scoped id, for every message after the first
   stage          RunStage  @default(START)
   lastUserAt     DateTime? // their last tap or reply; Instagram allows messages for 24 h after it

@@ -1,35 +1,44 @@
-import {
-  Prisma,
-  type AutomationRunStatus,
-  type AutomationSource,
+import type {
+  AutomationRunStatus,
+  AutomationSource,
+  AutomationTrigger,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureFreshAccessToken } from "@/lib/tokens";
 import { isPublishingPaused } from "@/lib/platform-settings";
-import { hasFeature } from "@/lib/plans";
-import {
-  automationsEnabled,
-  hasAutomationScopes,
-  PRIVATE_REPLY_WINDOW_MS,
-  RUN_RETENTION_DAYS,
-} from "./config";
+import { automationsEnabled, PRIVATE_REPLY_WINDOW_MS } from "./config";
 import { matchesKeywords } from "./match";
 import {
-  InstagramApiError,
   listComments,
   listRecentMedia,
   replyToComment,
-  sendPrivateReply,
+  sendMessage,
   type InstagramComment,
 } from "./instagram-api";
+import {
+  accountSelect,
+  asApiError,
+  automationBlocker,
+  fill,
+  firstMessage,
+  followUpAt,
+  isUniqueViolation,
+  MESSAGE_WINDOW_MS,
+  type AutomationAccount,
+} from "./shared";
+import { recordLead } from "./leads";
+import { holdReason } from "./moderation";
 
 /*
- * Instagram comment automations. A comment reaches ingestComments() from a
- * webhook (instant, once Meta grants Advanced Access) or from pollAccount()
- * (the every-minute check, which is all that works in Development mode, and
- * a safety net after). Either way it becomes at most one AutomationRun, which
- * processRun() sends: the DM first, then the public reply, because a reply
- * saying "check your DMs" is wrong when the DM didn't go.
+ * Instagram automations, the first message. A comment reaches ingestComments()
+ * from a webhook (instant, once Meta grants Advanced Access) or from
+ * pollAccount() (the every-minute check, which is all that works in
+ * Development mode, and a safety net after). Story replies and DM keywords
+ * come in through conversation.ts. Either way each one becomes at most one
+ * AutomationRun, which processRun() sends: the DM first, then the public
+ * reply, because a reply saying "check your DMs" is wrong when the DM didn't
+ * go. What follows the first DM (taps, answers, follow-ups) is in
+ * conversation.ts.
  */
 
 const MAX_ATTEMPTS = 5;
@@ -39,6 +48,9 @@ const LEASE_MS = 5 * 60 * 1000;
 // "Any post" rules watch this many of the account's newest posts when polling.
 // Webhooks cover every post.
 const ANY_POST_MEDIA = 10;
+// First DMs per account per hour. Meta allows 750 private replies an hour;
+// staying well under it keeps a viral post from looking like a spam burst.
+const HOURLY_CAP = Number(process.env.IG_DM_HOURLY_CAP) || 200;
 
 export interface IncomingComment {
   id: string;
@@ -50,55 +62,7 @@ export interface IncomingComment {
   timestamp: Date;
 }
 
-const accountSelect = {
-  id: true,
-  platform: true,
-  externalId: true,
-  displayName: true,
-  scopes: true,
-  accessToken: true,
-  refreshToken: true,
-  tokenExpires: true,
-  client: {
-    select: {
-      workspace: { select: { suspendedAt: true, disabledFeatures: true } },
-    },
-  },
-} satisfies Prisma.SocialAccountSelect;
-
-type AutomationAccount = Prisma.SocialAccountGetPayload<{
-  select: typeof accountSelect;
-}>;
-
-/** Null when the account may run automations, otherwise why not. */
-export function automationBlocker(account: AutomationAccount): string | null {
-  const ws = account.client.workspace;
-  if (account.platform !== "INSTAGRAM") return "Not an Instagram account.";
-  if (ws.suspendedAt) return "The workspace is suspended.";
-  if (!hasFeature(ws, "instagram") || !hasFeature(ws, "ig_automations")) {
-    return "Instagram automations are switched off for this workspace.";
-  }
-  if (!hasAutomationScopes(account.scopes)) {
-    return "Reconnect this Instagram account and allow comment and message access.";
-  }
-  return null;
-}
-
-function asApiError(err: unknown): InstagramApiError {
-  if (err instanceof InstagramApiError) return err;
-  const message = err instanceof Error ? err.message : String(err);
-  return new InstagramApiError(message.slice(0, 400), 0, false);
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
-  );
-}
-
-function fill(template: string, username: string | null): string {
-  return template.replaceAll("{username}", username ? `@${username}` : "there");
-}
+export { automationBlocker };
 
 export function commentFromApi(c: InstagramComment, mediaId: string): IncomingComment {
   return {
@@ -141,6 +105,90 @@ async function resolveScheduledPostRules(accountId: string) {
 }
 
 /**
+ * Creates the run for a matched comment or message, deciding first whether
+ * it's a repeat (once per person) or should be held. Returns the run id when
+ * it's queued to send, null when skipped, held or already handled.
+ */
+export async function createRun(p: {
+  account: AutomationAccount;
+  rule: {
+    id: string;
+    name: string;
+    trigger: AutomationTrigger;
+    oncePerPerson: boolean;
+    holdWords: string[];
+    aiModeration: boolean;
+  };
+  eventId: string;
+  mediaId: string | null;
+  commenterId: string;
+  username: string | null;
+  text: string;
+  at: Date;
+  source: AutomationSource;
+  recipientId?: string | null;
+}): Promise<string | null> {
+  const { rule } = p;
+  const repeat =
+    rule.oncePerPerson &&
+    (await prisma.automationRun.count({
+      where: {
+        ruleId: rule.id,
+        commenterId: p.commenterId,
+        status: { in: ["QUEUED", "SENT", "PARTIAL"] },
+      },
+    })) > 0;
+  const held = repeat ? null : await holdReason(rule, p.text);
+  const status: AutomationRunStatus = repeat ? "SKIPPED" : held ? "HELD" : "QUEUED";
+
+  let runId: string;
+  try {
+    const run = await prisma.automationRun.create({
+      data: {
+        ruleId: rule.id,
+        commentId: p.eventId,
+        trigger: rule.trigger,
+        mediaId: p.mediaId,
+        commenterId: p.commenterId,
+        commenterUsername: p.username,
+        commentText: p.text.slice(0, 2200),
+        commentedAt: p.at,
+        source: p.source,
+        status,
+        heldReason: held,
+        // A story reply or DM opens Instagram's 24-hour window right away.
+        recipientId: p.recipientId ?? null,
+        lastUserAt: p.recipientId ? p.at : null,
+      },
+      select: { id: true },
+    });
+    runId = run.id;
+  } catch (err) {
+    // The webhook and the poll saw the same comment at the same moment.
+    if (isUniqueViolation(err)) return null;
+    throw err;
+  }
+
+  await prisma.automationRule.update({
+    where: { id: rule.id },
+    data: {
+      matchedCount: { increment: 1 },
+      heldCount: { increment: held ? 1 : 0 },
+      lastTriggeredAt: new Date(),
+    },
+  });
+  await recordLead({
+    clientId: p.account.clientId,
+    accountId: p.account.id,
+    igsid: p.commenterId,
+    username: p.username,
+    source: rule.trigger,
+    ruleName: rule.name,
+  });
+  return status === "QUEUED" ? runId : null;
+}
+
+/**
  * Turns new comments into runs and sends them. Safe to call with comments it
  * has seen before (polling re-reads them; Meta re-sends webhooks): each comment
  * becomes at most one run.
@@ -175,7 +223,7 @@ export async function ingestComments(
 
   await resolveScheduledPostRules(account.id);
   const rules = await prisma.automationRule.findMany({
-    where: { accountId: account.id, enabled: true },
+    where: { accountId: account.id, enabled: true, trigger: "COMMENT" },
     orderBy: { createdAt: "asc" },
   });
   // A rule for one post outranks a rule for every post.
@@ -190,51 +238,23 @@ export async function ingestComments(
       (r) =>
         (r.scope === "ANY_POST" || r.mediaId === c.mediaId) &&
         r.activeSince <= c.timestamp &&
-        matchesKeywords(c.text, r.keywords, r.matchMode),
+        matchesKeywords(c.text, r.keywords, r.matchMode, r.fuzzy),
     );
     if (!rule) continue;
 
-    const commenterId =
-      c.fromId ?? (c.fromUsername ? `@${c.fromUsername}` : `comment:${c.id}`);
-    const repeat =
-      rule.oncePerPerson &&
-      (await prisma.automationRun.count({
-        where: {
-          ruleId: rule.id,
-          commenterId,
-          status: { in: ["QUEUED", "SENT", "PARTIAL"] },
-        },
-      })) > 0;
-
-    let runId: string;
-    try {
-      const run = await prisma.automationRun.create({
-        data: {
-          ruleId: rule.id,
-          commentId: c.id,
-          mediaId: c.mediaId,
-          commenterId,
-          commenterUsername: c.fromUsername,
-          commentText: c.text.slice(0, 2200),
-          commentedAt: c.timestamp,
-          source,
-          status: repeat ? "SKIPPED" : "QUEUED",
-        },
-        select: { id: true },
-      });
-      runId = run.id;
-    } catch (err) {
-      // The webhook and the poll saw the same comment at the same moment.
-      if (isUniqueViolation(err)) continue;
-      throw err;
-    }
-
-    matched++;
-    await prisma.automationRule.update({
-      where: { id: rule.id },
-      data: { matchedCount: { increment: 1 }, lastTriggeredAt: new Date() },
+    const runId = await createRun({
+      account,
+      rule,
+      eventId: c.id,
+      mediaId: c.mediaId,
+      commenterId: c.fromId ?? (c.fromUsername ? `@${c.fromUsername}` : `comment:${c.id}`),
+      username: c.fromUsername,
+      text: c.text,
+      at: c.timestamp,
+      source,
     });
-    if (!repeat) queued.push(runId);
+    matched++;
+    if (runId) queued.push(runId);
   }
 
   let sent = 0;
@@ -258,10 +278,17 @@ function settle(p: {
   return "FAILED";
 }
 
+/** First DMs this account sent in the last hour, for pacing. */
+async function firstDmsLastHour(accountId: string): Promise<number> {
+  return prisma.automationRun.count({
+    where: { rule: { accountId }, dmSentAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } },
+  });
+}
+
 /**
- * Sends one queued run. Returns its new status, or null when another worker
- * holds it or it isn't due. Never throws for Instagram's errors: they're
- * recorded on the run.
+ * Sends one queued run's first DM (and, for a comment, the public reply).
+ * Returns its new status, or null when another worker holds it or it isn't
+ * due. Never throws for Instagram's errors: they're recorded on the run.
  */
 export async function processRun(runId: string): Promise<AutomationRunStatus | null> {
   const now = new Date();
@@ -283,11 +310,12 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
     include: { rule: { include: { account: { select: accountSelect } } } },
   });
   const { rule } = run;
+  const isComment = run.trigger === "COMMENT";
   const wantsDm = !!rule.dmText;
-  const wantsReply = rule.replies.length > 0;
+  const wantsReply = isComment && rule.replies.length > 0;
 
   let { dmMessageId, dmError, replyId, replyError } = run;
-  const finish = async (status: AutomationRunStatus) => {
+  const finish = async (status: AutomationRunStatus, extra: object = {}) => {
     await prisma.automationRun.update({
       where: { id: runId },
       data: {
@@ -298,6 +326,7 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
         replyError,
         lastError: null,
         nextAttemptAt: null,
+        ...extra,
       },
     });
     return status;
@@ -305,26 +334,35 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
   const giveUp = (why: string) => {
     if (wantsDm && !dmMessageId && !dmError) dmError = why;
     if (wantsReply && !replyId && !replyError) replyError = why;
-    return finish(settle({ wantsDm, wantsReply, dmMessageId, replyId }));
+    return finish(settle({ wantsDm, wantsReply, dmMessageId, replyId }), { stage: "DONE" });
+  };
+  // Not an attempt: give it back and try again shortly.
+  const later = async (why: string, minutes: number) => {
+    await prisma.automationRun.update({
+      where: { id: runId },
+      data: {
+        attempts: { decrement: 1 },
+        nextAttemptAt: new Date(now.getTime() + minutes * 60 * 1000),
+        lastError: why,
+      },
+    });
+    return "QUEUED" as const;
   };
 
   if (!rule.enabled) return giveUp("The automation was switched off before this went out.");
   const blocker = automationBlocker(rule.account);
   if (blocker) return giveUp(blocker);
-  if (now.getTime() - run.commentedAt.getTime() > PRIVATE_REPLY_WINDOW_MS) {
+  if (isComment && now.getTime() - run.commentedAt.getTime() > PRIVATE_REPLY_WINDOW_MS) {
     return giveUp("Missed Instagram's 7-day window for replying to this comment.");
   }
+  if (!isComment && (!run.lastUserAt || now.getTime() - run.lastUserAt.getTime() > MESSAGE_WINDOW_MS)) {
+    return giveUp("Missed Instagram's 24-hour window for replying to this message.");
+  }
   if (await isPublishingPaused()) {
-    // Not an attempt: give it back and try again shortly.
-    await prisma.automationRun.update({
-      where: { id: runId },
-      data: {
-        attempts: { decrement: 1 },
-        nextAttemptAt: new Date(now.getTime() + 5 * 60 * 1000),
-        lastError: "Publishing is paused across Cue. This goes out when it resumes.",
-      },
-    });
-    return "QUEUED";
+    return later("Publishing is paused across Cue. This goes out when it resumes.", 5);
+  }
+  if (wantsDm && !dmMessageId && (await firstDmsLastHour(rule.accountId)) >= HOURLY_CAP) {
+    return later(`Pacing: this account sent ${HOURLY_CAP} DMs in the last hour. This one goes out shortly.`, 3);
   }
 
   let token: string;
@@ -346,21 +384,27 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
   let retryWhy: string | null = null;
   let dmSent = false;
   let replied = false;
+  let conversation: object = {};
 
   if (wantsDm && !dmMessageId && !dmError) {
-    const button =
-      rule.dmButtonLabel && rule.dmButtonUrl
-        ? { label: rule.dmButtonLabel, url: rule.dmButtonUrl }
-        : null;
+    const first = firstMessage(rule, run.id, run.commenterUsername);
     try {
-      dmMessageId = await sendPrivateReply(
+      const res = await sendMessage(
         token,
         rule.account.externalId,
-        run.commentId,
-        fill(rule.dmText!, run.commenterUsername),
-        button,
+        isComment ? { comment_id: run.commentId } : { id: run.recipientId! },
+        first.msg,
       );
+      dmMessageId = res.messageId;
       dmSent = true;
+      const delivered = first.stage === "DONE";
+      conversation = {
+        dmSentAt: new Date(),
+        recipientId: res.recipientId ?? run.recipientId,
+        stage: first.stage,
+        ...(delivered ? { deliveredAt: new Date() } : {}),
+        followUpAt: delivered ? null : followUpAt(rule, run.lastUserAt),
+      };
     } catch (err) {
       ({ final: dmError, retry: retryWhy } = classify(err));
     }
@@ -372,11 +416,7 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
     } else if (!wantsDm || dmMessageId) {
       const text = rule.replies[Math.floor(Math.random() * rule.replies.length)];
       try {
-        replyId = await replyToComment(
-          token,
-          run.commentId,
-          fill(text, run.commenterUsername),
-        );
+        replyId = await replyToComment(token, run.commentId, fill(text, run.commenterUsername));
         replied = true;
       } catch (err) {
         ({ final: replyError, retry: retryWhy } = classify(err));
@@ -385,10 +425,12 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
   }
 
   if (dmSent || replied) {
+    const delivered = dmSent && "deliveredAt" in conversation;
     await prisma.automationRule.update({
       where: { id: rule.id },
       data: {
         dmSentCount: { increment: dmSent ? 1 : 0 },
+        deliveredCount: { increment: delivered ? 1 : 0 },
         replyCount: { increment: replied ? 1 : 0 },
       },
     });
@@ -405,11 +447,17 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
         replyError,
         lastError: retryWhy,
         nextAttemptAt: new Date(Date.now() + wait * 60 * 1000),
+        ...conversation,
       },
     });
     return "QUEUED";
   }
-  return finish(settle({ wantsDm, wantsReply, dmMessageId, replyId }));
+  const status = settle({ wantsDm, wantsReply, dmMessageId, replyId });
+  return finish(status, {
+    ...conversation,
+    // Nothing more will happen on a run whose DM failed or that has no DM.
+    ...(!dmMessageId ? { stage: "DONE" } : {}),
+  });
 }
 
 export interface PollResult {
@@ -435,7 +483,7 @@ export async function pollAccount(accountId: string): Promise<PollResult> {
 
   await resolveScheduledPostRules(account.id);
   const rules = await prisma.automationRule.findMany({
-    where: { accountId, enabled: true },
+    where: { accountId, enabled: true, trigger: "COMMENT" },
     select: { scope: true, mediaId: true },
   });
   if (!rules.length) return { comments: 0, matched: 0, sent: 0 };
@@ -485,7 +533,7 @@ export async function handleWebhookComments(
       where: {
         platform: "INSTAGRAM",
         externalId: igUserId,
-        automationRules: { some: { enabled: true } },
+        automationRules: { some: { enabled: true, trigger: "COMMENT" } },
       },
       select: accountSelect,
     });
@@ -498,73 +546,4 @@ export async function handleWebhookComments(
       }
     }
   }
-}
-
-/**
- * The every-minute job: check comments on every account with a live rule,
- * send anything queued or due for a retry, and delete activity older than
- * RUN_RETENTION_DAYS. Stops starting new work once `budgetMs` is used.
- */
-export async function runAutomations(budgetMs = 45_000) {
-  const started = Date.now();
-  const elapsed = () => Date.now() - started;
-  const summary = {
-    accounts: 0,
-    polled: 0,
-    matched: 0,
-    sent: 0,
-    retried: 0,
-    purged: 0,
-    errors: 0,
-  };
-  if (!automationsEnabled()) return { ...summary, skipped: true };
-
-  const accounts = await prisma.socialAccount.findMany({
-    where: { platform: "INSTAGRAM", automationRules: { some: { enabled: true } } },
-    select: { id: true },
-    orderBy: { commentsCheckedAt: { sort: "asc", nulls: "first" } },
-  });
-  summary.accounts = accounts.length;
-  for (const { id } of accounts) {
-    if (elapsed() > budgetMs * 0.6) break;
-    try {
-      const r = await pollAccount(id);
-      summary.polled++;
-      summary.matched += r.matched;
-      summary.sent += r.sent;
-      if (r.error) summary.errors++;
-    } catch (err) {
-      summary.errors++;
-      console.error(`[automations] poll of account ${id} failed:`, err);
-    }
-  }
-
-  // Retries, and runs a webhook queued but couldn't finish (give those a
-  // minute, in case the webhook's own send is still in flight).
-  const due = await prisma.automationRun.findMany({
-    where: {
-      status: "QUEUED",
-      OR: [
-        { nextAttemptAt: { lte: new Date() } },
-        { nextAttemptAt: null, createdAt: { lt: new Date(Date.now() - 60_000) } },
-      ],
-    },
-    select: { id: true },
-    orderBy: { createdAt: "asc" },
-    take: 50,
-  });
-  for (const { id } of due) {
-    if (elapsed() > budgetMs) break;
-    const status = await processRun(id);
-    if (status) summary.retried++;
-    if (status === "SENT" || status === "PARTIAL") summary.sent++;
-  }
-
-  const purged = await prisma.automationRun.deleteMany({
-    where: {
-      createdAt: { lt: new Date(Date.now() - RUN_RETENTION_DAYS * 24 * 60 * 60 * 1000) },
-    },
-  });
-  summary.purged = purged.count;
-  return summary;
 }

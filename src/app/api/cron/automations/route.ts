@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeCron } from "@/lib/cron-auth";
-import { runAutomations } from "@/lib/automations/engine";
+import { runAutomations } from "@/lib/automations/cron";
 import { recordHeartbeat } from "@/lib/platform-settings";
 
 export const dynamic = "force-dynamic";

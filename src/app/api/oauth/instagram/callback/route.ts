@@ -7,7 +7,7 @@ import {
   hasAutomationScopes,
   instagramScopes,
 } from "@/lib/automations/config";
-import { subscribeToCommentWebhooks } from "@/lib/automations/instagram-api";
+import { subscribeToWebhooks } from "@/lib/automations/instagram-api";
 
 export const dynamic = "force-dynamic";
 
@@ -119,11 +119,11 @@ export async function GET(req: NextRequest) {
     select: { id: true },
   });
 
-  // Comment automations: ask Meta to send this account's comment webhooks.
+  // Automations: ask Meta to send this account's comment and message webhooks.
   // Best effort. Until then (or if it fails) the every-minute check covers it.
   if (automationsEnabled() && hasAutomationScopes(scopes)) {
     try {
-      await subscribeToCommentWebhooks(long.access_token);
+      await subscribeToWebhooks(long.access_token);
       await prisma.socialAccount.update({
         where: { id: account.id },
         data: { webhooksSubscribedAt: new Date() },

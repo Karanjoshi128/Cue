@@ -84,6 +84,15 @@ export async function updateProfile(input: z.infer<typeof profileSchema>) {
   revalidatePath("/settings");
 }
 
+/** Whether this person gets alert emails (src/lib/alerts.ts). */
+export async function setEmailAlerts(enabled: boolean): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    await prisma.user.update({ where: { id: user.id }, data: { emailAlerts: enabled } });
+    revalidatePath("/settings");
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Team (admin only) - all scoped to the admin's workspace
 // ---------------------------------------------------------------------------

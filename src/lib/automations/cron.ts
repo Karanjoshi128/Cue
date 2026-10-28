@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { automationsEnabled, RUN_RETENTION_DAYS } from "./config";
 import { pollAccount, processRun } from "./engine";
 import { sendFollowUps } from "./conversation";
+import { runSpikeAlerts } from "@/lib/alerts";
 
 /**
  * The every-minute job (POST /api/cron/automations): check comments on every
@@ -19,6 +20,7 @@ export async function runAutomations(budgetMs = 45_000) {
     sent: 0,
     retried: 0,
     followUps: 0,
+    spikeAlerts: 0,
     purged: 0,
     errors: 0,
   };
@@ -69,6 +71,10 @@ export async function runAutomations(budgetMs = 45_000) {
   }
 
   if (elapsed() < budgetMs) summary.followUps = await sendFollowUps();
+  summary.spikeAlerts = await runSpikeAlerts().catch((err) => {
+    console.error("[alerts] spike alerts failed:", err);
+    return 0;
+  });
 
   const purged = await prisma.automationRun.deleteMany({
     where: {

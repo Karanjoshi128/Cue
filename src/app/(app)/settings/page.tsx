@@ -21,6 +21,8 @@ import {
 import { ThemePicker } from "@/components/theme-picker";
 import { Kbd, PageHeader } from "@/components/page-header";
 import { SettingsNav } from "@/components/settings-nav";
+import { AlertsToggle } from "@/components/alerts-toggle";
+import { alertsConfigured } from "@/lib/alerts";
 import { navItems } from "@/components/nav-items";
 
 export const dynamic = "force-dynamic";
@@ -112,6 +114,12 @@ export default async function SettingsPage() {
               email={user?.email ?? "-"}
               role={user?.role ?? "MANAGER"}
             />
+            {/* Alerts go to admins, so only they see the switch. */}
+            {isAdmin && (
+              <div className="mt-5">
+                <AlertsToggle enabled={user?.emailAlerts ?? true} configured={alertsConfigured()} />
+              </div>
+            )}
           </Section>
 
           <Section

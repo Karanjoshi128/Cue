@@ -3,12 +3,14 @@ import {
   PenLine,
   CalendarDays,
   ListOrdered,
+  Inbox,
   MessageCircleReply,
   Users,
   Settings2,
   type LucideIcon,
 } from "lucide-react";
 import { automationsEnabled } from "@/lib/automations/config";
+import { replyDeskEnabled } from "@/lib/reply-desk/config";
 
 export interface NavItem {
   label: string;
@@ -24,7 +26,19 @@ export const navItems: NavItem[] = [
   { label: "Compose", href: "/composer", icon: PenLine, key: "n", group: "publish" },
   { label: "Calendar", href: "/calendar", icon: CalendarDays, key: "c", group: "publish" },
   { label: "Queue", href: "/queue", icon: ListOrdered, key: "q", group: "publish" },
-  // Hidden until Meta grants comment and message access (see config.ts).
+  // Each hidden until Meta (and Google, for the Reply Desk) approve the
+  // permissions it needs: see automations/config.ts and reply-desk/config.ts.
+  ...(replyDeskEnabled()
+    ? [
+        {
+          label: "Reply Desk",
+          href: "/replies",
+          icon: Inbox,
+          key: "r",
+          group: "engage",
+        } satisfies NavItem,
+      ]
+    : []),
   ...(automationsEnabled()
     ? [
         {

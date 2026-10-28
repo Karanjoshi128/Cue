@@ -7,8 +7,12 @@ import { workspaceHasFeature, type FeatureKey } from "@/lib/plans";
  * Where a connect flow returns to: ?next= when it's one of these pages,
  * otherwise Clients. A fixed list, so the redirect can't be pointed elsewhere.
  */
-export function returnPage(value: string | null | undefined): "/clients" | "/automations" {
-  return value === "/automations" ? "/automations" : "/clients";
+const RETURN_PAGES = ["/automations", "/replies"] as const;
+
+export function returnPage(
+  value: string | null | undefined,
+): "/clients" | (typeof RETURN_PAGES)[number] {
+  return RETURN_PAGES.find((p) => p === value) ?? "/clients";
 }
 
 /**

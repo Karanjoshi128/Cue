@@ -12,6 +12,18 @@ export async function writeDmVariants(text: string, count: number): Promise<stri
   throw new Error("AI isn't set up.");
 }
 
+/** A short public reply to a comment, in the brand's voice. Filled in in the AI step. */
+export async function draftCommentReply(input: {
+  brand: string;
+  platform: string;
+  post: string | null;
+  comment: string;
+  author: string | null;
+}): Promise<string> {
+  void input;
+  throw new Error("AI isn't set up.");
+}
+
 /**
  * Why a comment should be held as abusive, or null to let it through.
  * Filled in with the Claude call in the AI step; until then it holds nothing.

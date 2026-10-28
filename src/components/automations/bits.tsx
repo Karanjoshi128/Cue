@@ -13,6 +13,7 @@ const RUN_STATUS: Record<
   PARTIAL: { label: "Partly sent", dot: "text-standby", text: "text-standby-ink" },
   FAILED: { label: "Failed", dot: "text-fault", text: "text-fault-ink" },
   SKIPPED: { label: "Already sent", dot: "text-muted-foreground/50", text: "text-muted-foreground" },
+  HELD: { label: "Held", dot: "text-standby", text: "text-standby-ink" },
 };
 
 export function RunBadge({

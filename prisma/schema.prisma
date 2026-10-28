@@ -83,6 +83,7 @@ model User {
   lastSeenAt   DateTime? // last request in the app, written at most every few minutes
   bannedAt     DateTime? // set = this person can't use Cue at all
   bannedReason String?
+  emailAlerts  Boolean   @default(true) // alerts in src/lib/alerts.ts (admins only)
 
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
@@ -132,6 +133,8 @@ model Client {
   accounts        SocialAccount[]
   posts           Post[]
   automationRules AutomationRule[]
+  leads           Lead[]
+  bioPage         BioPage?
 }
 
 model SocialAccount {
@@ -152,9 +155,13 @@ model SocialAccount {
   // itself (the every-minute check that stands in until webhooks are approved).
   webhooksSubscribedAt DateTime?
   commentsCheckedAt    DateTime?
+  inboxSyncedAt        DateTime? // Reply Desk's last read of this account's comments
 
   targets         PostTarget[]
   automationRules AutomationRule[]
+  leads           Lead[]
+  inboxComments   InboxComment[]
+  bioPages        BioPage[]
 
   @@unique([clientId, platform, externalId])
 }
@@ -306,19 +313,25 @@ model PostHistory {
 
 // "Comment LINK and we'll DM it to you": when a comment on one of the
 // account's posts matches, Cue replies to the comment publicly and sends the
-// commenter a private reply (Instagram's one DM per comment). Hidden behind
-// NEXT_PUBLIC_IG_AUTOMATIONS until Meta grants comment and message access.
+// commenter a private reply (Instagram's one DM per comment). A rule can also
+// start from a story reply or a DM, gate the link behind a follow, and ask for
+// an email or phone number first. Hidden behind NEXT_PUBLIC_IG_AUTOMATIONS
+// until Meta grants comment and message access.
 model AutomationRule {
-  id          String        @id @default(cuid())
-  client      Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id          String            @id @default(cuid())
+  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
   clientId    String
-  account     SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  account     SocialAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
   accountId   String
   name        String
-  enabled     Boolean       @default(true)
+  enabled     Boolean           @default(true)
+  // What starts it: a comment (watching `scope` below), a reply to any story,
+  // or a DM. Story replies and DMs open Instagram's 24-hour window, so those
+  // rules answer with normal messages instead of a private reply.
+  trigger     AutomationTrigger @default(COMMENT)
   // Only comments made after this count. Reset when the rule is switched back
   // on, so it doesn't DM everyone who commented while it was off.
-  activeSince DateTime      @default(now())
+  activeSince DateTime          @default(now())
 
   // ANY_POST watches every post. ONE_POST watches mediaId, which is either
   // picked from the account's posts or filled in when `post` (a Cue post that
@@ -334,18 +347,37 @@ model AutomationRule {
 
   keywords      String[]     @default([]) // lowercased; empty only for ANY_COMMENT
   matchMode     KeywordMatch @default(WORD)
+  fuzzy         Boolean      @default(true) // tolerate one typo in keywords of 4+ letters
   // A rule does one or both: a public reply and a DM. {username} in either
   // becomes the commenter's handle.
   replies       String[]     @default([]) // public reply variants, one picked at random; empty = no public reply
   dmText        String? // null = no DM
+  dmVariants    String[]     @default([]) // other wordings of dmText, rotated every rotateEvery DMs
+  rotateEvery   Int          @default(50)
   dmButtonLabel String? // optional link button under the DM
   dmButtonUrl   String?
   oncePerPerson Boolean      @default(true)
+
+  // Steps before the link. Each waits for the person to tap or reply, which
+  // opens Instagram's 24-hour messaging window for the next message.
+  followGate      Boolean    @default(false) // only followers get the link
+  gateText        String? // the first DM, with a "Send me the link" button
+  collect         LeadField? // ask for an email or phone number first
+  askText         String?
+  followUpText    String? // one nudge if they go quiet part-way
+  followUpMinutes Int        @default(60)
+
+  // Comments to hold for review instead of answering.
+  holdWords    String[] @default([])
+  aiModeration Boolean  @default(false) // AI also holds abuse (needs ANTHROPIC_API_KEY)
 
   // Lifetime totals. The per-comment log below is deleted after 30 days.
   matchedCount    Int       @default(0)
   dmSentCount     Int       @default(0)
   replyCount      Int       @default(0)
+  deliveredCount  Int       @default(0) // the link reached them, after any gate or question
+  leadCount       Int       @default(0)
+  heldCount       Int       @default(0)
   lastTriggeredAt DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -360,20 +392,34 @@ enum AutomationScope {
   ONE_POST
 }
 
+enum AutomationTrigger {
+  COMMENT
+  STORY_REPLY
+  DM_KEYWORD
+}
+
+enum LeadField {
+  EMAIL
+  PHONE
+}
+
 enum KeywordMatch {
   WORD // the keyword as a whole word or phrase: "link" matches "LINK please", not "linked"
   CONTAINS // anywhere in the comment
   ANY_COMMENT // every comment, no keyword
 }
 
-// One comment a rule acted on. commentId is unique because Instagram allows a
-// single private reply per comment, and Meta re-sends webhooks for up to 36 h.
+// One comment (or story reply, or DM) a rule acted on. commentId holds the
+// comment id, or the message id for story and DM triggers. It's unique because
+// Instagram allows a single private reply per comment, and Meta re-sends
+// webhooks for up to 36 h.
 model AutomationRun {
   id                String              @id @default(cuid())
   rule              AutomationRule      @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   ruleId            String
   commentId         String              @unique
-  mediaId           String
+  trigger           AutomationTrigger   @default(COMMENT)
+  mediaId           String? // the post (or story) it came from
   commenterId       String // Instagram-scoped id
   commenterUsername String?
   commentText       String
@@ -391,12 +437,32 @@ model AutomationRun {
   // QUEUED runs are taken when this has passed (null = right away). Taking a
   // run pushes it forward, so two workers can't send the same DM.
   nextAttemptAt     DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+
+  // The conversation after the first DM (follow gate, question, follow-up).
+  recipientId    String? // their Instagram-scoped id, for every message after the first
+  stage          RunStage  @default(START)
+  lastUserAt     DateTime? // their last tap or reply; Instagram allows messages for 24 h after it
+  followUpAt     DateTime? // nudge then, if still waiting
+  followUpSentAt DateTime?
+  deliveredAt    DateTime? // the link went out
+  heldReason     String? // why it's HELD (a hold word, or the AI's reason)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([ruleId, commenterId])
   @@index([status, nextAttemptAt])
+  @@index([recipientId, stage])
+  @@index([stage, followUpAt])
   @@index([createdAt])
+}
+
+enum RunStage {
+  START // nothing sent yet
+  WAIT_TAP // sent the gate message, waiting for "Send me the link"
+  WAIT_FOLLOW // they tapped but don't follow yet
+  WAIT_ANSWER // asked for an email or phone number
+  DONE
 }
 
 enum AutomationSource {
@@ -410,6 +476,127 @@ enum AutomationRunStatus {
   PARTIAL // one of the two went
   FAILED
   SKIPPED // this person already got this rule's DM
+  HELD // held for review (hold word or AI); nothing sent
+}
+
+// Everyone an automation talked to, per Instagram account. Kept until deleted
+// (it's the workspace's list), unlike the 30-day run log; deleting the client
+// or disconnecting the account deletes it.
+model Lead {
+  id         String            @id @default(cuid())
+  client     Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId   String
+  account    SocialAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId  String
+  igsid      String // Instagram-scoped id
+  username   String?
+  email      String?
+  phone      String?
+  source     AutomationTrigger
+  lastRule   String? // the automation that last reached them, by name
+  touches    Int               @default(1)
+  createdAt  DateTime          @default(now())
+  lastSeenAt DateTime          @default(now())
+
+  @@unique([accountId, igsid])
+  @@index([clientId, lastSeenAt])
+}
+
+// ---------------------------------------------------------------------------
+// Reply Desk (src/lib/reply-desk): recent comments across clients' Instagram
+// and YouTube accounts, sorted so real questions come first. Synced by the
+// every-minute job; comments older than 30 days are deleted.
+// ---------------------------------------------------------------------------
+
+model InboxComment {
+  id         String        @id @default(cuid())
+  account    SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId  String
+  clientId   String
+  platform   Platform
+  externalId String // the platform's comment id
+  mediaId    String
+  mediaTitle String? // caption or video title, shortened
+  mediaUrl   String?
+  author     String?
+  authorId   String?
+  text       String
+  postedAt   DateTime
+  kind       CommentKind   @default(OTHER)
+  state      InboxState    @default(OPEN)
+  replyText  String?
+  replyId    String?
+  repliedAt  DateTime?
+  repliedBy  String?
+  createdAt  DateTime      @default(now())
+
+  @@unique([platform, externalId])
+  @@index([clientId, state, postedAt])
+}
+
+enum CommentKind {
+  QUESTION // asks something: price, size, how, when
+  OTHER
+  NOISE // emoji-only, "nice", tags of friends
+  ABUSE
+}
+
+enum InboxState {
+  OPEN
+  REPLIED
+  DONE
+}
+
+// ---------------------------------------------------------------------------
+// Link-in-bio pages (trycue.space/b/<slug>), one per client.
+// ---------------------------------------------------------------------------
+
+model BioPage {
+  id        String         @id @default(cuid())
+  client    Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String         @unique
+  slug      String         @unique
+  title     String
+  bio       String?
+  // The Instagram account whose recent posts show as a grid.
+  account   SocialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  accountId String?
+  showGrid  Boolean        @default(true)
+  links     Json           @default("[]") // [{ id, label, url }]
+  postLinks Json           @default("{}") // { [mediaId]: url }: where a grid tile goes instead of the post
+  published Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  clicks BioClick[]
+}
+
+// Daily counts per page and target ("view", a link id, or a media id).
+model BioClick {
+  id     String   @id @default(cuid())
+  page   BioPage  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  pageId String
+  target String
+  day    DateTime @db.Date
+  count  Int      @default(0)
+
+  @@unique([pageId, target, day])
+}
+
+// ---------------------------------------------------------------------------
+// Email alerts (src/lib/alerts.ts). One row per alert sent, so the same thing
+// isn't emailed twice. No foreign keys: it's bookkeeping.
+// ---------------------------------------------------------------------------
+
+model AlertLog {
+  id          String   @id @default(cuid())
+  workspaceId String
+  kind        String // spike | failed | expiring
+  key         String // what it was about: a rule, post or account id (plus a day for repeats)
+  sentAt      DateTime @default(now())
+
+  @@unique([workspaceId, kind, key])
+  @@index([sentAt])
 }
 
 // ---------------------------------------------------------------------------

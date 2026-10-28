@@ -1,7 +1,9 @@
 import { GRAPH } from "@/lib/platforms/instagram";
 
 // The Instagram API (Instagram Login, graph.instagram.com) calls behind
-// comment automations. Comment calls need instagram_business_manage_comments;
+// comment automations, the Reply Desk and link pages' post grid. Reading
+// posts and the profile needs only instagram_business_basic. Comment calls
+// need instagram_business_manage_comments;
 // messages (the private reply and everything after it) also use
 // instagram_business_manage_messages.
 // Docs: developers.facebook.com/docs/instagram-platform/private-replies and
@@ -127,6 +129,17 @@ export async function listRecentMedia(
     token,
   );
   return data.data ?? [];
+}
+
+/** The account's own profile picture (link pages). Basic access is enough. */
+export async function getOwnProfile(
+  token: string,
+): Promise<{ username?: string; profilePicture?: string }> {
+  const me = await call<{ username?: string; profile_picture_url?: string }>(
+    `${GRAPH}/me?fields=username,profile_picture_url`,
+    token,
+  );
+  return { username: me.username, profilePicture: me.profile_picture_url };
 }
 
 export interface InstagramComment {

@@ -559,12 +559,16 @@ model BioPage {
   slug      String         @unique
   title     String
   bio       String?
-  // The Instagram account whose recent posts show as a grid.
+  // The Instagram account whose recent posts show as a grid; none, no grid.
   account   SocialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   accountId String?
-  showGrid  Boolean        @default(true)
   links     Json           @default("[]") // [{ id, label, url }]
   postLinks Json           @default("{}") // { [mediaId]: url }: where a grid tile goes instead of the post
+  // The grid and profile picture as last read from Instagram (src/lib/bio/grid.ts),
+  // so a visit never waits on Instagram. Its image links expire after a few days.
+  grid      Json           @default("[]") // [{ id, image, permalink, caption, video }]
+  avatarUrl String?
+  gridAt    DateTime?
   published Boolean        @default(false)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt

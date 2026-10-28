@@ -4,6 +4,7 @@ import {
   CalendarDays,
   ListOrdered,
   Inbox,
+  Link2,
   MessageCircleReply,
   Users,
   Settings2,
@@ -50,6 +51,8 @@ export const navItems: NavItem[] = [
         } satisfies NavItem,
       ]
     : []),
+  // Needs nothing from Meta beyond publishing access, so not behind a flag.
+  { label: "Link in bio", href: "/bio", icon: Link2, key: "b", group: "engage" },
   { label: "Clients", href: "/clients", icon: Users, key: "l", group: "manage" },
   { label: "Settings", href: "/settings", icon: Settings2, key: "s", group: "manage" },
 ];

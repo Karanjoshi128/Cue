@@ -28,6 +28,7 @@ import {
 } from "./shared";
 import { recordLead } from "./leads";
 import { holdReason } from "./moderation";
+import { aiEnabled } from "@/lib/ai";
 
 /*
  * Instagram automations, the first message. A comment reaches ingestComments()
@@ -138,7 +139,8 @@ export async function createRun(p: {
         status: { in: ["QUEUED", "SENT", "PARTIAL"] },
       },
     })) > 0;
-  const held = repeat ? null : await holdReason(rule, p.text);
+  const aiAllowed = aiEnabled() && !p.account.client.workspace.disabledFeatures.includes("ai");
+  const held = repeat ? null : await holdReason(rule, p.text, aiAllowed);
   const status: AutomationRunStatus = repeat ? "SKIPPED" : held ? "HELD" : "QUEUED";
 
   let runId: string;

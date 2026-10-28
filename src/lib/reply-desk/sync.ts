@@ -4,6 +4,7 @@ import { ensureFreshAccessToken } from "@/lib/tokens";
 import { hasFeature } from "@/lib/plans";
 import { IG_COMMENT_SCOPE } from "@/lib/automations/config";
 import { listComments, listRecentMedia } from "@/lib/automations/instagram-api";
+import { aiEnabled, classifyComments } from "@/lib/ai";
 import { classifyComment } from "./classify";
 import { listChannelComments, myChannelId, videoTitles } from "./youtube";
 
@@ -18,6 +19,7 @@ export const YT_COMMENT_SCOPE = "youtube.force-ssl";
 const YOUTUBE_EVERY_MIN = Number(process.env.REPLY_DESK_YT_MINUTES) || 30;
 const IG_POSTS = 10; // newest posts read per Instagram account
 const KEEP_DAYS = 30;
+const AI_SORT_MAX = 40; // new comments sorted by Claude per account per run
 
 /** Whether an account was connected with the access the Reply Desk needs. */
 export function canReadComments(platform: Platform, scopes: string | null): boolean {
@@ -84,19 +86,51 @@ async function readYouTube(token: string): Promise<NewComment[]> {
   }));
 }
 
+/**
+ * Claude's sorting for new comments, when AI helpers are on for the workspace:
+ * it catches questions and abuse Cue's own rules miss. Emoji-only and
+ * tag-only comments are noise either way and aren't sent. On any failure the
+ * rules decide.
+ */
+async function sortWithAi(account: DeskAccount, comments: NewComment[]) {
+  const ws = account.client.workspace;
+  if (!aiEnabled() || !hasFeature(ws, "ai")) return new Map<string, Prisma.InboxCommentCreateManyInput["kind"]>();
+  const worth = comments
+    .filter((c) => classifyComment(c.text) !== "NOISE")
+    .slice(0, AI_SORT_MAX)
+    .map((c) => ({ id: c.externalId, text: c.text }));
+  try {
+    return await classifyComments(worth);
+  } catch (e) {
+    console.error(`[reply-desk] AI sorting skipped for ${account.id}:`, e instanceof Error ? e.message : e);
+    return new Map();
+  }
+}
+
 /** Reads one account's new comments into the desk. Returns how many were new. */
 export async function syncAccount(account: DeskAccount): Promise<number> {
   const token = await ensureFreshAccessToken(account);
   const found = account.platform === "INSTAGRAM" ? await readInstagram(account, token) : await readYouTube(token);
   const oldest = Date.now() - KEEP_DAYS * 24 * 60 * 60 * 1000;
   const fresh = found.filter((c) => new Date(c.postedAt).getTime() > oldest);
+  // Only comments not stored yet, so each is sorted (and paid for) once.
+  const known = new Set(
+    (
+      await prisma.inboxComment.findMany({
+        where: { platform: account.platform, externalId: { in: fresh.map((c) => c.externalId) } },
+        select: { externalId: true },
+      })
+    ).map((r) => r.externalId),
+  );
+  const incoming = fresh.filter((c) => !known.has(c.externalId));
+  const sorted = await sortWithAi(account, incoming);
   const { count } = await prisma.inboxComment.createMany({
-    data: fresh.map((c) => ({
+    data: incoming.map((c) => ({
       ...c,
       accountId: account.id,
       clientId: account.clientId,
       platform: account.platform,
-      kind: classifyComment(c.text),
+      kind: sorted.get(c.externalId) ?? classifyComment(c.text),
     })),
     skipDuplicates: true,
   });

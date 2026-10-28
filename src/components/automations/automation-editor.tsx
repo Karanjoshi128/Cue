@@ -26,7 +26,7 @@ import {
   type PickableMedia,
 } from "@/lib/automation-actions";
 import { unwrap } from "@/lib/action-result";
-import { COPY, LIMITS } from "@/lib/automations/config";
+import { COPY, LIMITS, type AutomationPreset } from "@/lib/automations/config";
 import { cleanKeywords } from "@/lib/automations/match";
 import type {
   AutomationAccountView,
@@ -97,6 +97,28 @@ interface Draft {
   oncePerPerson: boolean;
   holdWords: string[];
   aiModeration: boolean;
+}
+
+/** A described automation (AutomationPreset) laid over a new draft. */
+function withPreset(d: Draft, p: AutomationPreset | null | undefined): Draft {
+  if (!p) return d;
+  return {
+    ...d,
+    name: p.name,
+    trigger: p.trigger,
+    matchMode: p.matchMode,
+    keywords: p.keywords,
+    replyOn: p.replies.length > 0,
+    replies: p.replies.length ? p.replies : d.replies,
+    dmOn: true,
+    dmText: p.dmText || d.dmText,
+    buttonOn: !!p.buttonUrl,
+    buttonUrl: p.buttonUrl ?? "",
+    buttonLabel: p.buttonLabel ?? d.buttonLabel,
+    followGate: p.followGate,
+    collect: p.collect,
+    followUpOn: p.followUp,
+  };
 }
 
 const FOLLOW_UP_DELAYS: Record<string, string> = {
@@ -368,6 +390,7 @@ export function AutomationEditor({
   defaultAccountId,
   timeZone,
   aiOn,
+  preset,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -379,12 +402,14 @@ export function AutomationEditor({
   timeZone: string;
   /** AI helpers are set up (ANTHROPIC_API_KEY) and on for the workspace. */
   aiOn: boolean;
+  /** Settings from a described automation, for a new rule. */
+  preset?: AutomationPreset | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [writing, setWriting] = useState(false);
   const [draft, setDraft] = useState<Draft>(() =>
-    draftFrom(rule, defaultAccountId ?? accounts[0]?.id ?? ""),
+    withPreset(draftFrom(rule, defaultAccountId ?? accounts[0]?.id ?? ""), rule ? null : preset),
   );
   const [keywordInput, setKeywordInput] = useState("");
   const [holdInput, setHoldInput] = useState("");

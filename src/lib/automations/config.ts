@@ -82,3 +82,21 @@ export const PRIVATE_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The per-comment activity log (commenter names and text) is kept this long. */
 export const RUN_RETENTION_DAYS = 30;
+
+/**
+ * An automation someone described in a sentence (typed or spoken), turned
+ * into settings by Claude (src/lib/ai.ts) for the editor to open with.
+ */
+export interface AutomationPreset {
+  name: string;
+  trigger: "COMMENT" | "STORY_REPLY" | "DM_KEYWORD";
+  matchMode: "WORD" | "CONTAINS" | "ANY_COMMENT";
+  keywords: string[];
+  replies: string[];
+  dmText: string;
+  buttonUrl: string | null;
+  buttonLabel: string | null;
+  followGate: boolean;
+  collect: "EMAIL" | "PHONE" | null;
+  followUp: boolean;
+}

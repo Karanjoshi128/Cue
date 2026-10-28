@@ -31,7 +31,7 @@ import {
   setAutomationEnabled,
 } from "@/lib/automation-actions";
 import { unwrap } from "@/lib/action-result";
-import { RUN_RETENTION_DAYS } from "@/lib/automations/config";
+import { RUN_RETENTION_DAYS, type AutomationPreset } from "@/lib/automations/config";
 import type {
   AutomationAccountView,
   AutomationRuleView,
@@ -59,6 +59,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AutomationEditor, MediaThumb } from "@/components/automations/automation-editor";
 import { KeywordChip, RunBadge, TriggerSummary } from "@/components/automations/bits";
+import { DescribeAutomation } from "@/components/automations/describe-automation";
 import { cn } from "@/lib/utils";
 
 function ago(iso: string | null): string {
@@ -94,6 +95,7 @@ export function AutomationsView({
     key: number;
     rule: AutomationRuleView | null;
     accountId?: string;
+    preset?: AutomationPreset;
   }>({ key: 0, rule: null });
   const [toDelete, setToDelete] = useState<AutomationRuleView | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
@@ -110,6 +112,10 @@ export function AutomationsView({
 
   function openNew(accountId?: string) {
     setEditor((e) => ({ key: e.key + 1, rule: null, accountId }));
+    setEditorOpen(true);
+  }
+  function openDescribed(preset: AutomationPreset, accountId: string) {
+    setEditor((e) => ({ key: e.key + 1, rule: null, accountId, preset }));
     setEditorOpen(true);
   }
   function openEdit(rule: AutomationRuleView) {
@@ -227,6 +233,10 @@ export function AutomationsView({
         onNew={openNew}
         busy={pending}
       />
+
+      {data.aiOn && data.featureOn && ready.length > 0 && (
+        <DescribeAutomation accounts={ready} onDraft={openDescribed} />
+      )}
 
       <section className="space-y-4">
         <div className="flex items-baseline justify-between gap-3">
@@ -406,6 +416,7 @@ export function AutomationsView({
         defaultAccountId={editor.accountId}
         timeZone={timeZone}
         aiOn={data.aiOn}
+        preset={editor.preset}
       />
 
       <Dialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>

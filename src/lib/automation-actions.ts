@@ -12,11 +12,13 @@ import {
   automationsEnabled,
   hasAutomationScopes,
   LIMITS,
+  type AutomationPreset,
 } from "@/lib/automations/config";
 import { cleanKeywords } from "@/lib/automations/match";
+import { presetFromIdea } from "@/lib/automations/preset";
 import { listRecentMedia, InstagramApiError } from "@/lib/automations/instagram-api";
 import { pollAccount, processRun } from "@/lib/automations/engine";
-import { aiEnabled, writeDmVariants as writeVariants } from "@/lib/ai";
+import { aiEnabled, draftAutomation, writeDmVariants as writeVariants } from "@/lib/ai";
 
 // Instagram comment automations (src/app/(app)/automations). Every action is
 // scoped to the caller's workspace and refused while the feature is off.
@@ -366,5 +368,27 @@ export async function listAccountMedia(accountId: string) {
       if (err instanceof InstagramApiError) throw new ApiError(502, err.message);
       throw err;
     }
+  });
+}
+
+/**
+ * An automation described in a sentence, typed or spoken: Claude fills in the
+ * settings and the editor opens with them, for the person to check and save.
+ */
+export async function draftAutomationFromText(text: string, accountId: string) {
+  return toResult(async (): Promise<AutomationPreset> => {
+    const user = await automationUser();
+    if (!aiEnabled() || !(await workspaceHasFeature(user.workspaceId, "ai"))) {
+      throw new ApiError(403, "AI helpers aren't switched on.");
+    }
+    const description = z
+      .string()
+      .trim()
+      .min(8, "Say a little more about what it should do.")
+      .max(600, "Keep it to a sentence or two.")
+      .parse(text);
+    const account = await ownedAccount(user.workspaceId, accountId);
+    const client = await prisma.client.findUnique({ where: { id: account.clientId }, select: { name: true } });
+    return presetFromIdea(await draftAutomation(description, client?.name ?? account.displayName));
   });
 }

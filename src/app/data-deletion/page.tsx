@@ -33,7 +33,10 @@ export default function DataDeletionPage() {
               accounts, posts, and uploaded media. (Files in storage your
               workspace connected itself stay in your own bucket.)
               {automationsEnabled() &&
-                " Deleting an Instagram comment automation, or disconnecting its account, also deletes the record of the comments it acted on."}
+                " Deleting an Instagram comment automation, or disconnecting its account, also deletes the record of the comments and messages it acted on, and disconnecting the account deletes its leads."}{" "}
+              Deleting a client&apos;s link page deletes its view and tap
+              counts, and disconnecting an AI assistant in Settings ends its
+              access straight away.
             </p>
           </section>
 

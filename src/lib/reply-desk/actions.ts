@@ -1,17 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { toResult } from "@/lib/to-result";
 import { workspaceHasFeature } from "@/lib/plans";
-import { ensureFreshAccessToken } from "@/lib/tokens";
 import { aiEnabled, draftCommentReply } from "@/lib/ai";
-import { replyToComment as replyOnInstagram } from "@/lib/automations/instagram-api";
-import { replyDeskEnabled, REPLY_LIMIT } from "./config";
-import { replyToYouTubeComment } from "./youtube";
+import { replyDeskEnabled } from "./config";
+import { ownedComment, postDeskReply } from "./reply";
 import { syncReplyDesk } from "./sync";
 
 // Reply Desk actions (src/app/(app)/replies). Scoped to the caller's
@@ -26,41 +23,11 @@ async function deskUser() {
   return user;
 }
 
-async function ownedComment(workspaceId: string, id: string) {
-  const comment = await prisma.inboxComment.findFirst({
-    where: { id, account: { client: { workspaceId } } },
-    include: { account: true },
-  });
-  if (!comment) throw new ApiError(404, "That comment is gone.");
-  return comment;
-}
-
 /** Replies publicly under the comment, as the client's account. */
 export async function replyToDeskComment(id: string, text: string) {
   return toResult(async () => {
     const user = await deskUser();
-    const body = z.string().trim().min(1, "Write a reply first.").max(REPLY_LIMIT).parse(text);
-    const comment = await ownedComment(user.workspaceId, id);
-    let replyId: string;
-    try {
-      const token = await ensureFreshAccessToken(comment.account);
-      replyId =
-        comment.platform === "INSTAGRAM"
-          ? await replyOnInstagram(token, comment.externalId, body)
-          : await replyToYouTubeComment(token, comment.externalId, body);
-    } catch (err) {
-      throw new ApiError(502, err instanceof Error ? err.message : "The reply didn't go.");
-    }
-    await prisma.inboxComment.update({
-      where: { id: comment.id },
-      data: {
-        state: "REPLIED",
-        replyText: body,
-        replyId,
-        repliedAt: new Date(),
-        repliedBy: user.name ?? user.email,
-      },
-    });
+    await postDeskReply(user, id, text);
     revalidatePath("/replies");
   });
 }

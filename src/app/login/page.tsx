@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { AuthShell } from "@/components/auth-shell";
 import { LoginForm } from "@/components/login-form";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -13,8 +14,14 @@ export const metadata: Metadata = {
     "Sign in to Cue to schedule your clients' LinkedIn, Instagram and YouTube posts.",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const configured = isSupabaseConfigured();
+  // Back where they were going, e.g. the consent screen for an app.
+  const next = safeNext((await searchParams).next);
 
   return (
     <AuthShell
@@ -52,13 +59,13 @@ export default function LoginPage() {
       }
     >
       {configured ? (
-        <LoginForm />
+        <LoginForm next={next} />
       ) : (
         <div className="space-y-4">
           <p className="text-muted-foreground text-sm">
             Auth isn&apos;t configured yet, so Cue is running in local dev mode.
           </p>
-          <Button render={<Link href="/dashboard" />} size="xl" className="w-full">
+          <Button render={<Link href={next ?? "/dashboard"} />} size="xl" className="w-full">
             Enter app
           </Button>
         </div>

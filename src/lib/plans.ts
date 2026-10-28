@@ -53,7 +53,7 @@ export const LIMIT_LABELS: Record<LimitKey, string> = {
 export const FEATURES = {
   api: {
     label: "API access",
-    description: "API keys and the /api/v1 endpoints.",
+    description: "API keys, the /api/v1 endpoints and the Claude and ChatGPT connector.",
   },
   custom_storage: {
     label: "Own storage",

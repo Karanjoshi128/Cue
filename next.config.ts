@@ -11,6 +11,17 @@ const nextConfig: NextConfig = {
       hostname,
     })),
   },
+  // OAuth discovery for the Claude/ChatGPT connector (src/lib/connector).
+  // Rewrites rather than an app/.well-known folder, which sends Turbopack's
+  // dev server into an endless rebuild.
+  async rewrites() {
+    return [
+      { source: "/.well-known/oauth-protected-resource", destination: "/api/oauth/metadata/resource" },
+      { source: "/.well-known/oauth-protected-resource/:path*", destination: "/api/oauth/metadata/resource" },
+      { source: "/.well-known/oauth-authorization-server", destination: "/api/oauth/metadata/server" },
+      { source: "/.well-known/oauth-authorization-server/:path*", destination: "/api/oauth/metadata/server" },
+    ];
+  },
 };
 
 export default nextConfig;

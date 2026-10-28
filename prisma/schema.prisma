@@ -88,9 +88,11 @@ model User {
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
 
-  posts    Post[]
-  comments Comment[]
-  apiKeys  ApiKey[]
+  posts       Post[]
+  comments    Comment[]
+  apiKeys     ApiKey[]
+  oauthCodes  OAuthCode[]
+  oauthGrants OAuthGrant[]
 }
 
 enum Role {
@@ -645,4 +647,61 @@ model CronHeartbeat {
   ok        Boolean
   summary   Json?
   error     String?
+}
+
+// ---------------------------------------------------------------------------
+// The Claude and ChatGPT connector (src/lib/connector): an MCP server at
+// /api/mcp, and the OAuth that lets an assistant use it as a member. Apps
+// register themselves (RFC 7591), a member approves one on /oauth/authorize,
+// and the app swaps the one-time code for tokens. Like API keys, only sha256
+// hashes of codes and tokens are stored.
+// ---------------------------------------------------------------------------
+
+model OAuthClient {
+  id           String   @id @default(cuid()) // the client_id
+  name         String // self-reported by the app, so shown beside its redirect host
+  redirectUris String[]
+  createdAt    DateTime @default(now())
+
+  codes  OAuthCode[]
+  grants OAuthGrant[]
+}
+
+// A one-time code from the consent screen: 10 minutes, PKCE-bound.
+model OAuthCode {
+  id            String      @id @default(cuid())
+  hash          String      @unique
+  client        OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  redirectUri   String
+  codeChallenge String
+  scope         String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  grantId       String? // what it was exchanged for, revoked if the code is replayed
+  createdAt     DateTime    @default(now())
+}
+
+// One approval: an access token (1 hour) and a refresh token that's replaced
+// on every use. Revoking it (Settings) disconnects the app.
+model OAuthGrant {
+  id             String      @id @default(cuid())
+  client         OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId       String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  workspaceId    String
+  scope          String
+  accessHash     String      @unique
+  accessExpires  DateTime
+  refreshHash    String      @unique
+  refreshExpires DateTime
+  revokedAt      DateTime?
+  lastUsedAt     DateTime?
+  useCount       Int         @default(0)
+  createdAt      DateTime    @default(now())
+
+  @@index([userId])
 }

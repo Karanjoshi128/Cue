@@ -3,6 +3,7 @@ import { authorizeCron } from "@/lib/cron-auth";
 import { MAX_ATTEMPTS, publishDueTargets } from "@/lib/publish";
 import { recordHeartbeat } from "@/lib/platform-settings";
 import { pruneAlertLog, runPublishAlerts } from "@/lib/alerts";
+import { pruneOAuth } from "@/lib/connector/oauth";
 
 export const dynamic = "force-dynamic";
 // Same ceiling as the "post now" route: a video upload needs more than the
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
       return null;
     });
     await pruneAlertLog().catch(() => {});
+    await pruneOAuth().catch(() => {});
     return NextResponse.json({ ok: true, ...result, alerts });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

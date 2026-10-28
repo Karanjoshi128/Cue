@@ -2,6 +2,7 @@ import type { AutomationRunStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceId } from "@/lib/auth";
 import { hasFeature } from "@/lib/plans";
+import { aiEnabled } from "@/lib/ai";
 import { hasAutomationScopes } from "./config";
 
 // The Automations page. Self-scoped to the caller's workspace like
@@ -13,7 +14,7 @@ export async function getAutomationsPage(clientId?: string) {
   const inScope = { workspaceId, ...(clientId ? { id: clientId } : {}) };
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [workspace, accounts, rules, runs, posts] = await Promise.all([
+  const [workspace, accounts, rules, runs, posts, leads, leadTotal] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: { disabledFeatures: true },
@@ -72,6 +73,17 @@ export async function getAutomationsPage(clientId?: string) {
       orderBy: [{ scheduledAt: { sort: "asc", nulls: "last" } }, { createdAt: "desc" }],
       take: 60,
     }),
+    // The newest leads; the CSV export has all of them.
+    prisma.lead.findMany({
+      where: { client: inScope },
+      orderBy: { lastSeenAt: "desc" },
+      take: 100,
+      include: {
+        client: { select: { name: true, color: true } },
+        account: { select: { displayName: true } },
+      },
+    }),
+    prisma.lead.count({ where: { client: inScope } }),
   ]);
 
   const counts = await prisma.automationRun.groupBy({
@@ -88,6 +100,7 @@ export async function getAutomationsPage(clientId?: string) {
 
   return {
     featureOn: !!workspace && hasFeature(workspace, "ig_automations"),
+    aiOn: aiEnabled() && !!workspace && hasFeature(workspace, "ai"),
     accounts: accounts.map((a) => ({
       id: a.id,
       clientId: a.clientId,
@@ -107,6 +120,7 @@ export async function getAutomationsPage(clientId?: string) {
       accountName: r.account.displayName,
       name: r.name,
       enabled: r.enabled,
+      trigger: r.trigger,
       scope: r.scope,
       mediaId: r.mediaId,
       mediaPermalink: r.mediaPermalink,
@@ -122,14 +136,28 @@ export async function getAutomationsPage(clientId?: string) {
         : null,
       keywords: r.keywords,
       matchMode: r.matchMode,
+      fuzzy: r.fuzzy,
       replies: r.replies,
       dmText: r.dmText,
+      dmVariants: r.dmVariants,
+      rotateEvery: r.rotateEvery,
       dmButtonLabel: r.dmButtonLabel,
       dmButtonUrl: r.dmButtonUrl,
       oncePerPerson: r.oncePerPerson,
+      followGate: r.followGate,
+      gateText: r.gateText,
+      collect: r.collect,
+      askText: r.askText,
+      followUpText: r.followUpText,
+      followUpMinutes: r.followUpMinutes,
+      holdWords: r.holdWords,
+      aiModeration: r.aiModeration,
       matchedCount: r.matchedCount,
       dmSentCount: r.dmSentCount,
       replyCount: r.replyCount,
+      deliveredCount: r.deliveredCount,
+      leadCount: r.leadCount,
+      heldCount: r.heldCount,
       lastTriggeredAt: r.lastTriggeredAt?.toISOString() ?? null,
       week: week.get(r.id) ?? {},
     })),
@@ -140,13 +168,31 @@ export async function getAutomationsPage(clientId?: string) {
       clientColor: run.rule.client.color,
       commenter: run.commenterUsername,
       comment: run.commentText,
+      trigger: run.trigger,
       status: run.status,
+      stage: run.stage,
       source: run.source,
       dmSent: run.dmMessageId !== null,
       replied: run.replyId !== null,
+      delivered: run.deliveredAt !== null,
+      heldReason: run.heldReason,
       error: run.dmError ?? run.replyError ?? run.lastError,
       createdAt: run.createdAt.toISOString(),
     })),
+    leads: leads.map((l) => ({
+      id: l.id,
+      clientName: l.client.name,
+      clientColor: l.client.color,
+      accountName: l.account.displayName,
+      username: l.username,
+      email: l.email,
+      phone: l.phone,
+      source: l.source,
+      lastRule: l.lastRule,
+      touches: l.touches,
+      lastSeenAt: l.lastSeenAt.toISOString(),
+    })),
+    leadTotal,
     posts: posts.map((p) => ({
       id: p.id,
       clientId: p.clientId,
@@ -163,3 +209,4 @@ export type AutomationRuleView = AutomationsPageData["rules"][number];
 export type AutomationAccountView = AutomationsPageData["accounts"][number];
 export type AutomationRunView = AutomationsPageData["runs"][number];
 export type AutomationPostView = AutomationsPageData["posts"][number];
+export type AutomationLeadView = AutomationsPageData["leads"][number];

@@ -1,6 +1,6 @@
-import { Prisma, type AutomationRule, type LeadField, type RunStage } from "@prisma/client";
+import { Prisma, type AutomationRule, type RunStage } from "@prisma/client";
 import { hasFeature } from "@/lib/plans";
-import { hasAutomationScopes } from "./config";
+import { COPY, hasAutomationScopes } from "./config";
 import { InstagramApiError, type OutgoingMessage } from "./instagram-api";
 
 // Pieces the comment engine (engine.ts) and the conversation after the first
@@ -61,20 +61,7 @@ export function fill(template: string, username: string | null): string {
 /** Instagram opens a 24-hour window after a person's message or tap. */
 export const MESSAGE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// Default wording for the steps a rule leaves blank.
-export const COPY = {
-  gate: "Tap below and I'll send it over 👇",
-  tapLabel: "Send me the link",
-  notFollowing: "Almost there! Follow {handle} first, then tap the button again 👇",
-  ask: {
-    EMAIL: "What's your email? Reply here and I'll send it over.",
-    PHONE: "What's your phone number? Reply here and I'll send it over.",
-  } satisfies Record<LeadField, string>,
-  invalid: {
-    EMAIL: "That doesn't look like an email address. Could you send it again?",
-    PHONE: "That doesn't look like a phone number. Could you send it again?",
-  } satisfies Record<LeadField, string>,
-};
+export { COPY };
 
 /** The payload on a "Send me the link" button: which run it continues. */
 export const tapPayload = (runId: string) => `cue:tap:${runId}`;

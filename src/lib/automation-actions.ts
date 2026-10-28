@@ -15,7 +15,8 @@ import {
 } from "@/lib/automations/config";
 import { cleanKeywords } from "@/lib/automations/match";
 import { listRecentMedia, InstagramApiError } from "@/lib/automations/instagram-api";
-import { pollAccount } from "@/lib/automations/engine";
+import { pollAccount, processRun } from "@/lib/automations/engine";
+import { aiEnabled, writeDmVariants as writeVariants } from "@/lib/ai";
 
 // Instagram comment automations (src/app/(app)/automations). Every action is
 // scoped to the caller's workspace and refused while the feature is off.
@@ -59,6 +60,7 @@ const ruleSchema = z
     accountId: z.string().min(1, "Pick an Instagram account."),
     name: z.string().trim().min(1, "Give the automation a name.").max(LIMITS.name),
     enabled: z.boolean(),
+    trigger: z.enum(["COMMENT", "STORY_REPLY", "DM_KEYWORD"]),
     scope: z.enum(["ANY_POST", "ONE_POST"]),
     media: z
       .object({
@@ -70,6 +72,7 @@ const ruleSchema = z
       .nullish(),
     postId: z.string().nullish(),
     matchMode: z.enum(["WORD", "CONTAINS", "ANY_COMMENT"]),
+    fuzzy: z.boolean(),
     keywords: z
       .array(z.string().max(LIMITS.keywordLength, "Keep each keyword short."))
       .max(LIMITS.keywords, `Up to ${LIMITS.keywords} keywords.`),
@@ -80,9 +83,28 @@ const ruleSchema = z
       .max(LIMITS.replies, `Up to ${LIMITS.replies} reply variations.`)
       .transform((list) => list.filter(Boolean)),
     dmText: optionalText(LIMITS.dmLength),
+    dmVariants: z
+      .array(z.string().trim().max(LIMITS.dmLength, `Keep DMs under ${LIMITS.dmLength} characters.`))
+      .max(LIMITS.dmVariants, `Up to ${LIMITS.dmVariants} DM variations.`)
+      .transform((list) => list.filter(Boolean)),
+    rotateEvery: z.number().int().min(1).max(1000),
     dmButtonLabel: optionalText(LIMITS.buttonLabel),
     dmButtonUrl: optionalText(2000),
     oncePerPerson: z.boolean(),
+    followGate: z.boolean(),
+    gateText: optionalText(LIMITS.dmLength),
+    collect: z.enum(["EMAIL", "PHONE"]).nullish().transform((v) => v ?? null),
+    askText: optionalText(LIMITS.dmLength),
+    followUpText: optionalText(LIMITS.dmLength),
+    followUpMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .max(LIMITS.followUpMaxMinutes, "The follow-up has to go within 23 hours."),
+    holdWords: z
+      .array(z.string().max(LIMITS.keywordLength))
+      .max(LIMITS.holdWords, `Up to ${LIMITS.holdWords} hold words.`),
+    aiModeration: z.boolean(),
   })
   .superRefine((v, ctx) => {
     const issue = (message: string) => ctx.addIssue({ code: "custom", message });
@@ -91,6 +113,15 @@ const ruleSchema = z
     }
     if (!v.dmText && v.replies.length === 0) {
       issue("Add a public reply, a DM, or both.");
+    }
+    if (v.trigger !== "COMMENT" && !v.dmText) {
+      issue("Story-reply and DM automations answer with a DM, so add one.");
+    }
+    if (!v.dmText && (v.followGate || v.collect)) {
+      issue("The follow gate and questions lead to a DM, so add one.");
+    }
+    if (v.followUpText && !v.followGate && !v.collect) {
+      issue("A follow-up only goes to someone part-way through: turn on the follow gate or a question.");
     }
     if (!v.dmText && (v.dmButtonLabel || v.dmButtonUrl)) {
       issue("A link button needs a DM to sit under.");
@@ -105,7 +136,7 @@ const ruleSchema = z
       } catch {}
       if (!ok) issue("The button link must be a full https:// address.");
     }
-    if (v.scope === "ONE_POST" && !v.media && !v.postId) {
+    if (v.trigger === "COMMENT" && v.scope === "ONE_POST" && !v.media && !v.postId) {
       issue("Pick the post this automation watches.");
     }
   });
@@ -127,7 +158,8 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
       mediaThumbUrl: null as string | null,
       postId: null as string | null,
     };
-    if (data.scope === "ONE_POST" && data.postId) {
+    const onePost = data.trigger === "COMMENT" && data.scope === "ONE_POST";
+    if (onePost && data.postId) {
       const post = await prisma.post.findFirst({
         where: { id: data.postId, clientId: account.clientId },
         select: {
@@ -150,7 +182,7 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
         mediaThumbUrl: null,
         postId: post.id,
       };
-    } else if (data.scope === "ONE_POST" && data.media) {
+    } else if (onePost && data.media) {
       target = {
         mediaId: data.media.id,
         mediaPermalink: data.media.permalink ?? null,
@@ -165,15 +197,29 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
       accountId: account.id,
       name: data.name,
       enabled: data.enabled,
-      scope: data.scope,
+      trigger: data.trigger,
+      // Story replies and DMs aren't on a post.
+      scope: data.trigger === "COMMENT" ? data.scope : ("ANY_POST" as const),
       ...target,
       matchMode: data.matchMode,
+      fuzzy: data.fuzzy,
       keywords: data.matchMode === "ANY_COMMENT" ? [] : cleanKeywords(data.keywords),
-      replies: data.replies,
+      // A public reply only exists for a comment.
+      replies: data.trigger === "COMMENT" ? data.replies : [],
       dmText: data.dmText,
+      dmVariants: data.dmText ? data.dmVariants : [],
+      rotateEvery: data.rotateEvery,
       dmButtonLabel: data.dmText ? data.dmButtonLabel : null,
       dmButtonUrl: data.dmText ? data.dmButtonUrl : null,
       oncePerPerson: data.oncePerPerson,
+      followGate: data.followGate,
+      gateText: data.followGate ? data.gateText : null,
+      collect: data.collect,
+      askText: data.collect ? data.askText : null,
+      followUpText: data.followUpText,
+      followUpMinutes: data.followUpMinutes,
+      holdWords: cleanKeywords(data.holdWords),
+      aiModeration: data.aiModeration && aiEnabled(),
     };
 
     if (id) {
@@ -219,6 +265,52 @@ export async function setAutomationEnabled(id: string, enabled: boolean) {
         ...(!rule.enabled && enabled ? { activeSince: new Date() } : {}),
       },
     });
+    revalidatePath("/automations");
+  });
+}
+
+/** A held comment: send it after all, or dismiss it. */
+export async function resolveHeld(runId: string, send: boolean) {
+  return toResult(async () => {
+    const user = await automationUser();
+    const run = await prisma.automationRun.findFirst({
+      where: { id: runId, status: "HELD", rule: { client: { workspaceId: user.workspaceId } } },
+      select: { id: true },
+    });
+    if (!run) throw new ApiError(404, "That held comment is gone.");
+    if (send) {
+      await prisma.automationRun.update({
+        where: { id: run.id },
+        data: { status: "QUEUED", nextAttemptAt: null },
+      });
+      await processRun(run.id);
+    } else {
+      await prisma.automationRun.update({ where: { id: run.id }, data: { status: "SKIPPED" } });
+    }
+    revalidatePath("/automations");
+  });
+}
+
+/** AI-written other wordings of a DM, for the editor to show before saving. */
+export async function writeDmVariants(text: string, count: number) {
+  return toResult(async () => {
+    const user = await automationUser();
+    if (!aiEnabled() || !(await workspaceHasFeature(user.workspaceId, "ai"))) {
+      throw new ApiError(403, "AI helpers aren't switched on.");
+    }
+    const clean = z.string().trim().min(1, "Write the DM first.").max(LIMITS.dmLength).parse(text);
+    return writeVariants(clean, Math.min(Math.max(1, count), LIMITS.dmVariants));
+  });
+}
+
+/** Removes someone from the leads list. */
+export async function deleteLead(id: string) {
+  return toResult(async () => {
+    const user = await automationUser();
+    const { count } = await prisma.lead.deleteMany({
+      where: { id, client: { workspaceId: user.workspaceId } },
+    });
+    if (!count) throw new ApiError(404, "Lead not found.");
     revalidatePath("/automations");
   });
 }

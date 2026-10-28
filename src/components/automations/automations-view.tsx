@@ -8,7 +8,11 @@ import { toast } from "sonner";
 import {
   AlertTriangle,
   ArrowUpRight,
+  AtSign,
   CalendarClock,
+  Check,
+  Download,
+  Lock,
   MessageCircleReply,
   MoreHorizontal,
   Pencil,
@@ -17,10 +21,13 @@ import {
   Send,
   Trash2,
   Unplug,
+  X,
 } from "lucide-react";
 import {
   checkCommentsNow,
   deleteAutomation,
+  deleteLead,
+  resolveHeld,
   setAutomationEnabled,
 } from "@/lib/automation-actions";
 import { unwrap } from "@/lib/action-result";
@@ -57,6 +64,19 @@ import { cn } from "@/lib/utils";
 function ago(iso: string | null): string {
   return iso ? formatDistanceToNow(new Date(iso), { addSuffix: true }) : "never";
 }
+
+/** Where a conversation has got to, in words, for the activity log. */
+function stageNote(run: AutomationsPageData["runs"][number]): string | null {
+  if (run.status !== "SENT" && run.status !== "PARTIAL") return null;
+  if (run.delivered) return "Link delivered";
+  if (run.stage === "WAIT_TAP") return "Waiting for their tap";
+  if (run.stage === "WAIT_FOLLOW") return "Asked them to follow first";
+  if (run.stage === "WAIT_ANSWER") return "Waiting for their answer";
+  return null;
+}
+
+const TRIGGER_NOTE = { COMMENT: "", STORY_REPLY: "story reply · ", DM_KEYWORD: "DM · " } as const;
+const SOURCE_LABEL = { COMMENT: "Comment", STORY_REPLY: "Story reply", DM_KEYWORD: "DM" } as const;
 
 export function AutomationsView({
   data,
@@ -121,6 +141,29 @@ export function AutomationsView({
         router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Couldn't delete.", { id: t });
+      }
+    });
+  }
+
+  function resolve(runId: string, send: boolean) {
+    startTransition(async () => {
+      try {
+        unwrap(await resolveHeld(runId, send));
+        toast.success(send ? "Sent" : "Dismissed");
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't update.");
+      }
+    });
+  }
+
+  function removeLead(id: string) {
+    startTransition(async () => {
+      try {
+        unwrap(await deleteLead(id));
+        router.refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Couldn't remove.");
       }
     });
   }
@@ -216,7 +259,8 @@ export function AutomationsView({
           <div>
             <h2 className="text-[0.9375rem] font-semibold tracking-tight">Recent activity</h2>
             <p className="text-muted-foreground text-xs">
-              Every comment an automation acted on. Kept for {RUN_RETENTION_DAYS} days.
+              Every comment, story reply and DM an automation acted on. Kept for{" "}
+              {RUN_RETENTION_DAYS} days.
             </p>
           </div>
         </div>
@@ -237,8 +281,9 @@ export function AutomationsView({
                     </span>{" "}
                     <span className="text-muted-foreground">&ldquo;{run.comment}&rdquo;</span>
                   </p>
-                  <p className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-xs">
+                  <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
                     <ClientDot color={run.clientColor} className="size-2" />
+                    {TRIGGER_NOTE[run.trigger]}
                     {run.clientName} · {run.ruleName}
                     {run.dmSent && (
                       <span className="text-live-ink inline-flex items-center gap-1">
@@ -251,7 +296,23 @@ export function AutomationsView({
                       </span>
                     )}
                   </p>
-                  {run.error && run.status !== "SENT" && (
+                  {stageNote(run) && (
+                    <p className={cn("mt-1 text-xs", run.delivered ? "text-live-ink" : "text-standby-ink")}>
+                      {stageNote(run)}
+                    </p>
+                  )}
+                  {run.status === "HELD" && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="text-standby-ink text-xs">Held: {run.heldReason}</span>
+                      <Button size="xs" variant="outline" onClick={() => resolve(run.id, true)} disabled={pending}>
+                        <Check /> Send anyway
+                      </Button>
+                      <Button size="xs" variant="ghost" onClick={() => resolve(run.id, false)} disabled={pending}>
+                        <X /> Dismiss
+                      </Button>
+                    </div>
+                  )}
+                  {run.error && run.status !== "SENT" && run.status !== "HELD" && (
                     <p
                       className={cn(
                         "mt-1 text-xs leading-relaxed",
@@ -273,6 +334,67 @@ export function AutomationsView({
         )}
       </section>
 
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-[0.9375rem] font-semibold tracking-tight">Leads</h2>
+            <p className="text-muted-foreground text-xs">
+              Everyone an automation talked to, with any email or phone they shared.{" "}
+              {data.leadTotal} in total.
+            </p>
+          </div>
+          {data.leadTotal > 0 && (
+            <Button variant="outline" size="sm" render={<a href="/api/automations/leads" download />}>
+              <Download /> Export CSV
+            </Button>
+          )}
+        </div>
+        {data.leads.length ? (
+          <ul className="bg-card divide-y rounded-2xl border">
+            {data.leads.map((lead) => (
+              <li key={lead.id} className="group/lead flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3 sm:px-5">
+                <div className="min-w-0 flex-1 basis-48">
+                  <p className="truncate text-sm font-semibold">
+                    {lead.username ? `@${lead.username}` : "Instagram user"}
+                  </p>
+                  <p className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
+                    <ClientDot color={lead.clientColor} className="size-2" />
+                    {lead.clientName} · {SOURCE_LABEL[lead.source]}
+                    {lead.lastRule && ` · ${lead.lastRule}`}
+                  </p>
+                </div>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                  {lead.email && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <AtSign className="text-muted-foreground size-3.5" /> {lead.email}
+                    </span>
+                  )}
+                  {lead.phone && <span className="font-mono">{lead.phone}</span>}
+                  <span className="text-muted-foreground" suppressHydrationWarning>
+                    {lead.touches > 1 ? `${lead.touches} times · ` : ""}
+                    {ago(lead.lastSeenAt)}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remove ${lead.username ?? "this lead"}`}
+                  onClick={() => removeLead(lead.id)}
+                  disabled={pending}
+                  className="sm:opacity-0 sm:group-hover/lead:opacity-100 sm:focus-visible:opacity-100"
+                >
+                  <Trash2 />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="text-muted-foreground rounded-2xl border border-dashed px-5 py-8 text-center text-sm">
+            No leads yet. Everyone an automation talks to is added here.
+          </div>
+        )}
+      </section>
+
       {/* Keyed so each open starts from that rule's values (or a blank form). */}
       <AutomationEditor
         key={editor.key}
@@ -283,6 +405,7 @@ export function AutomationsView({
         posts={data.posts}
         defaultAccountId={editor.accountId}
         timeZone={timeZone}
+        aiOn={data.aiOn}
       />
 
       <Dialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
@@ -386,10 +509,9 @@ function AccountsStrip({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() =>
-                  window.location.assign(
-                    `/api/oauth/instagram/start?clientId=${a.clientId}&automations=1&next=/automations`,
-                  )
+                // A full page load: the connect route redirects on to Instagram.
+                render={
+                  <a href={`/api/oauth/instagram/start?clientId=${a.clientId}&automations=1&next=/automations`} />
                 }
               >
                 <Unplug /> Reconnect
@@ -479,38 +601,59 @@ function RuleCard({
       </header>
 
       <div className="space-y-3 text-sm leading-relaxed">
-        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
-          <span className="text-muted-foreground">When someone</span>
-          <TriggerSummary keywords={rule.keywords} matchMode={rule.matchMode} />
-          <span className="text-muted-foreground">on</span>
-          {rule.scope === "ANY_POST" ? (
-            <span className="font-medium">any post</span>
-          ) : waitingForPost ? (
-            <span className="inline-flex items-center gap-1.5 font-medium">
-              <CalendarClock className="text-standby size-3.5" />
-              a scheduled post
-              {rule.post?.scheduledAt && (
-                <span className="text-muted-foreground font-normal">
-                  ({format(new Date(rule.post.scheduledAt), "d MMM, h:mm a", ctx)})
-                </span>
-              )}
-            </span>
-          ) : postGone ? (
-            <span className="text-fault-ink font-medium">a post that was deleted</span>
-          ) : (
-            <a
-              href={rule.mediaPermalink ?? undefined}
-              target="_blank"
-              rel="noreferrer"
-              className="hover:bg-muted inline-flex max-w-full items-center gap-2 rounded-lg py-0.5 pr-1.5 font-medium"
-            >
-              <MediaThumb url={rule.mediaThumbUrl} className="size-6 rounded-md" />
-              <span className="truncate">
-                {rule.mediaCaption?.slice(0, 40) || "this post"}
+        {rule.trigger !== "COMMENT" ? (
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
+            <span className="text-muted-foreground">When someone</span>
+            {rule.matchMode === "ANY_COMMENT" ? (
+              <span className="font-medium">
+                {rule.trigger === "STORY_REPLY" ? "replies to a story" : "sends any DM"}
               </span>
-            </a>
-          )}
-        </div>
+            ) : (
+              <>
+                <span>{rule.trigger === "STORY_REPLY" ? "replies to a story with" : "sends a DM with"}</span>
+                {rule.keywords.map((k, i) => (
+                  <span key={k} className="inline-flex items-center gap-1.5">
+                    {i > 0 && <span className="text-muted-foreground">or</span>}
+                    <KeywordChip>{k}</KeywordChip>
+                  </span>
+                ))}
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
+            <span className="text-muted-foreground">When someone</span>
+            <TriggerSummary keywords={rule.keywords} matchMode={rule.matchMode} />
+            <span className="text-muted-foreground">on</span>
+            {rule.scope === "ANY_POST" ? (
+              <span className="font-medium">any post</span>
+            ) : waitingForPost ? (
+              <span className="inline-flex items-center gap-1.5 font-medium">
+                <CalendarClock className="text-standby size-3.5" />
+                a scheduled post
+                {rule.post?.scheduledAt && (
+                  <span className="text-muted-foreground font-normal">
+                    ({format(new Date(rule.post.scheduledAt), "d MMM, h:mm a", ctx)})
+                  </span>
+                )}
+              </span>
+            ) : postGone ? (
+              <span className="text-fault-ink font-medium">a post that was deleted</span>
+            ) : (
+              <a
+                href={rule.mediaPermalink ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:bg-muted inline-flex max-w-full items-center gap-2 rounded-lg py-0.5 pr-1.5 font-medium"
+              >
+                <MediaThumb url={rule.mediaThumbUrl} className="size-6 rounded-md" />
+                <span className="truncate">
+                  {rule.mediaCaption?.slice(0, 40) || "this post"}
+                </span>
+              </a>
+            )}
+          </div>
+        )}
         {waitingForPost && (
           <p className="text-standby-ink text-xs">Starts when the post goes live.</p>
         )}
@@ -539,17 +682,49 @@ function RuleCard({
                     {rule.dmButtonLabel}
                   </KeywordChip>
                 )}
+                {rule.dmVariants.length > 0 && (
+                  <span className="text-muted-foreground"> +{rule.dmVariants.length} wordings</span>
+                )}
               </span>
             </li>
           )}
         </ul>
+
+        {(rule.followGate || rule.collect || rule.followUpText || rule.holdWords.length > 0 || rule.aiModeration) && (
+          <div className="flex flex-wrap gap-1.5">
+            {rule.followGate && (
+              <span className="bg-muted inline-flex h-6 items-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium">
+                <Lock className="size-3" /> Followers only
+              </span>
+            )}
+            {rule.collect && (
+              <span className="bg-muted inline-flex h-6 items-center gap-1 rounded-md px-2 text-[0.6875rem] font-medium">
+                <AtSign className="size-3" /> Asks for {rule.collect === "EMAIL" ? "email" : "phone"}
+              </span>
+            )}
+            {rule.followUpText && (
+              <span className="bg-muted inline-flex h-6 items-center rounded-md px-2 text-[0.6875rem] font-medium">
+                One follow-up
+              </span>
+            )}
+            {(rule.holdWords.length > 0 || rule.aiModeration) && (
+              <span className="bg-muted inline-flex h-6 items-center rounded-md px-2 text-[0.6875rem] font-medium">
+                Holds {rule.aiModeration ? "abuse" : `${rule.holdWords.length} word${rule.holdWords.length === 1 ? "" : "s"}`}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <footer className="mt-auto grid grid-cols-4 gap-2 border-t pt-4">
         {[
           { label: "Matched", value: rule.matchedCount },
-          { label: "DMs", value: rule.dmSentCount },
-          { label: "Replies", value: rule.replyCount },
+          { label: "Delivered", value: rule.deliveredCount },
+          rule.collect
+            ? { label: "Leads", value: rule.leadCount }
+            : rule.trigger === "COMMENT"
+              ? { label: "Replies", value: rule.replyCount }
+              : { label: "Held", value: rule.heldCount },
         ].map((s) => (
           <div key={s.label}>
             <div className="label-caps">{s.label}</div>

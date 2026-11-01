@@ -534,6 +534,108 @@ export async function deletePost(id: string) {
   revalidatePath("/calendar");
 }
 
+/**
+ * Moves a post to a new time: the calendar's drag-and-drop and its Undo.
+ * Only drafts and scheduled posts move. A scheduled post must land in the
+ * future, since the publish sweep would otherwise send it at once; a draft
+ * never publishes, so it may sit on any date. One conditional update, so a
+ * post the sweep has just started uploading (a PROCESSING target) is refused
+ * rather than moved under it.
+ */
+export async function reschedulePost(
+  id: string,
+  iso: string,
+): Promise<ActionResult<{ scheduledAt: string }>> {
+  return toResult(async () => {
+    const user = await requireUser();
+    const when = new Date(iso);
+    if (Number.isNaN(when.getTime())) {
+      throw new ApiError(400, "That isn't a valid time.");
+    }
+    const post = await prisma.post.findFirst({
+      where: { id, client: { workspaceId: user.workspaceId } },
+      select: { status: true },
+    });
+    if (!post) throw new ApiError(404, "Post not found.");
+    if (post.status !== "DRAFT" && post.status !== "SCHEDULED") {
+      throw new ApiError(409, "Only drafts and scheduled posts can be moved.");
+    }
+    if (post.status === "SCHEDULED" && when.getTime() < Date.now() + 60_000) {
+      throw new ApiError(400, "Scheduled posts can only move to a time in the future.");
+    }
+    const { count } = await prisma.post.updateMany({
+      where: {
+        id,
+        status: post.status,
+        targets: { none: { status: "PROCESSING" } },
+      },
+      data: { scheduledAt: when },
+    });
+    if (count !== 1) {
+      throw new ApiError(409, "This post is being published right now and can't be moved.");
+    }
+    revalidatePath("/calendar");
+    revalidatePath("/queue");
+    revalidatePath("/dashboard");
+    return { scheduledAt: when.toISOString() };
+  });
+}
+
+/**
+ * Copies a post as a new draft: same client, accounts, caption, media and
+ * per-account captions. It goes through createPostForUser, so plan limits
+ * and validation apply exactly as in the composer. With `iso` the copy is
+ * placed on that date (still a draft); it never publishes by itself.
+ */
+export async function duplicatePost(
+  id: string,
+  iso?: string | null,
+): Promise<ActionResult<{ id: string }>> {
+  return toResult(async () => {
+    const user = await requireUser();
+    const src = await prisma.post.findFirst({
+      where: { id, client: { workspaceId: user.workspaceId } },
+      include: { media: true, targets: true },
+    });
+    if (!src) throw new ApiError(404, "Post not found.");
+    if (src.targets.length === 0) {
+      throw new ApiError(400, "This post has no connected accounts left to copy to.");
+    }
+    const data = postSchema.parse({
+      clientId: src.clientId,
+      body: src.body,
+      firstComment: src.firstComment ?? undefined,
+      title: src.title ?? undefined,
+      youtubePrivacy: (src.youtubePrivacy as PostInput["youtubePrivacy"]) ?? undefined,
+      youtubeTags: src.youtubeTags,
+      youtubeCategoryId: src.youtubeCategoryId ?? undefined,
+      accountIds: src.targets.map((t) => t.accountId),
+      media: src.media.map((m) => ({
+        type: m.type,
+        url: m.url,
+        storageKey: m.storageKey,
+        title: m.title ?? undefined,
+        sizeBytes: m.sizeBytes ?? undefined,
+      })),
+      link: (src.link as PostInput["link"]) ?? null,
+      poll: (src.poll as PostInput["poll"]) ?? null,
+      overrides: src.targets
+        .filter((t) => t.bodyOverride)
+        .map((t) => ({ accountId: t.accountId, body: t.bodyOverride as string })),
+      action: "draft",
+    } satisfies PostInput);
+    const { post } = await createPostForUser(user, data);
+    const when = iso ? new Date(iso) : null;
+    if (when && !Number.isNaN(when.getTime())) {
+      await prisma.post.update({ where: { id: post.id }, data: { scheduledAt: when } });
+    }
+    revalidatePath("/calendar");
+    revalidatePath("/queue");
+    revalidatePath("/dashboard");
+    return { id: post.id };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Approval + comments
 // ---------------------------------------------------------------------------

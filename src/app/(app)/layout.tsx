@@ -5,7 +5,9 @@ import { AppSidebar, type NextCueData } from "@/components/app-sidebar";
 import { AppTopbar } from "@/components/app-topbar";
 import { AppBanners } from "@/components/app-banners";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { getAuth } from "@/lib/auth";
+import { getAuth, getMyWorkspaces } from "@/lib/auth";
+import { decrypt } from "@/lib/crypto";
+import { pendingInvitesFor } from "@/lib/invites";
 import { getClientOptions, getNextCue, getWorkspace } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
 import { getTimeZone } from "@/lib/timezone-server";
@@ -28,13 +30,24 @@ export default async function AppLayout({
   }
 
   const scopeClientId = await getScopeClientId();
-  const [clients, workspace, cue, timeZone, platform] = await Promise.all([
+  const [clients, workspace, cue, timeZone, platform, workspaces, invites] = await Promise.all([
     getClientOptions(),
     getWorkspace(),
     getNextCue(scopeClientId),
     getTimeZone(),
     getPlatformSettings(),
+    // Not while viewing someone else's workspace: these would be theirs.
+    viewAs ? Promise.resolve([]) : getMyWorkspaces(user.id),
+    viewAs ? Promise.resolve([]) : pendingInvitesFor(user.email),
   ]);
+  const memberOf = new Set(workspaces.map((w) => w.id));
+  const openInvites = invites
+    .filter((i) => !memberOf.has(i.workspaceId))
+    .map((i) => ({
+      token: decrypt(i.tokenEnc),
+      workspaceName: i.workspace.name,
+      from: i.invitedBy?.name || i.invitedBy?.email || null,
+    }));
 
   const nextCue: NextCueData | null =
     cue?.scheduledAt
@@ -59,6 +72,8 @@ export default async function AppLayout({
     role: user.role,
     // Hidden while viewing a workspace: the shell is showing someone else.
     isPlatformAdmin: !viewAs && isPlatformAdminEmail(email),
+    workspaceId: user.workspaceId,
+    workspaces: viewAs ? undefined : workspaces,
   };
   const workspaceName = workspace?.name ?? "Workspace";
 
@@ -80,6 +95,7 @@ export default async function AppLayout({
             <AppBanners
               viewAs={viewAs ? { workspaceName: viewAs.workspaceName, expiresAt: viewAs.expiresAt } : null}
               paused={platform.publishingPaused}
+              invites={openInvites}
               announcement={
                 platform.announcement && platform.announcementAt
                   ? {

@@ -2,7 +2,7 @@ import { getCurrentUser } from "@/lib/auth";
 import {
   getApiKeys,
   getStorageSummary,
-  getUsers,
+  getTeam,
   getWorkspace,
 } from "@/lib/data";
 import { ProfileForm } from "@/components/profile-form";
@@ -51,13 +51,14 @@ function Section({
 }
 
 export default async function SettingsPage() {
-  const [user, users, workspace, storage] = await Promise.all([
+  const [user, team, workspace, storage] = await Promise.all([
     getCurrentUser(),
-    getUsers(),
+    getTeam(),
     getWorkspace(),
     getStorageSummary(),
   ]);
   const isAdmin = user?.role === "ADMIN";
+  const now = new Date().getTime();
   const apiAllowed = !workspace || hasFeature(workspace, "api");
   // Admin-only: getApiKeys() itself refuses non-admins, so don't ask.
   const apiKeys = isAdmin && apiAllowed ? await getApiKeys() : [];
@@ -129,14 +130,24 @@ export default async function SettingsPage() {
           <Section
             id="team"
             title="Team"
-            description="Invited teammates get access as soon as they sign in with that email."
+            description="Invite people by email. They join when they sign in with that address and accept."
           >
             <TeamManager
-              members={users.map((u) => ({
+              members={team.members.map((u) => ({
                 id: u.id,
                 name: u.name,
                 email: u.email,
                 role: u.role,
+                lastSeenAt: u.lastSeenAt?.toISOString() ?? null,
+              }))}
+              invites={team.invites.map((i) => ({
+                id: i.id,
+                email: i.email,
+                role: i.role,
+                expiresAt: i.expiresAt.toISOString(),
+                expired: i.expiresAt.getTime() <= now,
+                lastSentAt: i.lastSentAt?.toISOString() ?? null,
+                invitedBy: i.invitedBy?.name || i.invitedBy?.email || null,
               }))}
               currentUserId={user?.id ?? ""}
               isAdmin={isAdmin}

@@ -27,10 +27,14 @@ model Workspace {
   suspendedAt      DateTime? // set = members locked out, API refused, nothing publishes
   suspendedReason  String?
 
-  users   User[]
-  clients Client[]
-  apiKeys ApiKey[]
-  storage StorageConfig?
+  // Home workspace of each User (their active one; see User.workspaceId).
+  users       User[]
+  // Everyone who belongs here, with their role. The source of truth.
+  memberships Membership[]
+  invites     Invite[]
+  clients     Client[]
+  apiKeys     ApiKey[]
+  storage     StorageConfig?
 }
 
 // Limits for each plan live in src/lib/plans.ts.
@@ -84,17 +88,63 @@ model User {
   bannedAt     DateTime? // set = this person can't use Cue at all
   bannedReason String?
 
+  // The workspace this person is working in right now (switching changes it),
+  // so every query scoped by user.workspaceId follows the switcher. Access
+  // itself comes from Membership: auth refuses a workspace without one.
   workspace   Workspace @relation(fields: [workspaceId], references: [id])
   workspaceId String
 
-  posts    Post[]
-  comments Comment[]
-  apiKeys  ApiKey[]
+  memberships Membership[]
+  invitesSent Invite[]     @relation("InvitesSent")
+  posts       Post[]
+  comments    Comment[]
+  apiKeys     ApiKey[]
 }
 
 enum Role {
   ADMIN
   MANAGER
+}
+
+// Who belongs to which workspace, and as what. One person can be in several
+// workspaces (a freelancer for two agencies); User.role mirrors the role in
+// the active one.
+model Membership {
+  id          String    @id @default(cuid())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  role        Role      @default(MANAGER)
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+// An invitation to join a workspace, sent by email. The link carries a random
+// token: we keep its sha256 to look it up and an encrypted copy so the team
+// page can show the link again. Joining needs a signed-in Accept, so a mail
+// scanner opening the link can't accept on anyone's behalf.
+model Invite {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspaceId String
+  email       String // lowercased
+  role        Role      @default(MANAGER)
+  tokenHash   String    @unique
+  tokenEnc    String
+  invitedBy   User?     @relation("InvitesSent", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitedById String?
+  createdAt   DateTime  @default(now())
+  lastSentAt  DateTime?
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  declinedAt  DateTime?
+  revokedAt   DateTime?
+
+  @@index([email])
+  @@index([workspaceId])
 }
 
 // Bearer tokens for the programmatic API (/api/v1). The key itself is shown

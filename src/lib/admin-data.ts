@@ -98,7 +98,11 @@ export async function getAdminOverview() {
         id: true,
         name: true,
         createdAt: true,
-        users: { select: { email: true }, orderBy: [{ role: "asc" }, { createdAt: "asc" }], take: 1 },
+        memberships: {
+          select: { user: { select: { email: true } } },
+          orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+          take: 1,
+        },
       },
     }),
     prisma.adminAuditLog.findMany({ orderBy: { createdAt: "desc" }, take: 6 }),
@@ -128,7 +132,7 @@ export async function getAdminOverview() {
       id: w.id,
       name: w.name,
       createdAt: w.createdAt,
-      owner: w.users[0]?.email ?? null,
+      owner: w.memberships[0]?.user.email ?? null,
     })),
     recentAudit,
   };
@@ -171,8 +175,12 @@ export async function listWorkspaces(opts: {
         createdAt: true,
         suspendedAt: true,
         storage: { select: { provider: true } },
-        users: { select: { email: true }, orderBy: [{ role: "asc" }, { createdAt: "asc" }], take: 1 },
-        _count: { select: { users: true, clients: true } },
+        memberships: {
+          select: { user: { select: { email: true } } },
+          orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+          take: 1,
+        },
+        _count: { select: { memberships: true, clients: true } },
       },
     }),
   ]);
@@ -202,8 +210,8 @@ export async function listWorkspaces(opts: {
       plan: r.plan,
       createdAt: r.createdAt,
       suspended: !!r.suspendedAt,
-      owner: r.users[0]?.email ?? null,
-      members: r._count.users,
+      owner: r.memberships[0]?.user.email ?? null,
+      members: r._count.memberships,
       clients: r._count.clients,
       storage: r.storage?.provider ?? null,
       lastSeenAt: seen.find((s) => s.workspaceId === r.id)?._max.lastSeenAt ?? null,
@@ -224,18 +232,22 @@ export async function getWorkspaceDetail(id: string) {
       suspendedAt: true,
       suspendedReason: true,
       disabledFeatures: true,
-      users: {
+      memberships: {
         orderBy: [{ role: "asc" }, { createdAt: "asc" }],
         select: {
-          id: true,
-          email: true,
-          name: true,
           role: true,
-          createdAt: true,
-          lastSeenAt: true,
-          bannedAt: true,
-          bannedReason: true,
-          _count: { select: { posts: true } },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              createdAt: true,
+              lastSeenAt: true,
+              bannedAt: true,
+              bannedReason: true,
+              _count: { select: { posts: true } },
+            },
+          },
         },
       },
       clients: {
@@ -286,8 +298,11 @@ export async function getWorkspaceDetail(id: string) {
     lastOutcomeByAccount(accountIds),
   ]);
 
+  const { memberships, ...rest } = ws;
   return {
-    ...ws,
+    ...rest,
+    // Everyone with a membership here, with their role in this workspace.
+    users: memberships.map((m) => ({ ...m.user, role: m.role })),
     clients: ws.clients.map((c) => ({
       ...c,
       accounts: c.accounts.map((a) => withHealth(a, lastOutcomes.get(a.id))),

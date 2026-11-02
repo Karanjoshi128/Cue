@@ -28,7 +28,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { switchWorkspace } from "@/lib/actions";
+import { toast } from "sonner";
 import {
+  Check,
   ChevronsUpDown,
   LogOut,
   Monitor,
@@ -55,6 +58,16 @@ export interface ShellUser {
   role: string;
   /** Runs the whole platform: gets a link to /admin. */
   isPlatformAdmin?: boolean;
+  /** The workspace being worked in, and every one they belong to. */
+  workspaceId?: string;
+  workspaces?: { id: string; name: string; role: string; suspended: boolean }[];
+}
+
+async function goToWorkspace(id: string) {
+  const res = await switchWorkspace(id);
+  if (!res.ok) return void toast.error(res.error);
+  // A hard navigation: every page and the client scope belong to the old workspace.
+  window.location.href = "/dashboard";
 }
 
 export function initialsOf(user: ShellUser) {
@@ -271,6 +284,37 @@ export function UserMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        {user.workspaces && (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+              {user.workspaces.map((w) => {
+                const current = w.id === user.workspaceId;
+                return (
+                  <DropdownMenuItem
+                    key={w.id}
+                    disabled={w.suspended}
+                    onClick={() => !current && void goToWorkspace(w.id)}
+                  >
+                    <span className="bg-muted grid size-5 shrink-0 place-items-center rounded font-mono text-[0.5625rem] font-semibold uppercase">
+                      {w.name.slice(0, 2)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                    {w.suspended ? (
+                      <span className="text-muted-foreground text-[0.625rem]">Suspended</span>
+                    ) : current ? (
+                      <Check className="text-primary" />
+                    ) : null}
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuItem render={<Link href="/onboarding?create=1" />}>
+                <Plus /> Create a workspace
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem render={<Link href="/settings" />}>
           <Settings2 /> Settings
         </DropdownMenuItem>

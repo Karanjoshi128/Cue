@@ -19,7 +19,7 @@ export interface AuthState {
   user: User | null;
   /** The authenticated email - set even before the person has a workspace. */
   email: string | null;
-  /** Authenticated but has no workspace yet → must run onboarding. */
+  /** Authenticated but in no workspace (yet, or any more) → the onboarding screen. */
   needsOnboarding: boolean;
   /** Signed in, but locked out by a ban or a suspended workspace. */
   blocked?: { kind: "banned" | "suspended"; reason: string | null };
@@ -77,7 +77,14 @@ export const getAuth = cache(async (): Promise<AuthState> => {
   const existing = await prisma.user.findUnique({
     where: { email },
     include: {
-      workspace: { select: { suspendedAt: true, suspendedReason: true } },
+      memberships: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          workspaceId: true,
+          role: true,
+          workspace: { select: { suspendedAt: true, suspendedReason: true } },
+        },
+      },
     },
   });
   if (!existing) {
@@ -85,23 +92,44 @@ export const getAuth = cache(async (): Promise<AuthState> => {
     return { user: null, email, needsOnboarding: true };
   }
 
-  const { workspace, ...user } = existing;
-  if (user.bannedAt) {
+  const { memberships, ...stored } = existing;
+  if (stored.bannedAt) {
     return {
       user: null,
       email,
       needsOnboarding: false,
-      blocked: { kind: "banned", reason: user.bannedReason },
+      blocked: { kind: "banned", reason: stored.bannedReason },
     };
   }
-  if (workspace.suspendedAt) {
+  // Removed from every workspace: back to the onboarding screen, which offers
+  // their pending invites or a workspace of their own.
+  if (memberships.length === 0) return { user: null, email, needsOnboarding: true };
+
+  // The active workspace is User.workspaceId while they still belong to it and
+  // it isn't suspended; otherwise their next usable one.
+  const usable = memberships.filter((m) => !m.workspace.suspendedAt);
+  const active = usable.find((m) => m.workspaceId === stored.workspaceId) ?? usable[0];
+  if (!active) {
+    const current =
+      memberships.find((m) => m.workspaceId === stored.workspaceId) ?? memberships[0];
     return {
       user: null,
       email,
       needsOnboarding: false,
-      blocked: { kind: "suspended", reason: workspace.suspendedReason },
+      blocked: { kind: "suspended", reason: current.workspace.suspendedReason },
     };
   }
+  if (active.workspaceId !== stored.workspaceId || active.role !== stored.role) {
+    // Keep the stored pointer and role in step (removed, suspended, re-roled).
+    void prisma.user
+      .update({
+        where: { id: stored.id },
+        data: { workspaceId: active.workspaceId, role: active.role },
+      })
+      .catch(() => {});
+  }
+  // Role comes from the membership, so every check reads the right one.
+  const user: User = { ...stored, workspaceId: active.workspaceId, role: active.role };
 
   if (!user.lastSeenAt || Date.now() - user.lastSeenAt.getTime() > SEEN_EVERY_MS) {
     // Telemetry only; never fail or slow a request over it.
@@ -136,13 +164,17 @@ async function resolveViewAs(
       id: true,
       name: true,
       // Their admin, so every page renders as the workspace's owner sees it.
-      users: { orderBy: [{ role: "asc" }, { createdAt: "asc" }], take: 1 },
+      memberships: {
+        orderBy: [{ role: "asc" }, { createdAt: "asc" }],
+        take: 1,
+        include: { user: true },
+      },
     },
   });
-  const user = workspace?.users[0];
-  if (!workspace || !user) return null;
+  const member = workspace?.memberships[0];
+  if (!workspace || !member) return null;
   return {
-    user,
+    user: { ...member.user, workspaceId: workspace.id, role: member.role },
     viewAs: {
       workspaceId: workspace.id,
       workspaceName: workspace.name,
@@ -211,4 +243,22 @@ export async function requireAdmin(): Promise<User> {
  */
 export async function requireWorkspaceId(): Promise<string> {
   return (await requireUser()).workspaceId;
+}
+
+/** Every workspace this person belongs to, for the switcher. */
+export async function getMyWorkspaces(userId: string) {
+  const rows = await prisma.membership.findMany({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+    select: {
+      role: true,
+      workspace: { select: { id: true, name: true, suspendedAt: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.workspace.id,
+    name: r.workspace.name,
+    role: r.role,
+    suspended: !!r.workspace.suspendedAt,
+  }));
 }

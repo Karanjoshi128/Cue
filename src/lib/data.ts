@@ -76,12 +76,35 @@ export type StorageSummary = NonNullable<
   Awaited<ReturnType<typeof getStorageSummary>>
 >;
 
-export async function getUsers() {
+/** The workspace's members (with their role here) and its open invites. */
+export async function getTeam() {
   const workspaceId = await requireWorkspaceId();
-  return prisma.user.findMany({
-    where: { workspaceId },
-    orderBy: { createdAt: "asc" },
-  });
+  const [memberships, invites] = await Promise.all([
+    prisma.membership.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        role: true,
+        user: { select: { id: true, name: true, email: true, lastSeenAt: true } },
+      },
+    }),
+    prisma.invite.findMany({
+      where: { workspaceId, acceptedAt: null, declinedAt: null, revokedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        lastSentAt: true,
+        invitedBy: { select: { name: true, email: true } },
+      },
+    }),
+  ]);
+  return {
+    members: memberships.map((m) => ({ ...m.user, role: m.role })),
+    invites,
+  };
 }
 
 export async function getClients() {

@@ -2,7 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 import { format } from "date-fns";
-import { Eye, Info, PauseCircle, TriangleAlert, X } from "lucide-react";
+import { Eye, Info, MailOpen, PauseCircle, TriangleAlert, X } from "lucide-react";
+import { InviteActions } from "@/components/invite-actions";
 import { stopViewAs } from "@/lib/admin-actions";
 import { cn } from "@/lib/utils";
 
@@ -32,17 +33,20 @@ function readDismissed(): string | null {
 export function AppBanners({
   viewAs,
   paused,
+  invites = [],
   announcement,
 }: {
   viewAs: { workspaceName: string; expiresAt: number } | null;
   paused: boolean;
+  /** Invitations to other workspaces, waiting for this person. */
+  invites?: { token: string; workspaceName: string; from: string | null }[];
   announcement: { text: string; tone: "info" | "warning"; at: string } | null;
 }) {
   // Dismissal is remembered per announcement: a new message shows again.
   const dismissed = useSyncExternalStore(subscribe, readDismissed, () => null);
   const showAnnouncement = !!announcement && dismissed !== announcement.at;
 
-  if (!viewAs && !paused && !showAnnouncement) return null;
+  if (!viewAs && !paused && !showAnnouncement && invites.length === 0) return null;
 
   return (
     <div className="space-y-px">
@@ -65,6 +69,20 @@ export function AppBanners({
           </form>
         </div>
       )}
+      {invites.map((inv) => (
+        <div
+          key={inv.token}
+          className="bg-primary/8 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 text-sm sm:px-6"
+          role="status"
+        >
+          <MailOpen className="text-primary size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">
+            {inv.from ? <>{inv.from} invited you to </> : <>You&apos;re invited to </>}
+            <strong className="font-semibold">{inv.workspaceName}</strong>.
+          </span>
+          <InviteActions token={inv.token} workspaceName={inv.workspaceName} compact />
+        </div>
+      ))}
       {paused && (
         <Notice tone="warning" icon={<PauseCircle className="size-4 shrink-0" aria-hidden />}>
           Publishing is paused across Cue right now. Scheduled posts will go out as soon as it resumes.

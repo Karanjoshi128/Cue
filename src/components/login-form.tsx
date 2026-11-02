@@ -20,8 +20,16 @@ const RESEND_COOLDOWN_S = 60;
  * therefore consume the token before the recipient ever clicks, producing
  * "otp_expired". A code can't be prefetched, so sign-in stays reliable.
  */
-export function LoginForm() {
-  const [email, setEmail] = useState("");
+export function LoginForm({
+  initialEmail,
+  next,
+}: {
+  /** Prefilled from an invite link. */
+  initialEmail?: string;
+  /** Where to go after signing in (a same-site path), e.g. back to the invite. */
+  next?: string;
+} = {}) {
+  const [email, setEmail] = useState(initialEmail ?? "");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [loading, setLoading] = useState(false);
@@ -76,7 +84,7 @@ export function LoginForm() {
       toast.success("Signed in", { id: t });
       // Hard navigation: guarantees the server re-reads the freshly written
       // auth cookies instead of replaying a cached "/" → /login payload.
-      window.location.href = "/dashboard";
+      window.location.href = next ?? "/dashboard";
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : "That code didn't work - try again",

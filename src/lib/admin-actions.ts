@@ -135,12 +135,16 @@ export async function deleteWorkspace(workspaceId: string, confirmName: string, 
     const why = requiredReason.parse(reason);
     const ws = await prisma.workspace.findUniqueOrThrow({
       where: { id: id.parse(workspaceId) },
-      select: { id: true, name: true, users: { select: { email: true } } },
+      select: {
+        id: true,
+        name: true,
+        memberships: { select: { user: { select: { email: true } } } },
+      },
     });
     if (confirmName.trim() !== ws.name) {
       return { ok: false, error: "Type the workspace's name exactly to confirm." };
     }
-    if (ws.users.some((u) => isPlatformAdminEmail(u.email))) {
+    if (ws.memberships.some((m) => isPlatformAdminEmail(m.user.email))) {
       return { ok: false, error: "A platform admin belongs to this workspace. Remove them from it first." };
     }
 
@@ -154,6 +158,29 @@ export async function deleteWorkspace(workspaceId: string, confirmName: string, 
       const history = await tx.postHistory.deleteMany({ where: { workspaceId: ws.id } });
       // Clients cascade to their posts, targets, media rows and comments.
       const clients = await tx.client.deleteMany({ where: { workspaceId: ws.id } });
+      // People also in other workspaces keep their account: move them to one
+      // of those. Only accounts that belong nowhere else are deleted.
+      const homed = await tx.user.findMany({
+        where: { workspaceId: ws.id },
+        select: {
+          id: true,
+          memberships: {
+            where: { workspaceId: { not: ws.id } },
+            orderBy: { createdAt: "asc" },
+            take: 1,
+            select: { workspaceId: true, role: true },
+          },
+        },
+      });
+      for (const u of homed) {
+        const next = u.memberships[0];
+        if (next) {
+          await tx.user.update({
+            where: { id: u.id },
+            data: { workspaceId: next.workspaceId, role: next.role },
+          });
+        }
+      }
       const users = await tx.user.deleteMany({ where: { workspaceId: ws.id } });
       // API keys and the storage config cascade with the workspace.
       await tx.workspace.delete({ where: { id: ws.id } });
@@ -190,9 +217,9 @@ export async function startViewAs(workspaceId: string, reason?: string): Promise
   try {
     const ws = await prisma.workspace.findUniqueOrThrow({
       where: { id: id.parse(workspaceId) },
-      select: { id: true, _count: { select: { users: true } } },
+      select: { id: true, _count: { select: { memberships: true } } },
     });
-    if (ws._count.users === 0) return { ok: false, error: "This workspace has no members to view as." };
+    if (ws._count.memberships === 0) return { ok: false, error: "This workspace has no members to view as." };
     const expiresAt = Date.now() + VIEW_AS_MINUTES * 60_000;
     (await cookies()).set(VIEW_AS_COOKIE, signViewAs({ workspaceId: ws.id, adminEmail: actor, expiresAt }), {
       httpOnly: true,
@@ -266,7 +293,9 @@ export async function unbanUser(userId: string, reason?: string): Promise<AdminR
 }
 
 async function otherAdmins(workspaceId: string, exceptId: string) {
-  return prisma.user.count({ where: { workspaceId, role: "ADMIN", id: { not: exceptId } } });
+  return prisma.membership.count({
+    where: { workspaceId, role: "ADMIN", userId: { not: exceptId } },
+  });
 }
 
 export async function setUserRole(userId: string, role: string, reason?: string): Promise<AdminResult> {
@@ -279,7 +308,14 @@ export async function setUserRole(userId: string, role: string, reason?: string)
     if (u.role === "ADMIN" && (await otherAdmins(u.workspaceId, u.id)) === 0) {
       return { ok: false, error: "This is the workspace's only admin. Make someone else admin first." };
     }
-    await prisma.user.update({ where: { id: u.id }, data: { role: next } });
+    // The role lives on the membership (in their current workspace).
+    await prisma.$transaction([
+      prisma.membership.updateMany({
+        where: { userId: u.id, workspaceId: u.workspaceId },
+        data: { role: next },
+      }),
+      prisma.user.update({ where: { id: u.id }, data: { role: next } }),
+    ]);
     await audit({ actor, action: "user.role", targetType: "user", targetId: u.id, workspaceId: u.workspaceId, reason: optionalReason.parse(reason), details: { email: u.email, from: u.role, to: next } });
     return done(`${u.email} is now ${next === "ADMIN" ? "an admin" : "a manager"}.`);
   } catch (e) {
@@ -296,6 +332,13 @@ export async function removeUser(userId: string, reason: string): Promise<AdminR
     if (isPlatformAdminEmail(u.email)) return { ok: false, error: "Platform admins can't be removed here." };
     if (u.role === "ADMIN" && (await otherAdmins(u.workspaceId, u.id)) === 0) {
       return { ok: false, error: "This is the workspace's only admin. Make someone else admin first, or delete the workspace." };
+    }
+    const workspaces = await prisma.membership.count({ where: { userId: u.id } });
+    if (workspaces > 1) {
+      return {
+        ok: false,
+        error: `${u.email} also belongs to ${workspaces - 1} other workspace(s). Removing the account would take them out of all of them; a workspace admin can remove them from one in Team settings, or ban them instead.`,
+      };
     }
     if (u._count.posts > 0 || u._count.comments > 0) {
       return {

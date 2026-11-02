@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z, ZodError } from "zod";
 import { Prisma } from "@prisma/client";
@@ -14,6 +15,15 @@ import { limitProblem, workspaceHasFeature } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
 import { removeUnusedMedia } from "@/lib/media";
+import { SCOPE_COOKIE } from "@/lib/scope";
+import {
+  hashInviteToken,
+  inviteExpiry,
+  inviteLink,
+  inviteState,
+  newInviteToken,
+  sendInviteEmail,
+} from "@/lib/invites";
 import {
   BROWSER_TEST_KEY,
   settingsFromInput,
@@ -57,24 +67,64 @@ async function toResult<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
 
 const workspaceNameSchema = z.string().trim().min(1).max(60);
 
+/** A different workspace's client ids mean nothing here: drop the client scope. */
+async function resetClientScope() {
+  (await cookies()).set(SCOPE_COOKIE, "all", {
+    path: "/",
+    maxAge: 31536000,
+    sameSite: "lax",
+  });
+}
+
 /**
- * Onboarding: the signed-in email creates its own workspace and becomes its
- * admin. Only reachable when getAuth() reported needsOnboarding (no member row
- * yet); an already-onboarded user is bounced to the dashboard.
+ * The signed-in email creates a workspace and becomes its admin, then works in
+ * it. First-time sign-ins come here from onboarding; people who already belong
+ * somewhere come from the workspace switcher's "Create a workspace".
  */
 export async function createWorkspace(name: string) {
-  const { user, email } = await getAuth();
-  if (user) redirect("/dashboard");
+  const { email, viewAs } = await getAuth();
   if (!email) throw new Error("UNAUTHENTICATED");
+  if (viewAs) throw new Error("Exit view mode first.");
   const wsName = workspaceNameSchema.parse(name);
 
-  await prisma.workspace.create({
-    data: {
-      name: wsName,
-      users: { create: { email, name: email.split("@")[0], role: "ADMIN" } },
-    },
+  await prisma.$transaction(async (tx) => {
+    const ws = await tx.workspace.create({ data: { name: wsName } });
+    const existing = await tx.user.findUnique({ where: { email } });
+    const user = existing
+      ? await tx.user.update({
+          where: { id: existing.id },
+          data: { workspaceId: ws.id, role: "ADMIN" },
+        })
+      : await tx.user.create({
+          data: { email, name: email.split("@")[0], role: "ADMIN", workspaceId: ws.id },
+        });
+    await tx.membership.create({
+      data: { userId: user.id, workspaceId: ws.id, role: "ADMIN" },
+    });
   });
+  await resetClientScope();
   redirect("/dashboard");
+}
+
+/** Work in another workspace this person belongs to. */
+export async function switchWorkspace(workspaceId: string): Promise<ActionResult> {
+  return toResult(async () => {
+    const user = await requireUser();
+    const membership = await prisma.membership.findUnique({
+      where: { userId_workspaceId: { userId: user.id, workspaceId } },
+      select: { role: true, workspace: { select: { suspendedAt: true } } },
+    });
+    if (!membership) throw new ApiError(404, "You're not a member of that workspace.");
+    if (membership.workspace.suspendedAt) {
+      throw new ApiError(403, "That workspace is suspended. Contact Cue support.");
+    }
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { workspaceId, role: membership.role },
+    });
+    await resetClientScope();
+    revalidatePath("/", "layout");
+  });
 }
 
 export async function renameWorkspace(name: string) {
@@ -105,37 +155,204 @@ export async function updateProfile(input: z.infer<typeof profileSchema>) {
 // ---------------------------------------------------------------------------
 
 const inviteSchema = z.object({
-  email: z.string().email().max(120),
+  email: z.string().trim().email("Enter a valid email.").max(120),
   role: z.enum(["ADMIN", "MANAGER"]),
 });
 
+const openInvite = {
+  acceptedAt: null,
+  declinedAt: null,
+  revokedAt: null,
+} satisfies Prisma.InviteWhereInput;
+
+/** Admins invite anyone; managers invite managers. */
+function assertCanInvite(me: { role: string }, role: "ADMIN" | "MANAGER") {
+  if (role === "ADMIN" && me.role !== "ADMIN") {
+    throw new ApiError(403, "Only admins can invite admins.");
+  }
+}
+
+async function emailInvite(
+  invite: { email: string; role: "ADMIN" | "MANAGER"; tokenEnc: string; workspaceId: string },
+  me: { name: string | null; email: string },
+): Promise<boolean> {
+  const ws = await prisma.workspace.findUnique({
+    where: { id: invite.workspaceId },
+    select: { name: true },
+  });
+  return sendInviteEmail({
+    to: invite.email,
+    link: inviteLink(invite),
+    workspaceName: ws?.name ?? "a workspace",
+    inviterName: me.name || me.email.split("@")[0],
+    inviterEmail: me.email,
+    role: invite.role,
+  }).catch((e) => {
+    console.error("[invites] sending failed:", e);
+    return false;
+  });
+}
+
+/**
+ * Invites an email to this workspace: an Invite row (7 days) and an email
+ * with the link. Nobody joins until they sign in and accept. Returns the link
+ * so it can be shared by hand, and whether the email went out.
+ */
 export async function inviteMember(
   input: z.infer<typeof inviteSchema>,
-): Promise<ActionResult> {
+): Promise<ActionResult<{ link: string; emailed: boolean }>> {
   return toResult(async () => {
-  const admin = await requireAdmin();
-  const data = inviteSchema.parse(input);
-  const email = data.email.toLowerCase();
+    const me = await requireUser();
+    const data = inviteSchema.parse(input);
+    const email = data.email.toLowerCase();
+    assertCanInvite(me, data.role);
+    if (email === me.email.toLowerCase()) {
+      throw new ApiError(400, "That's your own email.");
+    }
+    const member = await prisma.membership.findFirst({
+      where: { workspaceId: me.workspaceId, user: { email } },
+      select: { id: true },
+    });
+    if (member) throw new ApiError(409, "They're already in this workspace.");
+    const open = await prisma.invite.findFirst({
+      where: { workspaceId: me.workspaceId, email, ...openInvite, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+    if (open) {
+      throw new ApiError(409, "They already have an invite. Use Resend on it below.");
+    }
+    const overLimit = await limitProblem(me.workspaceId, "members");
+    if (overLimit) throw new ApiError(403, overLimit);
 
-  // Email is globally unique - a person can belong to one workspace.
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new ApiError(409, "That email already has an account.");
-  const overLimit = await limitProblem(admin.workspaceId, "members");
-  if (overLimit) throw new ApiError(403, overLimit);
+    const t = newInviteToken();
+    const invite = await prisma.invite.create({
+      data: {
+        workspaceId: me.workspaceId,
+        email,
+        role: data.role,
+        tokenHash: t.tokenHash,
+        tokenEnc: t.tokenEnc,
+        invitedById: me.id,
+        expiresAt: inviteExpiry(),
+        lastSentAt: new Date(),
+      },
+    });
+    const emailed = await emailInvite(invite, me);
+    revalidatePath("/settings");
+    return { link: inviteLink(invite), emailed };
+  });
+}
 
-  // Pre-create the member row in THIS workspace so their role + tenant are set
-  // when they first sign in (auth.ts returns the existing row on sign-in, so
-  // they skip onboarding and land straight in this workspace).
-  await prisma.user.create({
-    data: {
-      email,
-      name: email.split("@")[0],
-      role: data.role,
-      workspaceId: admin.workspaceId,
-    },
+/** An invite in the caller's workspace that they're allowed to manage. */
+async function manageableInvite(id: string) {
+  const me = await requireUser();
+  const invite = await prisma.invite.findFirst({
+    where: { id, workspaceId: me.workspaceId, ...openInvite },
   });
-  revalidatePath("/settings");
+  if (!invite) throw new ApiError(404, "That invite is no longer open.");
+  assertCanInvite(me, invite.role);
+  return { me, invite };
+}
+
+/** Sends the invite again and gives it a fresh 7 days. */
+export async function resendInvite(id: string): Promise<ActionResult<{ emailed: boolean }>> {
+  return toResult(async () => {
+    const { me, invite } = await manageableInvite(id);
+    const updated = await prisma.invite.update({
+      where: { id: invite.id },
+      data: { expiresAt: inviteExpiry(), lastSentAt: new Date() },
+    });
+    const emailed = await emailInvite(updated, me);
+    revalidatePath("/settings");
+    return { emailed };
   });
+}
+
+/** The invite's link, to share by hand. */
+export async function getInviteLink(id: string): Promise<ActionResult<{ link: string }>> {
+  return toResult(async () => {
+    const { invite } = await manageableInvite(id);
+    return { link: inviteLink(invite) };
+  });
+}
+
+export async function revokeInvite(id: string): Promise<ActionResult> {
+  return toResult(async () => {
+    const { invite } = await manageableInvite(id);
+    await prisma.invite.update({ where: { id: invite.id }, data: { revokedAt: new Date() } });
+    revalidatePath("/settings");
+  });
+}
+
+/** The open invite behind a link, for the signed-in person it was sent to. */
+async function inviteForMe(token: string) {
+  const auth = await getAuth();
+  if (!auth.email) throw new ApiError(401, "Sign in to respond to this invite.");
+  if (auth.viewAs) throw new ApiError(403, "Exit view mode first.");
+  const invite = await prisma.invite.findUnique({
+    where: { tokenHash: hashInviteToken(token) },
+    include: { workspace: { select: { suspendedAt: true } } },
+  });
+  if (!invite) throw new ApiError(404, "This invite link isn't valid.");
+  const state = inviteState(invite);
+  if (state !== "pending") throw new ApiError(410, `This invite has been ${state}.`);
+  if (invite.email !== auth.email.toLowerCase()) {
+    throw new ApiError(403, `This invite is for ${invite.email}. Sign in with that email to accept it.`);
+  }
+  return { invite, email: auth.email.toLowerCase() };
+}
+
+/**
+ * Joins the workspace: a membership with the invited role, and the workspace
+ * becomes the one they're working in. Creates their account on first use.
+ */
+export async function acceptInvite(token: string): Promise<ActionResult> {
+  return toResult(async () => {
+    const { invite, email } = await inviteForMe(token);
+    if (invite.workspace.suspendedAt) {
+      throw new ApiError(403, "That workspace is suspended. Contact Cue support.");
+    }
+    const overLimit = await limitProblem(invite.workspaceId, "members");
+    if (overLimit) throw new ApiError(403, "That workspace's plan is full. Ask its admin to make room.");
+
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.user.findUnique({ where: { email } });
+      const user = existing
+        ? existing
+        : await tx.user.create({
+            data: {
+              email,
+              name: email.split("@")[0],
+              role: invite.role,
+              workspaceId: invite.workspaceId,
+            },
+          });
+      const membership = await tx.membership.upsert({
+        where: { userId_workspaceId: { userId: user.id, workspaceId: invite.workspaceId } },
+        update: {},
+        create: { userId: user.id, workspaceId: invite.workspaceId, role: invite.role },
+      });
+      await tx.user.update({
+        where: { id: user.id },
+        data: { workspaceId: invite.workspaceId, role: membership.role },
+      });
+      await tx.invite.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } });
+    });
+    await resetClientScope();
+    revalidatePath("/", "layout");
+  });
+}
+
+export async function declineInvite(token: string): Promise<ActionResult> {
+  return toResult(async () => {
+    const { invite } = await inviteForMe(token);
+    await prisma.invite.update({ where: { id: invite.id }, data: { declinedAt: new Date() } });
+    revalidatePath("/", "layout");
+  });
+}
+
+async function adminCount(workspaceId: string) {
+  return prisma.membership.count({ where: { workspaceId, role: "ADMIN" } });
 }
 
 export async function updateMemberRole(id: string, role: "ADMIN" | "MANAGER") {
@@ -143,41 +360,33 @@ export async function updateMemberRole(id: string, role: "ADMIN" | "MANAGER") {
   if (id === me.id && role !== "ADMIN") {
     throw new Error("You can't remove your own admin access.");
   }
-  const target = await prisma.user.findFirst({
-    where: { id, workspaceId: me.workspaceId },
+  const target = await prisma.membership.findUnique({
+    where: { userId_workspaceId: { userId: id, workspaceId: me.workspaceId } },
   });
   if (!target) throw new Error("Member not found.");
-  if (role === "MANAGER" && target.role === "ADMIN") {
-    const admins = await prisma.user.count({
-      where: { role: "ADMIN", workspaceId: me.workspaceId },
-    });
-    if (admins <= 1) throw new Error("Keep at least one admin on the team.");
+  if (role === "MANAGER" && target.role === "ADMIN" && (await adminCount(me.workspaceId)) <= 1) {
+    throw new Error("Keep at least one admin on the team.");
   }
-  await prisma.user.update({ where: { id }, data: { role } });
+  await prisma.membership.update({ where: { id: target.id }, data: { role } });
   revalidatePath("/settings");
 }
 
+/**
+ * Takes someone out of this workspace. Their account, their other workspaces
+ * and the posts they wrote all stay; their API keys for this workspace stop
+ * working, since keys need a membership.
+ */
 export async function removeMember(id: string) {
   const me = await requireAdmin();
   if (id === me.id) throw new Error("You can't remove yourself.");
-
-  const target = await prisma.user.findFirst({
-    where: { id, workspaceId: me.workspaceId },
-    include: { _count: { select: { posts: true } } },
+  const target = await prisma.membership.findUnique({
+    where: { userId_workspaceId: { userId: id, workspaceId: me.workspaceId } },
   });
   if (!target) throw new Error("Member not found.");
-  if (target.role === "ADMIN") {
-    const admins = await prisma.user.count({
-      where: { role: "ADMIN", workspaceId: me.workspaceId },
-    });
-    if (admins <= 1) throw new Error("Keep at least one admin on the team.");
+  if (target.role === "ADMIN" && (await adminCount(me.workspaceId)) <= 1) {
+    throw new Error("Keep at least one admin on the team.");
   }
-  if (target._count.posts > 0) {
-    throw new Error(
-      "This member has authored posts - reassign or delete them first.",
-    );
-  }
-  await prisma.user.delete({ where: { id } });
+  await prisma.membership.delete({ where: { id: target.id } });
   revalidatePath("/settings");
 }
 

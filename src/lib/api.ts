@@ -122,9 +122,14 @@ export async function requireApiUser(req: Request): Promise<User> {
     },
   });
   if (!key || key.revokedAt) throw unauthorized();
-  // A key belongs to one workspace. If its user ever ended up elsewhere, the
-  // key must not become a way into that other tenant.
-  if (key.user.workspaceId !== key.workspaceId) throw unauthorized();
+  // A key belongs to one workspace and works only while its owner is still a
+  // member there. People can be in several workspaces and switch between
+  // them, so this checks the membership, not where they happen to be now.
+  const membership = await prisma.membership.findUnique({
+    where: { userId_workspaceId: { userId: key.userId, workspaceId: key.workspaceId } },
+    select: { role: true },
+  });
+  if (!membership) throw unauthorized();
 
   // Switches from the platform admin panel. These say why, since the caller
   // holds a valid key and the fix is a conversation, not a new key.
@@ -147,5 +152,6 @@ export async function requireApiUser(req: Request): Promise<User> {
     })
     .catch(() => {});
 
-  return key.user;
+  // Acts in the key's workspace with the owner's role there.
+  return { ...key.user, workspaceId: key.workspaceId, role: membership.role };
 }

@@ -4,6 +4,7 @@ import { AuthShell } from "@/components/auth-shell";
 import { LoginForm } from "@/components/login-form";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
+import { safeNext } from "@/lib/safe-next";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,16 @@ export const metadata: Metadata = {
     "Sign in to Cue to schedule your clients' LinkedIn, Instagram and YouTube posts.",
 };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string; next?: string }>;
+}) {
   const configured = isSupabaseConfigured();
+  // An invite link sends people here with their address and a way back.
+  const { email, next } = await searchParams;
+  const initialEmail =
+    typeof email === "string" && /^[^\s@]{1,64}@[^\s@]{1,190}$/.test(email) ? email : undefined;
 
   return (
     <AuthShell
@@ -52,7 +61,7 @@ export default function LoginPage() {
       }
     >
       {configured ? (
-        <LoginForm />
+        <LoginForm initialEmail={initialEmail} next={safeNext(next)} />
       ) : (
         <div className="space-y-4">
           <p className="text-muted-foreground text-sm">

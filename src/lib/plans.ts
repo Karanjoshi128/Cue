@@ -128,7 +128,7 @@ export interface WorkspaceUsage {
 
 const USAGE: Record<LimitKey, (workspaceId: string) => Promise<number>> = {
   clients: (workspaceId) => prisma.client.count({ where: { workspaceId } }),
-  members: (workspaceId) => prisma.user.count({ where: { workspaceId } }),
+  members: (workspaceId) => prisma.membership.count({ where: { workspaceId } }),
   postsPerMonth: (workspaceId) =>
     prisma.post.count({
       where: { client: { workspaceId }, createdAt: { gte: startOfMonthUtc() } },

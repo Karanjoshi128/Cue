@@ -60,11 +60,13 @@ export const getAuth = cache(async (): Promise<AuthState> => {
     if (!email) return { user: null, email: null, needsOnboarding: false };
   } else {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // Verifies the session token locally against the project's signing key,
+    // instead of asking Supabase's Auth server on every render and prefetch
+    // (which ran into its rate limit). src/proxy.ts keeps the token fresh.
+    const { data } = await supabase.auth.getClaims();
+    const claimed = data?.claims.email;
     // Normalize to lowercase so invited rows (stored lowercased) always match.
-    email = user?.email?.toLowerCase() ?? null;
+    email = typeof claimed === "string" && claimed ? claimed.toLowerCase() : null;
     if (!email) return { user: null, email: null, needsOnboarding: false };
   }
 

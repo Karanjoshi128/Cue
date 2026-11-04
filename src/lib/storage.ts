@@ -61,6 +61,11 @@ export function resolveEndpoint(s: StorageSettings): string | null {
 
 export function makeTarget(s: StorageSettings, custom = true): StorageTarget {
   const endpoint = resolveEndpoint(s);
+  // Checked when the settings were saved; repeated here because the
+  // public-only agent below only guards https connections.
+  if (custom && endpoint && !endpoint.startsWith("https://")) {
+    throw new StorageError("The storage endpoint must start with https://");
+  }
   return {
     client: new S3Client({
       region: s.provider === "R2" ? "auto" : s.region,

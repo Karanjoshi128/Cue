@@ -22,7 +22,6 @@ const POSTING_ROLES = new Set(["ADMINISTRATOR", "CONTENT_ADMINISTRATOR"]);
 export const MAX_PAGES = 30;
 const MAX_NAME = 50;
 
-const STATE_COOKIE = "cue_li_page_state";
 const TOKEN_COOKIE = "cue_li_page_token";
 const LIST_COOKIE = "cue_li_page_list";
 const PENDING_TTL_S = 15 * 60;
@@ -149,18 +148,18 @@ export interface PendingToken {
   refreshToken?: string;
   /** Epoch ms. */
   expiresAt: number;
+  /** Epoch ms when the callback issued it; the pick must follow within PENDING_TTL_S. */
+  issuedAt: number;
 }
 
+// The picker page and its actions are the only readers, so the encrypted
+// token goes nowhere else.
+const PENDING_PATH = "/clients/linkedin-pages";
 const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
-  path: "/",
-};
-
-export const stateCookie = {
-  name: STATE_COOKIE,
-  options: { ...cookieOptions, maxAge: 10 * 60 },
+  path: PENDING_PATH,
 };
 
 export const pendingCookies = {
@@ -184,16 +183,19 @@ export async function readPending(
   try {
     const token = JSON.parse(decrypt(rawToken)) as PendingToken;
     const pairs = JSON.parse(decrypt(rawList)) as [string, string][];
-    if (token.userId !== userId || token.expiresAt <= Date.now()) return null;
+    // The cookie's maxAge is only the browser's promise; the pick must also
+    // happen within PENDING_TTL_S server-side.
+    const fresh = Date.now() - token.issuedAt < PENDING_TTL_S * 1000;
+    if (token.userId !== userId || !fresh || token.expiresAt <= Date.now()) return null;
     return { token, pages: pairs.map(([id, name]) => ({ id, name })) };
   } catch {
     return null;
   }
 }
 
-// Deleting by name alone sends no Path, which wouldn't match the "/" cookies.
+// Deleting by name alone sends no Path, which wouldn't match these cookies.
 export async function clearPending(): Promise<void> {
   const jar = await cookies();
-  jar.delete({ name: TOKEN_COOKIE, path: "/" });
-  jar.delete({ name: LIST_COOKIE, path: "/" });
+  jar.delete({ name: TOKEN_COOKIE, path: PENDING_PATH });
+  jar.delete({ name: LIST_COOKIE, path: PENDING_PATH });
 }

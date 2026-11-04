@@ -178,3 +178,38 @@ export async function ensureFreshAccessToken(
 
   return decrypt(account.accessToken);
 }
+
+/**
+ * Revokes a just-disconnected YouTube account's grant at Google. A Google
+ * refresh token otherwise stays valid until revoked, outliving the
+ * connection (and lingering in database backups). Revoking ends the grant
+ * for every connection made with that Google account, so it's skipped while
+ * another client still uses the same account. Best effort: never throws.
+ */
+export async function revokeGoogleGrant(account: {
+  platform: Platform;
+  externalId: string;
+  accessToken: string;
+  refreshToken: string | null;
+}): Promise<void> {
+  if (account.platform !== "YOUTUBE") return;
+  try {
+    const stillUsed = await prisma.socialAccount.count({
+      where: { platform: "YOUTUBE", externalId: account.externalId },
+    });
+    if (stillUsed > 0) return;
+    const token = decrypt(account.refreshToken ?? account.accessToken);
+    const res = await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    // 400 means Google had already dropped it (expired or revoked).
+    if (!res.ok && res.status !== 400) {
+      console.error(`[tokens] Google revoke answered ${res.status}`);
+    }
+  } catch (e) {
+    console.error("[tokens] Google revoke failed:", e);
+  }
+}

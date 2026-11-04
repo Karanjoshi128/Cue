@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectingUser } from "@/lib/oauth-guard";
+import { connectingUser, startOAuthState } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   // comments need. Opt-in, so a default connect asks only for what App Review
   // covers.
   const comments = req.nextUrl.searchParams.get("comments") === "1";
-  const state = Buffer.from(JSON.stringify({ clientId, comments })).toString("base64url");
+  const { state, attach } = startOAuthState("instagram", { clientId, comments });
 
   const url = new URL("https://www.instagram.com/oauth/authorize");
   url.searchParams.set("client_id", process.env.META_APP_ID);
@@ -50,5 +50,5 @@ export async function GET(req: NextRequest) {
   // without this the next connect silently reuses whichever account is open.
   url.searchParams.set("force_reauth", "true");
 
-  return NextResponse.redirect(url.toString());
+  return attach(NextResponse.redirect(url.toString()));
 }

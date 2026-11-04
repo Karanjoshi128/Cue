@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectingUser } from "@/lib/oauth-guard";
+import { connectingUser, endOAuthState, readOAuthState } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
 import {
   listPostablePages,
   pendingCookies,
-  stateCookie,
 } from "@/lib/linkedin-pages";
 
 export const dynamic = "force-dynamic";
@@ -16,26 +15,19 @@ export const dynamic = "force-dynamic";
  * until the user assigns Pages to clients there.
  */
 export async function GET(req: NextRequest) {
-  const back = (error: string) => {
-    const res = NextResponse.redirect(new URL(`/clients?error=${error}`, req.url));
-    res.cookies.delete({ name: stateCookie.name, path: "/" });
-    return res;
-  };
+  // Every exit drops the nonce cookie, so a callback link works only once.
+  return endOAuthState(await connect(req), "linkedin-page");
+}
+
+async function connect(req: NextRequest): Promise<NextResponse> {
+  const back = (error: string) =>
+    NextResponse.redirect(new URL(`/clients?error=${error}`, req.url));
 
   const code = req.nextUrl.searchParams.get("code");
-  const state = req.nextUrl.searchParams.get("state");
-  if (!code || !state) return back("linkedin_page_denied");
-
-  let parsed: { clientId?: string; nonce?: string };
-  try {
-    parsed = JSON.parse(Buffer.from(state, "base64url").toString("utf8"));
-  } catch {
-    return back("linkedin_page_denied");
-  }
-  const expected = req.cookies.get(stateCookie.name)?.value;
-  if (!parsed.clientId || !parsed.nonce || parsed.nonce !== expected) {
-    return back("linkedin_page_expired");
-  }
+  if (!code || !req.nextUrl.searchParams.get("state")) return back("linkedin_page_denied");
+  // Refused unless this browser started the flow (see startOAuthState).
+  const parsed = readOAuthState(req, "linkedin-page");
+  if (!parsed) return back("linkedin_page_expired");
 
   const user = await connectingUser(req, "linkedin");
   if (user instanceof NextResponse) return user;
@@ -74,12 +66,12 @@ export async function GET(req: NextRequest) {
   if (pages.length === 0) return back("linkedin_no_pages");
 
   const res = NextResponse.redirect(new URL("/clients/linkedin-pages", req.url));
-  res.cookies.delete({ name: stateCookie.name, path: "/" });
   res.cookies.set(
     pendingCookies.token,
     pendingCookies.encodeToken({
       userId: user.id,
       clientId: parsed.clientId,
+      issuedAt: Date.now(),
       accessToken: token.access_token,
       refreshToken: token.refresh_token,
       expiresAt: Date.now() + token.expires_in * 1000,

@@ -85,6 +85,8 @@ type ConfirmState = {
 // Friendly messages for the ?error= codes the OAuth connect routes redirect with.
 const CONNECT_ERRORS: Record<string, string> = {
   not_your_client: "That client isn't in your workspace.",
+  connect_expired:
+    "That connection expired or was started in another browser. Please try again from here.",
   read_only: "You're viewing this workspace read-only, so accounts can't be connected.",
   platform_disabled: "Connecting this platform is turned off for your workspace. Contact Cue support.",
   linkedin_not_configured: "LinkedIn isn't set up on the server yet.",

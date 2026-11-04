@@ -110,7 +110,9 @@ Sign in with ${args.to} to accept. The invitation expires in ${INVITE_DAYS} days
       from: FROM,
       to: [args.to],
       reply_to: args.inviterEmail,
-      subject: `${args.inviterName} invited you to ${args.workspaceName} on Cue`,
+      // Fixed wording: the names are the inviter's choice, and a subject line
+      // is where a phishing message would go.
+      subject: "You've been invited to a workspace on Cue",
       html,
       text,
     }),

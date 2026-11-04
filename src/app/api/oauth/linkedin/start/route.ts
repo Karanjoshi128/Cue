@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectingUser } from "@/lib/oauth-guard";
+import { connectingUser, startOAuthState } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   }
 
   const redirectUri = `${process.env.APP_URL ?? req.nextUrl.origin}/api/oauth/linkedin/callback`;
-  const state = Buffer.from(JSON.stringify({ clientId })).toString("base64url");
+  const { state, attach } = startOAuthState("linkedin", { clientId });
 
   const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
   url.searchParams.set("response_type", "code");
@@ -38,5 +38,5 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("state", state);
   url.searchParams.set("scope", "openid profile email w_member_social");
 
-  return NextResponse.redirect(url.toString());
+  return attach(NextResponse.redirect(url.toString()));
 }

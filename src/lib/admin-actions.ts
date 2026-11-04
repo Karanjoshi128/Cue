@@ -17,7 +17,8 @@ import { isFeatureKey, PLANS } from "@/lib/plans";
 import { updatePlatformSettings } from "@/lib/platform-settings";
 import { MAX_ATTEMPTS, rollUpPostStatus, staleProcessingWhere } from "@/lib/publish";
 import { STUCK_AFTER_MS } from "@/lib/admin-data";
-import { cueMediaKey, defaultStorage, deleteObjects, settingsFromConfig } from "@/lib/storage";
+import { cueMediaKey, settingsFromConfig } from "@/lib/storage";
+import { removeUnusedMedia } from "@/lib/media";
 import { testStorage, type StorageTestResult } from "@/lib/storage-config";
 
 // Write side of the platform admin panel. Every action re-checks that the
@@ -196,10 +197,9 @@ export async function deleteWorkspace(workspaceId: string, confirmName: string, 
       details: { name: ws.name, ...counts, mediaObjects: keys.length },
     });
     // After the commit, and best effort: a stray object is harmless, a
-    // half-deleted workspace is not.
-    await deleteObjects(defaultStorage(), keys).catch((e) =>
-      console.error("[admin] media cleanup failed:", e),
-    );
+    // half-deleted workspace is not. Only files no other workspace's post
+    // still uses: media rows can share a file (see removeUnusedMedia).
+    await removeUnusedMedia(media.map((m) => m.url));
     revalidatePath("/admin", "layout");
   } catch (e) {
     return fail(e);

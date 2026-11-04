@@ -15,6 +15,7 @@ import { limitProblem, workspaceHasFeature } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
 import { removeUnusedMedia } from "@/lib/media";
+import { revokeGoogleGrant } from "@/lib/tokens";
 import { SCOPE_COOKIE } from "@/lib/scope";
 import {
   hashInviteToken,
@@ -74,6 +75,8 @@ const roleSchema = z.enum(["ADMIN", "MANAGER"]);
 // ---------------------------------------------------------------------------
 
 const workspaceNameSchema = z.string().trim().min(1).max(60);
+const MAX_ADMIN_WORKSPACES = 10;
+const BANNED_MESSAGE = "This account has been suspended. Contact Cue support.";
 
 /** A different workspace's client ids mean nothing here: drop the client scope. */
 async function resetClientScope() {
@@ -90,10 +93,19 @@ async function resetClientScope() {
  * somewhere come from the workspace switcher's "Create a workspace".
  */
 export async function createWorkspace(name: string) {
-  const { email, viewAs } = await getAuth();
+  const { email, viewAs, blocked } = await getAuth();
   if (!email) throw new Error("UNAUTHENTICATED");
   if (viewAs) throw new Error("Exit view mode first.");
+  if (blocked?.kind === "banned") throw new Error(BANNED_MESSAGE);
   const wsName = workspaceNameSchema.parse(name);
+  // Each workspace comes with its own allowances (invite emails, storage,
+  // posts), so how many one person can run is capped.
+  const adminOf = await prisma.membership.count({ where: { user: { email }, role: "ADMIN" } });
+  if (adminOf >= MAX_ADMIN_WORKSPACES) {
+    throw new Error(
+      `You're already an admin of ${MAX_ADMIN_WORKSPACES} workspaces. Contact Cue support to add more.`,
+    );
+  }
 
   await prisma.$transaction(async (tx) => {
     const ws = await tx.workspace.create({ data: { name: wsName } });
@@ -174,6 +186,20 @@ const openInvite = {
   revokedAt: null,
 } satisfies Prisma.InviteWhereInput;
 
+// Invite emails go out from Cue's own address carrying names the inviter
+// chose, so they're rationed: an invite is emailed again at most hourly, and
+// a workspace emails at most INVITE_EMAILS_PER_DAY invites in any 24 hours.
+// Past that, invites still work: their link can be shared by hand.
+const RESEND_COOLDOWN_MS = 60 * 60 * 1000;
+const INVITE_EMAILS_PER_DAY = 20;
+
+async function canEmailInvite(workspaceId: string): Promise<boolean> {
+  const sent = await prisma.invite.count({
+    where: { workspaceId, lastSentAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+  });
+  return sent < INVITE_EMAILS_PER_DAY;
+}
+
 /** Admins invite anyone; managers invite managers. */
 function assertCanInvite(me: { role: string }, role: "ADMIN" | "MANAGER") {
   if (role === "ADMIN" && me.role !== "ADMIN") {
@@ -234,6 +260,7 @@ export async function inviteMember(
     if (overLimit) throw new ApiError(403, overLimit);
 
     const t = newInviteToken();
+    const sendEmail = await canEmailInvite(me.workspaceId);
     const invite = await prisma.invite.create({
       data: {
         workspaceId: me.workspaceId,
@@ -243,10 +270,10 @@ export async function inviteMember(
         tokenEnc: t.tokenEnc,
         invitedById: me.id,
         expiresAt: inviteExpiry(),
-        lastSentAt: new Date(),
+        lastSentAt: sendEmail ? new Date() : null,
       },
     });
-    const emailed = await emailInvite(invite, me);
+    const emailed = sendEmail && (await emailInvite(invite, me));
     revalidatePath("/settings");
     return { link: inviteLink(invite), emailed };
   });
@@ -267,6 +294,15 @@ async function manageableInvite(id: string) {
 export async function resendInvite(id: string): Promise<ActionResult<{ emailed: boolean }>> {
   return toResult(async () => {
     const { me, invite } = await manageableInvite(id);
+    if (invite.lastSentAt && Date.now() - invite.lastSentAt.getTime() < RESEND_COOLDOWN_MS) {
+      throw new ApiError(429, "This invite was emailed less than an hour ago. Copy its link to share it now.");
+    }
+    if (!(await canEmailInvite(me.workspaceId))) {
+      throw new ApiError(
+        429,
+        `This workspace has emailed ${INVITE_EMAILS_PER_DAY} invites in the last day. Copy the invite's link to share it by hand.`,
+      );
+    }
     const updated = await prisma.invite.update({
       where: { id: invite.id },
       data: { expiresAt: inviteExpiry(), lastSentAt: new Date() },
@@ -298,6 +334,7 @@ async function inviteForMe(token: string) {
   const auth = await getAuth();
   if (!auth.email) throw new ApiError(401, "Sign in to respond to this invite.");
   if (auth.viewAs) throw new ApiError(403, "Exit view mode first.");
+  if (auth.blocked?.kind === "banned") throw new ApiError(403, BANNED_MESSAGE);
   const invite = await prisma.invite.findUnique({
     where: { tokenHash: hashInviteToken(z.string().min(1).max(200).parse(token)) },
     include: { workspace: { select: { suspendedAt: true } } },
@@ -360,8 +397,13 @@ export async function declineInvite(token: string): Promise<ActionResult> {
   });
 }
 
-async function adminCount(workspaceId: string) {
-  return prisma.membership.count({ where: { workspaceId, role: "ADMIN" } });
+// Team changes check "at least one admin" and then write. Serializable makes
+// that safe against two admins demoting or removing each other at the same
+// moment: Postgres rolls one of the two transactions back.
+const TEAM_TX = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
+
+function adminCount(tx: Prisma.TransactionClient, workspaceId: string) {
+  return tx.membership.count({ where: { workspaceId, role: "ADMIN" } });
 }
 
 export async function updateMemberRole(id: string, nextRole: "ADMIN" | "MANAGER") {
@@ -371,34 +413,55 @@ export async function updateMemberRole(id: string, nextRole: "ADMIN" | "MANAGER"
   if (userId === me.id && role !== "ADMIN") {
     throw new Error("You can't remove your own admin access.");
   }
-  const target = await prisma.membership.findUnique({
-    where: { userId_workspaceId: { userId, workspaceId: me.workspaceId } },
-  });
-  if (!target) throw new Error("Member not found.");
-  if (role === "MANAGER" && target.role === "ADMIN" && (await adminCount(me.workspaceId)) <= 1) {
-    throw new Error("Keep at least one admin on the team.");
-  }
-  await prisma.membership.update({ where: { id: target.id }, data: { role } });
+  await prisma.$transaction(async (tx) => {
+    const target = await tx.membership.findUnique({
+      where: { userId_workspaceId: { userId, workspaceId: me.workspaceId } },
+    });
+    if (!target) throw new Error("Member not found.");
+    if (role === "MANAGER" && target.role === "ADMIN" && (await adminCount(tx, me.workspaceId)) <= 1) {
+      throw new Error("Keep at least one admin on the team.");
+    }
+    await tx.membership.update({ where: { id: target.id }, data: { role } });
+    // Admin invites they sent would otherwise bring in new admins after all.
+    if (role === "MANAGER") {
+      await tx.invite.updateMany({
+        where: { workspaceId: me.workspaceId, invitedById: userId, role: "ADMIN", ...openInvite },
+        data: { revokedAt: new Date() },
+      });
+    }
+  }, TEAM_TX);
   revalidatePath("/settings");
 }
 
 /**
  * Takes someone out of this workspace. Their account, their other workspaces
- * and the posts they wrote all stay; their API keys for this workspace stop
- * working, since keys need a membership.
+ * and the posts they wrote all stay. What they leave behind here stops
+ * working: their API keys for this workspace (which would otherwise revive
+ * if they were ever added back) and the invites they sent that are still open.
  */
 export async function removeMember(id: string) {
   const me = await requireAdmin();
   const userId = idSchema.parse(id);
   if (userId === me.id) throw new Error("You can't remove yourself.");
-  const target = await prisma.membership.findUnique({
-    where: { userId_workspaceId: { userId, workspaceId: me.workspaceId } },
-  });
-  if (!target) throw new Error("Member not found.");
-  if (target.role === "ADMIN" && (await adminCount(me.workspaceId)) <= 1) {
-    throw new Error("Keep at least one admin on the team.");
-  }
-  await prisma.membership.delete({ where: { id: target.id } });
+  await prisma.$transaction(async (tx) => {
+    const target = await tx.membership.findUnique({
+      where: { userId_workspaceId: { userId, workspaceId: me.workspaceId } },
+    });
+    if (!target) throw new Error("Member not found.");
+    if (target.role === "ADMIN" && (await adminCount(tx, me.workspaceId)) <= 1) {
+      throw new Error("Keep at least one admin on the team.");
+    }
+    await tx.membership.delete({ where: { id: target.id } });
+    const now = new Date();
+    await tx.apiKey.updateMany({
+      where: { userId, workspaceId: me.workspaceId, revokedAt: null },
+      data: { revokedAt: now },
+    });
+    await tx.invite.updateMany({
+      where: { workspaceId: me.workspaceId, invitedById: userId, ...openInvite },
+      data: { revokedAt: now },
+    });
+  }, TEAM_TX);
   revalidatePath("/settings");
 }
 
@@ -598,7 +661,9 @@ function errorMessage(e: unknown): string {
 
 const clientSchema = z.object({
   name: z.string().min(1).max(80),
-  color: z.string().optional(),
+  // A hex colour only: it lands in inline styles, where anything after a ";"
+  // would be extra CSS shown to every teammate (and to Cue support).
+  color: z.string().regex(/^#[0-9a-f]{6}$/i, "Pick a colour.").optional(),
 });
 
 export async function createClient(input: z.infer<typeof clientSchema>) {
@@ -642,8 +707,13 @@ export async function deleteClient(id: string) {
     where: { post: { clientId: owned.id } },
     select: { url: true },
   });
+  const accounts = await prisma.socialAccount.findMany({
+    where: { clientId: owned.id },
+    select: { platform: true, externalId: true, accessToken: true, refreshToken: true },
+  });
   await prisma.client.delete({ where: { id: owned.id } });
   await removeUnusedMedia(media.map((m) => m.url));
+  for (const account of accounts) await revokeGoogleGrant(account);
   revalidatePath("/clients");
 }
 
@@ -651,10 +721,11 @@ export async function disconnectAccount(accountId: string) {
   const user = await requireUser();
   const owned = await prisma.socialAccount.findFirst({
     where: { id: idSchema.parse(accountId), client: { workspaceId: user.workspaceId } },
-    select: { id: true },
+    select: { id: true, platform: true, externalId: true, accessToken: true, refreshToken: true },
   });
   if (!owned) throw new Error("Account not found.");
   await prisma.socialAccount.delete({ where: { id: owned.id } });
+  await revokeGoogleGrant(owned);
   revalidatePath("/clients");
 }
 

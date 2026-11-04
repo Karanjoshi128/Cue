@@ -1,8 +1,7 @@
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { connectingUser } from "@/lib/oauth-guard";
+import { connectingUser, startOAuthState } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
-import { linkedinPagesConfigured, PAGE_SCOPES, stateCookie } from "@/lib/linkedin-pages";
+import { linkedinPagesConfigured, PAGE_SCOPES } from "@/lib/linkedin-pages";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +29,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const nonce = crypto.randomBytes(16).toString("base64url");
   const redirectUri = `${process.env.APP_URL ?? req.nextUrl.origin}/api/oauth/linkedin-page/callback`;
-  const state = Buffer.from(JSON.stringify({ clientId, nonce })).toString("base64url");
+  const { state, attach } = startOAuthState("linkedin-page", { clientId });
 
   const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
   url.searchParams.set("response_type", "code");
@@ -41,7 +39,5 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("state", state);
   url.searchParams.set("scope", PAGE_SCOPES);
 
-  const res = NextResponse.redirect(url.toString());
-  res.cookies.set(stateCookie.name, nonce, stateCookie.options);
-  return res;
+  return attach(NextResponse.redirect(url.toString()));
 }

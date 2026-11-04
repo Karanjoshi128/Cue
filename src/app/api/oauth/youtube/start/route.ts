@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectingUser } from "@/lib/oauth-guard";
+import { connectingUser, startOAuthState } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   // youtube.upload alone, and a default connect must stay on that verified
   // scope set rather than show every client the unverified-app warning.
   const comments = req.nextUrl.searchParams.get("comments") === "1";
-  const state = Buffer.from(JSON.stringify({ clientId, comments })).toString("base64url");
+  const { state, attach } = startOAuthState("youtube", { clientId, comments });
 
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID);
@@ -52,5 +52,5 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("include_granted_scopes", "true");
   url.searchParams.set("state", state);
 
-  return NextResponse.redirect(url.toString());
+  return attach(NextResponse.redirect(url.toString()));
 }

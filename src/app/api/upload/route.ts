@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireWritableUser } from "@/lib/auth";
 import { limitProblem } from "@/lib/plans";
 import { getWorkspaceStorage, putObject } from "@/lib/storage";
+import { uploadType } from "@/lib/media";
+import { ApiError } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,8 +30,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
 
-  const ext = file.name.split(".").pop() ?? "bin";
-  const key = `posts/${crypto.randomUUID()}.${ext}`;
+  // Same allowlist as presign: the bucket is public, so the stored type matters.
+  let kind: ReturnType<typeof uploadType>;
+  try {
+    kind = uploadType(file.name, file.type);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof ApiError ? e.message : "Unsupported file" },
+      { status: 400 },
+    );
+  }
+  const key = `posts/${crypto.randomUUID()}.${kind.ext}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
   const storage = await getWorkspaceStorage(workspaceId);
@@ -40,12 +51,7 @@ export async function POST(req: NextRequest) {
 
   let url: string;
   try {
-    url = await putObject(
-      storage,
-      key,
-      bytes,
-      file.type || "application/octet-stream",
-    );
+    url = await putObject(storage, key, bytes, kind.mime);
   } catch (e) {
     console.error("[upload] storage rejected the file:", e);
     return NextResponse.json(
@@ -53,25 +59,14 @@ export async function POST(req: NextRequest) {
       { status: 502 },
     );
   }
-  const mime = file.type;
-  const isDoc =
-    mime === "application/pdf" ||
-    mime.includes("presentation") ||
-    mime.includes("msword") ||
-    mime.includes("officedocument") ||
-    /\.(pdf|ppt|pptx|doc|docx)$/i.test(file.name);
-  const type = isDoc
-    ? "DOCUMENT"
-    : mime.startsWith("video")
-      ? "VIDEO"
-      : "IMAGE";
+  const isDoc = kind.type === "DOCUMENT";
 
   return NextResponse.json({
     url,
     storageKey: key,
-    type,
+    type: kind.type,
     // Original filename - LinkedIn requires a title for document posts.
-    title: isDoc ? file.name : undefined,
+    title: isDoc ? file.name.slice(0, 255) : undefined,
     sizeBytes: bytes.length,
   });
 }

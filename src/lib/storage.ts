@@ -163,10 +163,12 @@ export function objectUrl(target: StorageTarget, key: string): string {
 }
 
 /**
- * A short-lived URL the browser can PUT one object to. Content-Type isn't
- * signed, so the uploader may send any. With `contentLength`, the length is
- * signed: the upload must be exactly the size that was declared (and checked
- * against the plan), or the bucket refuses it.
+ * A short-lived URL the browser can PUT one object to. Content-Type is
+ * signed: the upload must send exactly `contentType`, so a file presigned as
+ * an image can't be stored (and then served publicly) as an HTML page. With
+ * `contentLength`, the length is signed too: the upload must be exactly the
+ * size that was declared (and checked against the plan), or the bucket
+ * refuses it.
  */
 export function presignPut(
   target: StorageTarget,
@@ -183,9 +185,12 @@ export function presignPut(
       ContentType: contentType,
       ContentLength: contentLength,
     }),
-    contentLength === undefined
-      ? { expiresIn }
-      : { expiresIn, signableHeaders: new Set(["content-length"]) },
+    {
+      expiresIn,
+      signableHeaders: new Set(
+        contentLength === undefined ? ["content-type"] : ["content-type", "content-length"],
+      ),
+    },
   );
 }
 

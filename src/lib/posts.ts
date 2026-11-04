@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api";
 import { cleanYoutubeTags, youtubeTagsProblem } from "@/lib/youtube-tags";
 import { limitProblem } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
-import { measureMedia } from "@/lib/media";
+import { assertWorkspaceMedia, measureMedia, MEDIA_KEY } from "@/lib/media";
 
 // Post creation shared by the composer's server actions and POST /api/v1/posts.
 //
@@ -25,7 +25,7 @@ const FIRST_COMMENT_MAX = 2200;
 
 // LinkedIn-only content types.
 const linkSchema = z.object({
-  url: z.string().url(),
+  url: z.string().url().max(2048),
   title: z.string().max(200).optional(),
   description: z.string().max(300).optional(),
 });
@@ -49,7 +49,7 @@ const youtubeTagsSchema = z
 
 export const postSchema = z
   .object({
-    clientId: z.string().min(1),
+    clientId: z.string().min(1).max(100),
     // 5000 is YouTube's cap. Every other platform is held to 3000 in
     // assertPostIsPublishable(), once we know which accounts are targeted.
     body: z.string().min(1).max(YOUTUBE_BODY_MAX),
@@ -69,28 +69,38 @@ export const postSchema = z
       .string()
       .regex(/^\d{1,3}$/, 'youtubeCategoryId must be a YouTube category id, e.g. "24".')
       .optional(),
-    accountIds: z.array(z.string()).min(1),
+    accountIds: z.array(z.string().max(100)).min(1).max(50),
     // Offsets are accepted (e.g. +05:30), so callers needn't convert to UTC.
     scheduledAt: z.string().datetime({ offset: true }).nullable().optional(),
+    // Items from presign, exactly as returned; assertWorkspaceMedia() checks
+    // the url belongs to this workspace's storage. 20 is LinkedIn's
+    // multi-image cap, the most any platform takes.
     media: z
       .array(
         z.object({
           type: z.enum(["IMAGE", "VIDEO", "DOCUMENT"]),
-          url: z.string(),
-          storageKey: z.string(),
-          title: z.string().optional(),
+          url: z.string().max(2048),
+          storageKey: z
+            .string()
+            .regex(MEDIA_KEY, "storageKey must be the one returned by media/presign."),
+          title: z.string().max(255).optional(),
           // From the presign response; feeds storage usage on the plan.
           sizeBytes: z.number().int().nonnegative().optional(),
         }),
       )
+      .max(20)
       .optional(),
     link: linkSchema.nullable().optional(),
     poll: pollSchema.nullable().optional(),
     // Per-account caption overrides; anything not listed uses `body`.
     overrides: z
       .array(
-        z.object({ accountId: z.string(), body: z.string().max(YOUTUBE_BODY_MAX) }),
+        z.object({
+          accountId: z.string().max(100),
+          body: z.string().max(YOUTUBE_BODY_MAX),
+        }),
       )
+      .max(50)
       .optional(),
     action: z.enum(["draft", "schedule", "now"]),
   })
@@ -228,8 +238,15 @@ export function scheduledAtFor(data: PostData): Date | null {
   return data.action === "now" ? new Date() : null;
 }
 
-/** The post's data with media sizes read from storage (see measureMedia). */
-export async function withMeasuredMedia(data: PostData): Promise<PostData> {
+/**
+ * The post's data with its media checked to be this workspace's uploads
+ * (assertWorkspaceMedia) and sizes read from storage (measureMedia).
+ */
+export async function withMeasuredMedia(
+  workspaceId: string,
+  data: PostData,
+): Promise<PostData> {
+  await assertWorkspaceMedia(workspaceId, data.media);
   return { ...data, media: await measureMedia(data.media) };
 }
 
@@ -327,7 +344,7 @@ export async function createPostForUser(
   }
   const overLimit = await limitProblem(user.workspaceId, "postsPerMonth");
   if (overLimit) throw new ApiError(403, overLimit);
-  const measured = await withMeasuredMedia(data);
+  const measured = await withMeasuredMedia(user.workspaceId, data);
 
   let post: Post;
   try {

@@ -1,9 +1,13 @@
 import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
+import { fetchMedia } from "./fetch-media";
 
 // YYYYMM LinkedIn-Version header. 202506 is sunset - keep this current.
 export const LINKEDIN_VERSION = "202606";
 export const LINKEDIN_REST = "https://api.linkedin.com/rest";
 const REST = LINKEDIN_REST;
+// Images and documents are downloaded from storage before upload; a stalled
+// download must fail its target, not hold up the whole publish run.
+const FETCH_MEDIA_TIMEOUT_MS = 60_000;
 
 function jsonHeaders(accessToken: string) {
   return {
@@ -129,11 +133,11 @@ async function uploadAsset(
   };
   const urn = init.value.image ?? init.value.document ?? "";
 
-  const bytes = await (await fetch(fileUrl)).arrayBuffer();
+  const { bytes } = await fetchMedia(fileUrl, FETCH_MEDIA_TIMEOUT_MS);
   const putRes = await fetch(init.value.uploadUrl, {
     method: "PUT",
     headers: { Authorization: `Bearer ${accessToken}` },
-    body: Buffer.from(bytes),
+    body: bytes,
   });
   if (!putRes.ok) {
     throw new Error(`LinkedIn ${kind} upload failed (${putRes.status})`);

@@ -417,17 +417,19 @@ export function Composer({
           }),
         });
         if (!presignRes.ok) throw new Error(await readError(presignRes));
-        const { uploadUrl, ...item } =
+        const { uploadUrl, contentType, ...item } =
           (await presignRes.json()) as MediaItem & {
             uploadUrl: string;
+            contentType: string;
           };
 
         // 2. Send the bytes straight to the bucket. Going direct is what allows files
         //    past the ~4.5 MB cap on requests routed through a function.
+        //    The Content-Type is signed into the URL, so it must be the server's.
         //    A CORS failure rejects the fetch outright, hence the catch.
         const put = await fetch(uploadUrl, {
           method: "PUT",
-          headers: { "Content-Type": file.type || "application/octet-stream" },
+          headers: { "Content-Type": contentType },
           body: file,
         }).catch(() => null);
         if (!put?.ok) {

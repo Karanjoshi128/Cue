@@ -667,6 +667,11 @@ export async function disconnectAccount(accountId: string) {
 // only add what's specific to a cookie session: requireUser() and cache
 // revalidation.
 
+/** A publish run is uploading one of this post's targets right now. */
+async function isBeingPublished(postId: string): Promise<boolean> {
+  return (await prisma.postTarget.count({ where: { postId, status: "PROCESSING" } })) > 0;
+}
+
 export async function savePost(input: PostInput) {
   return toResult(async () => {
     const user = await requireUser();
@@ -696,6 +701,11 @@ export async function updatePost(
   if (existing.status !== "DRAFT" && existing.status !== "SCHEDULED") {
     throw new ApiError(409, "Only drafts and scheduled posts can be edited.");
   }
+  // The post stays SCHEDULED while a run uploads it. Replacing its targets
+  // then would publish it a second time once the edit is saved.
+  if (await isBeingPublished(existing.id)) {
+    throw new ApiError(409, "This post is being published right now and can't be edited.");
+  }
 
   // Same account + platform rules as creating a post.
   const accounts = await resolveAccounts(user, data);
@@ -704,7 +714,7 @@ export async function updatePost(
   if (data.action === "now" && (await isPublishingPaused())) {
     throw new ApiError(503, PAUSED_MESSAGE);
   }
-  const measured = await withMeasuredMedia(data);
+  const measured = await withMeasuredMedia(user.workspaceId, data);
 
   // Replace media + targets wholesale - safe because nothing has published yet.
   await prisma.$transaction([
@@ -749,6 +759,9 @@ export async function deletePost(id: string) {
     select: { id: true, media: { select: { url: true } } },
   });
   if (!owned) throw new Error("Post not found.");
+  if (await isBeingPublished(owned.id)) {
+    throw new Error("This post is being published right now. Try again in a minute.");
+  }
   await prisma.post.delete({ where: { id: owned.id } });
   await removeUnusedMedia(owned.media.map((m) => m.url));
   revalidatePath("/queue");

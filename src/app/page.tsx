@@ -15,7 +15,7 @@ import {
   InstagramIcon,
   YoutubeIcon,
 } from "@/components/platform-icons";
-import { getAuth } from "@/lib/auth";
+import { AccountButton, AccountLink } from "@/components/marketing/account-links";
 import { CONTACT_EMAIL, SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
 import { HeroStage } from "@/components/marketing/hero-stage";
 import {
@@ -36,8 +36,9 @@ import { Spotlight } from "@/components/fx/spotlight";
 import { cn } from "@/lib/utils";
 
 // Public marketing home. Kept outside the (app) group so it renders for
-// signed-out visitors - the app itself lives under /dashboard.
-export const dynamic = "force-dynamic";
+// signed-out visitors - the app itself lives under /dashboard. It's static and
+// served from the CDN; the links that depend on being signed in decide that in
+// the browser (see account-links.tsx).
 
 export const metadata: Metadata = {
   title: "Cue - social media scheduling for agencies",
@@ -176,15 +177,10 @@ function Bento({
   );
 }
 
-export default async function HomePage() {
-  const { user } = await getAuth();
-  const signedIn = Boolean(user);
-  const primaryHref = signedIn ? "/dashboard" : "/login";
-  const primaryLabel = signedIn ? "Open dashboard" : "Get started";
-
+export default function HomePage() {
   return (
     <div className="bg-background text-foreground min-h-dvh overflow-x-clip">
-      <SiteHeader signedIn={signedIn} />
+      <SiteHeader />
 
       <main>
         {/* ---------------- Hero ---------------- */}
@@ -200,8 +196,7 @@ export default async function HomePage() {
           />
           <div className="mx-auto grid max-w-7xl items-center gap-16 px-5 pt-14 pb-24 sm:px-8 lg:grid-cols-[1.12fr_1fr] lg:pt-20 lg:pb-32">
             <div>
-              <Link
-                href={primaryHref}
+              <AccountLink
                 className="bg-card text-muted-foreground hover:text-foreground animate-rise inline-flex items-center gap-2 rounded-full py-1 pr-3 pl-1.5 text-xs shadow-[0_0_0_1px_var(--border)] transition-colors"
               >
                 <span className="bg-live/12 text-live-ink flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[0.625rem] font-semibold tracking-wider uppercase">
@@ -210,7 +205,7 @@ export default async function HomePage() {
                 </span>
                 Publishing to LinkedIn, Instagram and YouTube
                 <ArrowRight className="size-3" />
-              </Link>
+              </AccountLink>
 
               <h1 className="mt-8">
                 <span
@@ -250,14 +245,7 @@ export default async function HomePage() {
                 className="animate-rise mt-9 flex flex-wrap items-center gap-3"
                 style={{ animationDelay: "520ms" }}
               >
-                <Button
-                  render={<Link href={primaryHref} />}
-                  size="xl"
-                  className="group rounded-full pr-5 pl-6"
-                >
-                  {primaryLabel}
-                  <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-                </Button>
+                <AccountButton className="pl-6" />
                 <Button
                   render={<Link href="#how" />}
                   size="xl"
@@ -591,14 +579,7 @@ export default async function HomePage() {
                 week on the sheet.
               </p>
               <div className="mt-10 flex flex-wrap justify-center gap-3">
-                <Button
-                  render={<Link href={primaryHref} />}
-                  size="xl"
-                  className="group rounded-full pr-5 pl-7"
-                >
-                  {primaryLabel}
-                  <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-                </Button>
+                <AccountButton className="pl-7" />
                 <Button
                   render={<a href={`mailto:${CONTACT_EMAIL}`} />}
                   size="xl"

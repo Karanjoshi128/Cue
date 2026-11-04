@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/logo";
-import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ArrowRight } from "lucide-react";
+import { HeaderAccount } from "@/components/marketing/account-links";
 
 export const CONTACT_EMAIL = "karan@trycue.space";
 
@@ -14,7 +13,7 @@ const NAV = [
 ];
 
 /** Public-site header: logo, section links, sign-in. */
-export function SiteHeader({ signedIn }: { signedIn: boolean }) {
+export function SiteHeader() {
   return (
     <header className="bg-background/70 supports-backdrop-filter:bg-background/55 sticky top-0 z-40 border-b backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:gap-8 sm:px-8">
@@ -34,26 +33,7 @@ export function SiteHeader({ signedIn }: { signedIn: boolean }) {
         </nav>
         <div className="ml-auto flex items-center gap-1.5">
           <ThemeToggle />
-          {!signedIn && (
-            <Link
-              href="/login"
-              className="text-muted-foreground hover:text-foreground hidden px-3 text-sm transition-colors sm:block"
-            >
-              Sign in
-            </Link>
-          )}
-          <Button
-            render={<Link href={signedIn ? "/dashboard" : "/login"} />}
-            variant="ink"
-            className="group rounded-full px-4 sm:pr-3"
-          >
-            {/* Phones get the short label so the header never overflows. */}
-            <span className="sm:hidden">{signedIn ? "Dashboard" : "Get started"}</span>
-            <span className="hidden sm:inline">
-              {signedIn ? "Open dashboard" : "Get started"}
-            </span>
-            <ArrowRight className="hidden transition-transform group-hover:translate-x-0.5 sm:block" />
-          </Button>
+          <HeaderAccount />
         </div>
       </div>
     </header>
@@ -141,17 +121,15 @@ function FooterCol({
 export function LegalShell({
   title,
   updated,
-  signedIn = false,
   children,
 }: {
   title: string;
   updated?: string;
-  signedIn?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="bg-background text-foreground min-h-dvh">
-      <SiteHeader signedIn={signedIn} />
+      <SiteHeader />
       <main>
         <div className="relative overflow-hidden border-b">
           <div

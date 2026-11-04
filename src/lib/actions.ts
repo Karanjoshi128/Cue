@@ -61,6 +61,14 @@ async function toResult<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   }
 }
 
+// Every export here is a public POST endpoint, and parameter types exist only
+// in TypeScript: a caller can send {"not": ""} where an id is expected, which
+// Prisma reads as a filter matching every row. So each argument is parsed
+// before it reaches a query, as in admin-actions.ts.
+const idSchema = z.string().min(1).max(100);
+const isoSchema = z.string().max(40);
+const roleSchema = z.enum(["ADMIN", "MANAGER"]);
+
 // ---------------------------------------------------------------------------
 // Workspace
 // ---------------------------------------------------------------------------
@@ -107,9 +115,10 @@ export async function createWorkspace(name: string) {
 }
 
 /** Work in another workspace this person belongs to. */
-export async function switchWorkspace(workspaceId: string): Promise<ActionResult> {
+export async function switchWorkspace(id: string): Promise<ActionResult> {
   return toResult(async () => {
     const user = await requireUser();
+    const workspaceId = idSchema.parse(id);
     const membership = await prisma.membership.findUnique({
       where: { userId_workspaceId: { userId: user.id, workspaceId } },
       select: { role: true, workspace: { select: { suspendedAt: true } } },
@@ -247,7 +256,7 @@ export async function inviteMember(
 async function manageableInvite(id: string) {
   const me = await requireUser();
   const invite = await prisma.invite.findFirst({
-    where: { id, workspaceId: me.workspaceId, ...openInvite },
+    where: { id: idSchema.parse(id), workspaceId: me.workspaceId, ...openInvite },
   });
   if (!invite) throw new ApiError(404, "That invite is no longer open.");
   assertCanInvite(me, invite.role);
@@ -290,7 +299,7 @@ async function inviteForMe(token: string) {
   if (!auth.email) throw new ApiError(401, "Sign in to respond to this invite.");
   if (auth.viewAs) throw new ApiError(403, "Exit view mode first.");
   const invite = await prisma.invite.findUnique({
-    where: { tokenHash: hashInviteToken(token) },
+    where: { tokenHash: hashInviteToken(z.string().min(1).max(200).parse(token)) },
     include: { workspace: { select: { suspendedAt: true } } },
   });
   if (!invite) throw new ApiError(404, "This invite link isn't valid.");
@@ -355,13 +364,15 @@ async function adminCount(workspaceId: string) {
   return prisma.membership.count({ where: { workspaceId, role: "ADMIN" } });
 }
 
-export async function updateMemberRole(id: string, role: "ADMIN" | "MANAGER") {
+export async function updateMemberRole(id: string, nextRole: "ADMIN" | "MANAGER") {
   const me = await requireAdmin();
-  if (id === me.id && role !== "ADMIN") {
+  const userId = idSchema.parse(id);
+  const role = roleSchema.parse(nextRole);
+  if (userId === me.id && role !== "ADMIN") {
     throw new Error("You can't remove your own admin access.");
   }
   const target = await prisma.membership.findUnique({
-    where: { userId_workspaceId: { userId: id, workspaceId: me.workspaceId } },
+    where: { userId_workspaceId: { userId, workspaceId: me.workspaceId } },
   });
   if (!target) throw new Error("Member not found.");
   if (role === "MANAGER" && target.role === "ADMIN" && (await adminCount(me.workspaceId)) <= 1) {
@@ -378,9 +389,10 @@ export async function updateMemberRole(id: string, role: "ADMIN" | "MANAGER") {
  */
 export async function removeMember(id: string) {
   const me = await requireAdmin();
-  if (id === me.id) throw new Error("You can't remove yourself.");
+  const userId = idSchema.parse(id);
+  if (userId === me.id) throw new Error("You can't remove yourself.");
   const target = await prisma.membership.findUnique({
-    where: { userId_workspaceId: { userId: id, workspaceId: me.workspaceId } },
+    where: { userId_workspaceId: { userId, workspaceId: me.workspaceId } },
   });
   if (!target) throw new Error("Member not found.");
   if (target.role === "ADMIN" && (await adminCount(me.workspaceId)) <= 1) {
@@ -434,7 +446,7 @@ export async function revokeApiKey(id: string) {
   // updateMany with a workspace guard = no cross-tenant revocation, and
   // revoking an already-revoked key is a harmless no-op.
   await prisma.apiKey.updateMany({
-    where: { id, workspaceId: admin.workspaceId, revokedAt: null },
+    where: { id: idSchema.parse(id), workspaceId: admin.workspaceId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
   revalidatePath("/settings");
@@ -610,11 +622,11 @@ export async function updateClient(
   const user = await requireUser();
   const data = clientSchema.parse(input);
   const owned = await prisma.client.findFirst({
-    where: { id, workspaceId: user.workspaceId },
+    where: { id: idSchema.parse(id), workspaceId: user.workspaceId },
     select: { id: true },
   });
   if (!owned) throw new Error("Client not found.");
-  const client = await prisma.client.update({ where: { id }, data });
+  const client = await prisma.client.update({ where: { id: owned.id }, data });
   revalidatePath("/clients");
   return client;
 }
@@ -622,15 +634,15 @@ export async function updateClient(
 export async function deleteClient(id: string) {
   const user = await requireUser();
   const owned = await prisma.client.findFirst({
-    where: { id, workspaceId: user.workspaceId },
+    where: { id: idSchema.parse(id), workspaceId: user.workspaceId },
     select: { id: true },
   });
   if (!owned) throw new Error("Client not found.");
   const media = await prisma.mediaAsset.findMany({
-    where: { post: { clientId: id } },
+    where: { post: { clientId: owned.id } },
     select: { url: true },
   });
-  await prisma.client.delete({ where: { id } });
+  await prisma.client.delete({ where: { id: owned.id } });
   await removeUnusedMedia(media.map((m) => m.url));
   revalidatePath("/clients");
 }
@@ -638,11 +650,11 @@ export async function deleteClient(id: string) {
 export async function disconnectAccount(accountId: string) {
   const user = await requireUser();
   const owned = await prisma.socialAccount.findFirst({
-    where: { id: accountId, client: { workspaceId: user.workspaceId } },
+    where: { id: idSchema.parse(accountId), client: { workspaceId: user.workspaceId } },
     select: { id: true },
   });
   if (!owned) throw new Error("Account not found.");
-  await prisma.socialAccount.delete({ where: { id: accountId } });
+  await prisma.socialAccount.delete({ where: { id: owned.id } });
   revalidatePath("/clients");
 }
 
@@ -677,7 +689,7 @@ export async function updatePost(
   const data = postSchema.parse(input);
 
   const existing = await prisma.post.findFirst({
-    where: { id, client: { workspaceId: user.workspaceId } },
+    where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } },
   });
   if (!existing) throw new ApiError(404, "Post not found.");
   // Only drafts and not-yet-published scheduled posts can be edited.
@@ -696,10 +708,10 @@ export async function updatePost(
 
   // Replace media + targets wholesale - safe because nothing has published yet.
   await prisma.$transaction([
-    prisma.mediaAsset.deleteMany({ where: { postId: id } }),
-    prisma.postTarget.deleteMany({ where: { postId: id } }),
+    prisma.mediaAsset.deleteMany({ where: { postId: existing.id } }),
+    prisma.postTarget.deleteMany({ where: { postId: existing.id } }),
     prisma.post.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         clientId: data.clientId,
         body: data.body,
@@ -721,7 +733,7 @@ export async function updatePost(
   ]);
 
   if (data.action === "now") {
-    await publishPostNow(id);
+    await publishPostNow(existing.id);
   }
 
   revalidatePath("/queue");
@@ -733,11 +745,11 @@ export async function updatePost(
 export async function deletePost(id: string) {
   const user = await requireUser();
   const owned = await prisma.post.findFirst({
-    where: { id, client: { workspaceId: user.workspaceId } },
+    where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } },
     select: { id: true, media: { select: { url: true } } },
   });
   if (!owned) throw new Error("Post not found.");
-  await prisma.post.delete({ where: { id } });
+  await prisma.post.delete({ where: { id: owned.id } });
   await removeUnusedMedia(owned.media.map((m) => m.url));
   revalidatePath("/queue");
   revalidatePath("/calendar");
@@ -757,13 +769,13 @@ export async function reschedulePost(
 ): Promise<ActionResult<{ scheduledAt: string }>> {
   return toResult(async () => {
     const user = await requireUser();
-    const when = new Date(iso);
+    const when = new Date(isoSchema.parse(iso));
     if (Number.isNaN(when.getTime())) {
       throw new ApiError(400, "That isn't a valid time.");
     }
     const post = await prisma.post.findFirst({
-      where: { id, client: { workspaceId: user.workspaceId } },
-      select: { status: true },
+      where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } },
+      select: { id: true, status: true },
     });
     if (!post) throw new ApiError(404, "Post not found.");
     if (post.status !== "DRAFT" && post.status !== "SCHEDULED") {
@@ -774,7 +786,8 @@ export async function reschedulePost(
     }
     const { count } = await prisma.post.updateMany({
       where: {
-        id,
+        id: post.id,
+        client: { workspaceId: user.workspaceId },
         status: post.status,
         targets: { none: { status: "PROCESSING" } },
       },
@@ -803,7 +816,7 @@ export async function duplicatePost(
   return toResult(async () => {
     const user = await requireUser();
     const src = await prisma.post.findFirst({
-      where: { id, client: { workspaceId: user.workspaceId } },
+      where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } },
       include: { media: true, targets: true },
     });
     if (!src) throw new ApiError(404, "Post not found.");
@@ -834,7 +847,7 @@ export async function duplicatePost(
       action: "draft",
     } satisfies PostInput);
     const { post } = await createPostForUser(user, data);
-    const when = iso ? new Date(iso) : null;
+    const when = iso ? new Date(isoSchema.parse(iso)) : null;
     if (when && !Number.isNaN(when.getTime())) {
       await prisma.post.update({ where: { id: post.id }, data: { scheduledAt: when } });
     }
@@ -856,8 +869,8 @@ export async function setApproval(
   const user = await requireUser();
   // updateMany with a workspace guard = no cross-tenant writes.
   await prisma.post.updateMany({
-    where: { id: postId, client: { workspaceId: user.workspaceId } },
-    data: { approval },
+    where: { id: idSchema.parse(postId), client: { workspaceId: user.workspaceId } },
+    data: { approval: z.enum(["PENDING", "APPROVED", "CHANGES_REQUESTED"]).parse(approval) },
   });
   revalidatePath("/queue");
 }
@@ -868,12 +881,12 @@ export async function addComment(postId: string, body: string) {
   const user = await requireUser();
   const text = commentSchema.parse(body);
   const owned = await prisma.post.findFirst({
-    where: { id: postId, client: { workspaceId: user.workspaceId } },
+    where: { id: idSchema.parse(postId), client: { workspaceId: user.workspaceId } },
     select: { id: true },
   });
   if (!owned) throw new Error("Post not found.");
   await prisma.comment.create({
-    data: { postId, authorId: user.id, body: text },
+    data: { postId: owned.id, authorId: user.id, body: text },
   });
   revalidatePath("/queue");
 }
@@ -881,14 +894,14 @@ export async function addComment(postId: string, body: string) {
 export async function deleteComment(id: string) {
   const user = await requireUser();
   const comment = await prisma.comment.findFirst({
-    where: { id, post: { client: { workspaceId: user.workspaceId } } },
+    where: { id: idSchema.parse(id), post: { client: { workspaceId: user.workspaceId } } },
   });
   if (!comment) return;
   // Authors can delete their own comments; admins can delete any (in-workspace).
   if (comment.authorId !== user.id && user.role !== "ADMIN") {
     throw new Error("You can only delete your own comments.");
   }
-  await prisma.comment.delete({ where: { id } });
+  await prisma.comment.delete({ where: { id: comment.id } });
   revalidatePath("/queue");
 }
 
@@ -896,17 +909,21 @@ export async function retryPost(id: string): Promise<ActionResult> {
   return toResult(async () => {
     const user = await requireUser();
     const owned = await prisma.post.findFirst({
-      where: { id, client: { workspaceId: user.workspaceId } },
+      where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } },
       select: { id: true },
     });
     if (!owned) throw new ApiError(404, "Post not found.");
     // Before resetting anything, so a paused retry leaves the post as it was.
     if (await isPublishingPaused()) throw new ApiError(503, PAUSED_MESSAGE);
     await prisma.postTarget.updateMany({
-      where: { postId: id, status: "FAILED" },
+      where: {
+        postId: owned.id,
+        post: { client: { workspaceId: user.workspaceId } },
+        status: "FAILED",
+      },
       data: { status: "SCHEDULED", attempts: 0, error: null },
     });
-    await publishPostNow(id);
+    await publishPostNow(owned.id);
     revalidatePath("/queue");
   });
 }

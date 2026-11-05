@@ -7,6 +7,7 @@ import {
   HardDrive,
   KeyRound,
   LayoutDashboard,
+  Palette,
   Plug,
   ScrollText,
   Send,
@@ -24,6 +25,7 @@ const ITEMS = [
   { href: "/admin/api-keys", label: "API keys", icon: KeyRound },
   { href: "/admin/storage", label: "Storage", icon: HardDrive },
   { href: "/admin/audit", label: "Audit log", icon: ScrollText },
+  { href: "/admin/themes", label: "Themes", icon: Palette },
   { href: "/admin/platform", label: "Platform", icon: SlidersHorizontal },
 ];
 

@@ -370,6 +370,7 @@ model PlatformSettings {
   announcement     String? // shown to every signed-in user while set
   announcementTone String    @default("info") // info | warning
   announcementAt   DateTime? // changes when the text changes, so dismissals reset
+  siteTheme        String    @default("default") // a key from src/lib/site-themes.ts, on every page
   updatedBy        String?
   updatedAt        DateTime  @updatedAt
 }

@@ -152,7 +152,7 @@ export function Acts() {
       >
         <motion.div
           style={{ height }}
-          className="w-px bg-linear-to-b from-[#196bf5] via-[#4c8dff] to-[#14b26a] shadow-[0_0_12px_1px_rgb(25_107_245/0.5)]"
+          className="w-px bg-linear-to-b from-glow via-glow-soft to-[#14b26a] shadow-[0_0_12px_1px_color-mix(in_oklch,var(--glow)_50%,transparent)]"
         />
       </div>
 

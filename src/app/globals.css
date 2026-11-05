@@ -45,6 +45,11 @@
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-mint: var(--live);
+  /* Decorative glows on the landing and sign-in pages. The logo blue by
+     default; a site theme recolours them. */
+  --color-glow: var(--glow);
+  --color-glow-soft: var(--glow-soft);
+  --color-glow-text: var(--glow-text);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -74,7 +79,9 @@
   --shadow-float:
     0 1px 2px oklch(0.2 0.02 270 / 0.06), 0 8px 24px -6px oklch(0.2 0.02 270 / 0.12),
     0 24px 48px -12px oklch(0.2 0.02 270 / 0.12);
-  --shadow-glow: 0 0 0 1px oklch(0.6 0.2 260 / 0.25), 0 8px 30px -8px oklch(0.6 0.2 260 / 0.45);
+  --shadow-glow:
+    0 0 0 1px color-mix(in oklch, var(--glow) 25%, transparent),
+    0 8px 30px -8px color-mix(in oklch, var(--glow) 45%, transparent);
 
   --animate-tally: tally 2.4s ease-in-out infinite;
   --animate-marquee: marquee var(--marquee-duration, 40s) linear infinite;
@@ -182,6 +189,11 @@
 
   --grid-line: oklch(0.2 0.02 270 / 0.06);
   --grain-opacity: 0.35;
+  --glow: #196bf5;
+  --glow-soft: #4c8dff;
+  --glow-text: #7aa8ff; /* accent text on the always-dark panels */
+  /* The hairline round primary buttons. */
+  --primary-edge: rgb(10 40 140 / 0.25);
 }
 
 .dark {
@@ -230,6 +242,106 @@
 
   --grid-line: oklch(1 0 0 / 0.045);
   --grain-opacity: 0.5;
+}
+
+/*
+ * Site themes (src/lib/site-themes.ts), chosen in the admin panel and set as
+ * `data-skin` on <html>. Each one restyles both modes; the cue lights
+ * (standby/live/fault) keep their meaning, so they stay as they are.
+ */
+
+/* Diwali, light: sandalwood paper, kumkum ink, saffron as the signal. */
+:root[data-skin="diwali"] {
+  --canvas: #f6ecdc;
+  --background: #fdf7ee;
+  --foreground: #2a1216;
+  --card: #fffdf9;
+  --card-foreground: #2a1216;
+  --popover: #fffdf9;
+  --popover-foreground: #2a1216;
+  --primary: #c2410c;
+  --primary-foreground: #ffffff;
+  --brand: #c2410c;
+  --brand-foreground: #ffffff;
+  --secondary: #fdebd3;
+  --secondary-foreground: #9a3412;
+  --muted: #f8eddd;
+  --muted-foreground: #7a5a4c;
+  --accent: #f7e8d2;
+  --accent-foreground: #2a1216;
+  --destructive: #c81e3a;
+  --border: #ecdcc4;
+  --input: #e2cfb2;
+  --ring: #c2410c;
+
+  --chart-1: #c2410c;
+  --chart-2: #b5179e;
+  --chart-3: #e8a317;
+  --chart-4: #7c3aed;
+  --chart-5: #14b26a;
+  --sidebar-foreground: #2a1216;
+  --sidebar-primary: #c2410c;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fffdf9;
+  --sidebar-accent-foreground: #2a1216;
+  --sidebar-border: #e8d6bb;
+  --sidebar-ring: #c2410c;
+
+  --grid-line: oklch(0.55 0.13 55 / 0.11);
+  --glow: #f59e0b;
+  --glow-soft: #fbbf24;
+  --glow-text: #ffc861;
+  --primary-edge: rgb(120 35 5 / 0.3);
+  --festive-wire: #7a4b2a;
+  --festive-gold: linear-gradient(100deg, #c2410c, #d97706 50%, #b5179e);
+}
+
+/* Diwali, dark: the new-moon night, lit by diyas. The second selector covers
+   panels that are always dark (sign-in, the landing's stage), whatever the mode. */
+:root.dark[data-skin="diwali"],
+:root[data-skin="diwali"] .dark {
+  --canvas: #0b0610;
+  --background: #120a17;
+  --foreground: #f6eadb;
+  --card: #1a0f20;
+  --card-foreground: #f6eadb;
+  --popover: #1e1225;
+  --popover-foreground: #f6eadb;
+  --primary: #ffa83d;
+  --primary-foreground: #2a1100;
+  --brand: #ffa83d;
+  --brand-foreground: #2a1100;
+  --secondary: #2c1630;
+  --secondary-foreground: #ffc98a;
+  --muted: #1d1123;
+  --muted-foreground: #b39a8f;
+  --accent: #24152b;
+  --accent-foreground: #f6eadb;
+  --destructive: #ff5a6e;
+  --border: oklch(0.9 0.08 60 / 10%);
+  --input: oklch(0.9 0.08 60 / 15%);
+  --ring: #ffb45c;
+
+  --chart-1: #ffa83d;
+  --chart-2: #ff5fa2;
+  --chart-3: #ffd166;
+  --chart-4: #9b7bff;
+  --chart-5: #1fc677;
+  --sidebar-foreground: #f6eadb;
+  --sidebar-primary: #ffa83d;
+  --sidebar-primary-foreground: #2a1100;
+  --sidebar-accent: #1e1225;
+  --sidebar-accent-foreground: #f6eadb;
+  --sidebar-border: oklch(0.9 0.08 60 / 9%);
+  --sidebar-ring: #ffb45c;
+
+  --grid-line: oklch(0.85 0.12 70 / 0.075);
+  --glow: #ff9f1c;
+  --glow-soft: #ffc861;
+  --glow-text: #ffc861;
+  --primary-edge: rgb(130 60 0 / 0.45);
+  --festive-wire: #6b5240;
+  --festive-gold: linear-gradient(100deg, #ffb347, #ffd166 50%, #ff7eb6);
 }
 
 @layer base {
@@ -366,6 +478,102 @@
   }
   .tally[data-live="true"] {
     animation: var(--animate-tally);
+  }
+
+  /* ---- Diwali ------------------------------------------------------- */
+
+  /* Lamp light pooling from the top of the page. */
+  :root[data-skin="diwali"] body {
+    background-image: radial-gradient(
+      ellipse 70% 40% at 50% -8%,
+      color-mix(in oklch, var(--glow) 16%, transparent),
+      transparent 70%
+    );
+    background-repeat: no-repeat;
+  }
+
+  /* Headline accents in marigold gold. */
+  :root[data-skin="diwali"] .headline em,
+  :root[data-skin="diwali"] .serif-em {
+    background-image: var(--festive-gold);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    /* Room for the italic overhang, which background-clip would cut off. */
+    padding-right: 0.08em;
+    margin-right: -0.08em;
+  }
+
+  /* The hairline grid becomes a jaali lattice; the dots become rangoli. */
+  :root[data-skin="diwali"] .bg-grid {
+    background-image:
+      repeating-linear-gradient(45deg, var(--grid-line) 0 1px, transparent 1px 22px),
+      repeating-linear-gradient(-45deg, var(--grid-line) 0 1px, transparent 1px 22px);
+    background-size: auto;
+  }
+  :root[data-skin="diwali"] .bg-dots {
+    background-image:
+      radial-gradient(color-mix(in oklch, var(--glow) 38%, transparent) 1.4px, transparent 1.6px),
+      radial-gradient(color-mix(in oklch, #e0218a 26%, transparent) 1px, transparent 1.2px);
+    background-size: 22px 22px;
+    background-position:
+      0 0,
+      11px 11px;
+  }
+
+  /* The string of lamps (src/components/fx/site-theme-decor.tsx). */
+  .festive-lights {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 45;
+    height: 1.25rem;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  /* The wire: one 64px scallop, repeated. */
+  .festive-lights::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 12px;
+    background-color: var(--festive-wire);
+    --wire: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='12'%3E%3Cpath d='M0 1Q32 17 64 1' fill='none' stroke='%23000' stroke-width='1.2'/%3E%3C/svg%3E");
+    -webkit-mask: var(--wire) repeat-x 0 0 / 64px 12px;
+    mask: var(--wire) repeat-x 0 0 / 64px 12px;
+    opacity: 0.7;
+  }
+  .festive-bulb {
+    position: absolute;
+    top: 8px;
+    width: 7px;
+    height: 10px;
+    border-radius: 50% 50% 50% 50% / 38% 38% 62% 62%;
+    background: radial-gradient(circle at 50% 62%, #fff8e1 0 18%, var(--bulb) 62%);
+    box-shadow:
+      0 0 6px 1px color-mix(in oklch, var(--bulb) 75%, transparent),
+      0 2px 14px 3px color-mix(in oklch, var(--bulb) 35%, transparent);
+    animation: festive-twinkle 2s ease-in-out infinite alternate;
+  }
+  /* The little brass cap the bulb hangs from. */
+  .festive-bulb::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: 1.5px;
+    width: 4px;
+    height: 3px;
+    border-radius: 1px;
+    background: var(--festive-wire);
+  }
+  @keyframes festive-twinkle {
+    from {
+      opacity: 0.45;
+      filter: saturate(0.7);
+    }
+    to {
+      opacity: 1;
+      filter: none;
+    }
   }
 }
 

@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 const STAGE_TITLE = (
   <>
-    First, <em className="text-[#7aa8ff]">set the stage.</em>
+    First, <em className="text-glow-text">set the stage.</em>
   </>
 );
 const STAGE_BODY =

@@ -678,3 +678,12 @@ export async function getPlatformPage() {
   ]);
   return { settings, heartbeat, admins: platformAdminEmails() };
 }
+
+export async function getThemesPage() {
+  await requirePlatformAdmin();
+  const [settings, lastChange] = await Promise.all([
+    getPlatformSettings(),
+    prisma.adminAuditLog.findFirst({ where: { action: "platform.theme" }, orderBy: { createdAt: "desc" } }),
+  ]);
+  return { current: settings.siteTheme, lastChange };
+}

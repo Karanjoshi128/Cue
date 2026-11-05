@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -15,6 +15,8 @@ import {
 } from "@/lib/platform-admin";
 import { isFeatureKey, PLANS } from "@/lib/plans";
 import { updatePlatformSettings } from "@/lib/platform-settings";
+import { SITE_THEME_KEYS, siteTheme } from "@/lib/site-themes";
+import { SITE_THEME_TAG } from "@/lib/site-theme-server";
 import { MAX_ATTEMPTS, rollUpPostStatus, staleProcessingWhere } from "@/lib/publish";
 import { STUCK_AFTER_MS } from "@/lib/admin-data";
 import { cueMediaKey, settingsFromConfig } from "@/lib/storage";
@@ -542,6 +544,24 @@ export async function clearAnnouncement(): Promise<AdminResult> {
     await updatePlatformSettings({ announcement: null, announcementAt: null, updatedBy: actor });
     await audit({ actor, action: "platform.announce_clear", targetType: "platform" });
     return done("Banner removed.");
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function setSiteTheme(key: string): Promise<AdminResult> {
+  const actor = await getPlatformAdminEmail();
+  if (!actor) return NOT_ALLOWED;
+  try {
+    const theme = z.enum(SITE_THEME_KEYS).parse(key);
+    await updatePlatformSettings({ siteTheme: theme, updatedBy: actor });
+    await audit({ actor, action: "platform.theme", targetType: "platform", details: { theme } });
+    // Expire the cached theme now, then re-render every page (the static
+    // marketing pages included) so nobody waits for the backstop.
+    revalidateTag(SITE_THEME_TAG, { expire: 0 });
+    revalidatePath("/", "layout");
+    const name = siteTheme(theme).name;
+    return done(theme === "default" ? "Back to the everyday look." : `The ${name} theme is live on every page.`);
   } catch (e) {
     return fail(e);
   }

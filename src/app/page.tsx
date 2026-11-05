@@ -287,7 +287,7 @@ export default function HomePage() {
                     className="flex items-center gap-6 pr-6 font-mono text-xs tracking-[0.14em] whitespace-nowrap uppercase"
                   >
                     <span className="opacity-90">{t}</span>
-                    <span className="text-[#4c8dff]">◆</span>
+                    <span className="text-glow-soft">◆</span>
                   </li>
                 ))}
               </ul>
@@ -471,7 +471,7 @@ export default function HomePage() {
         <section className="dark grain relative isolate overflow-hidden bg-[#07080b] px-5 py-24 text-white sm:px-8 sm:py-32">
           <div
             aria-hidden
-            className="pointer-events-none absolute -bottom-40 -left-40 -z-10 size-[40rem] rounded-full bg-[#196bf5]/20 blur-[140px]"
+            className="pointer-events-none absolute -bottom-40 -left-40 -z-10 size-[40rem] rounded-full bg-glow/20 blur-[140px]"
           />
           <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.1fr_1fr]">
             <Reveal>
@@ -499,12 +499,12 @@ export default function HomePage() {
             </Reveal>
             <Reveal delay={0.1}>
               <div className="label-caps flex items-center gap-2 text-white/50">
-                <span className="size-1.5 rounded-full bg-[#4c8dff]" />
+                <span className="size-1.5 rounded-full bg-glow-soft" />
                 Why &ldquo;Cue&rdquo;
               </div>
               <h2 className="headline mt-4 text-4xl text-white sm:text-5xl">
                 In theatre, nothing moves until the cue is{" "}
-                <em className="text-[#7aa8ff]">called.</em>
+                <em className="text-glow-text">called.</em>
               </h2>
               <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/60">
                 A stage manager watches the clock and calls every light, sound
@@ -565,14 +565,14 @@ export default function HomePage() {
             />
             <div
               aria-hidden
-              className="pointer-events-none absolute -top-32 left-1/2 -z-10 h-[38rem] w-[44rem] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,rgb(76_141_255/0.35),transparent_65%)] blur-xl"
+              className="pointer-events-none absolute -top-32 left-1/2 -z-10 h-[38rem] w-[44rem] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,color-mix(in_oklch,var(--glow-soft)_35%,transparent),transparent_65%)] blur-xl"
             />
             <Reveal>
               <div className="font-mono text-[0.6875rem] tracking-[0.3em] text-white/45 uppercase">
                 Places, please
               </div>
               <h2 className="headline mx-auto mt-6 max-w-4xl text-[clamp(3.5rem,10vw,9rem)] leading-[0.9] text-white">
-                Take your <em className="text-[#7aa8ff]">cue.</em>
+                Take your <em className="text-glow-text">cue.</em>
               </h2>
               <p className="mx-auto mt-7 max-w-md text-lg leading-relaxed text-white/60">
                 Set up a workspace, connect your first client, and put next

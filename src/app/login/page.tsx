@@ -30,7 +30,7 @@ export default async function LoginPage({
       stageTitle={
         <>
           Every client. Every channel.{" "}
-          <em className="text-[#7aa8ff]">On cue.</em>
+          <em className="text-glow-text">On cue.</em>
         </>
       }
       stageBody="Plan the week for your whole roster, then let Cue call each post at exactly the right moment."

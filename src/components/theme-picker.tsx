@@ -4,40 +4,17 @@ import { useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DEFAULT_SITE_THEME, siteTheme } from "@/lib/site-themes";
+import { ThemeMiniature } from "@/components/theme-miniature";
 
 const subscribe = () => () => {};
 
-/** A miniature of the app shell, drawn in the given palette. */
-function Miniature({ dark }: { dark: boolean }) {
-  const c = dark
-    ? { canvas: "#060709", panel: "#0c0e12", line: "#22262e", ink: "#edeef0", soft: "#1a1e25" }
-    : { canvas: "#edece6", panel: "#f9f8f5", line: "#e4e2db", ink: "#121420", soft: "#efeee9" };
-  return (
-    <div className="flex h-full gap-1.5 p-2" style={{ background: c.canvas }}>
-      <div className="flex w-1/4 flex-col gap-1 pt-1">
-        <span className="h-1.5 w-3/4 rounded-full" style={{ background: "#196bf5" }} />
-        <span className="mt-1 h-1 w-full rounded-full" style={{ background: c.soft }} />
-        <span className="h-1 w-2/3 rounded-full" style={{ background: c.soft }} />
-        <span className="h-1 w-3/4 rounded-full" style={{ background: c.soft }} />
-      </div>
-      <div
-        className="flex-1 rounded-md p-1.5"
-        style={{ background: c.panel, boxShadow: `0 0 0 1px ${c.line}` }}
-      >
-        <span className="block h-1.5 w-1/2 rounded-full" style={{ background: c.ink }} />
-        <div className="mt-1.5 grid grid-cols-3 gap-1">
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="h-5 rounded"
-              style={{ background: i === 0 ? "#196bf5" : c.soft }}
-            />
-          ))}
-        </div>
-        <span className="mt-1.5 block h-1 w-3/4 rounded-full" style={{ background: c.soft }} />
-      </div>
-    </div>
-  );
+// The person's own light/dark choice. The site theme (Diwali and so on) is set
+// for everyone in the admin panel; these previews show the everyday palette.
+const { light, dark } = siteTheme(DEFAULT_SITE_THEME);
+
+function Miniature({ dark: isDark }: { dark: boolean }) {
+  return <ThemeMiniature colors={isDark ? dark : light} />;
 }
 
 export function ThemePicker() {

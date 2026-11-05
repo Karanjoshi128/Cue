@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 const STAGE_TITLE = (
   <>
-    Every client. Every channel. <em className="text-[#7aa8ff]">On cue.</em>
+    Every client. Every channel. <em className="text-glow-text">On cue.</em>
   </>
 );
 const STAGE_BODY =

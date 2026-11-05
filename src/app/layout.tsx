@@ -4,6 +4,9 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TimezoneSync } from "@/components/timezone-sync";
+import { SiteThemeDecor } from "@/components/fx/site-theme-decor";
+import { getSiteTheme } from "@/lib/site-theme-server";
+import { siteTheme } from "@/lib/site-themes";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -34,22 +37,28 @@ export const metadata: Metadata = {
     "Plan, schedule, and publish LinkedIn, Instagram, and YouTube posts for every client from one calendar.",
 };
 
-export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f4f3ee" },
-    { media: "(prefers-color-scheme: dark)", color: "#060709" },
-  ],
-};
+export async function generateViewport(): Promise<Viewport> {
+  const { chrome } = siteTheme(await getSiteTheme());
+  return {
+    themeColor: [
+      { media: "(prefers-color-scheme: light)", color: chrome.light },
+      { media: "(prefers-color-scheme: dark)", color: chrome.dark },
+    ],
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // The site theme from the admin panel; "default" adds no attribute at all.
+  const skin = await getSiteTheme();
   return (
     <html
       lang="en"
       suppressHydrationWarning
+      data-skin={skin === "default" ? undefined : skin}
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground min-h-full">
@@ -59,6 +68,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
+          <SiteThemeDecor theme={skin} />
           {children}
           <TimezoneSync />
           <Toaster position="bottom-right" />

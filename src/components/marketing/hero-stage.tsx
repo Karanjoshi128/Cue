@@ -94,7 +94,7 @@ export function HeroStage({ className }: { className?: string }) {
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute -top-24 left-1/2 h-64 w-[130%] -translate-x-1/2 rounded-full bg-[#196bf5]/30 blur-[90px]"
+            className="pointer-events-none absolute -top-24 left-1/2 h-64 w-[130%] -translate-x-1/2 rounded-full bg-glow/30 blur-[90px]"
           />
           <CueSheet
             rows={ROWS}

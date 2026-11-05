@@ -378,9 +378,169 @@ model PlatformSettings {
 // The last run of each scheduled job, so the admin panel can tell whether the
 // publisher (Supabase pg_cron, every 5 minutes) is actually running.
 model CronHeartbeat {
-  name      String   @id // "publish"
+  name      String   @id // "publish" | "mailer"
   lastRunAt DateTime
   ok        Boolean
   summary   Json?
   error     String?
+}
+
+// ---------------------------------------------------------------------------
+// Mailer (src/app/admin/mailer): marketing email sent by platform admins to
+// contacts they add or import. Separate from the app's own email (sign-in
+// codes, invites). Only /admin/mailer, the mailer cron and the public
+// unsubscribe page read these tables, so a missing table can't break the app.
+// ---------------------------------------------------------------------------
+
+// A Resend account that email goes out from. Use a different Resend account
+// from the one that sends sign-in codes, so complaints about marketing email
+// can never pause sign-in.
+model MailerAccount {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  fromName       String
+  fromEmail      String
+  replyTo        String?
+  apiKey         String // encrypted (src/lib/crypto.ts); never sent to the browser
+  webhookSecret  String? // encrypted Resend webhook signing secret (whsec_...)
+  perMinute      Int       @default(60)
+  perDay         Int       @default(100)
+  active         Boolean   @default(true)
+  lastVerifiedAt DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  campaigns MailerCampaign[]
+}
+
+// Someone to email. One list for the whole mailer; tags make the segments.
+model MailerContact {
+  id        String   @id @default(cuid())
+  email     String   @unique // lowercased
+  name      String?
+  company   String?
+  tags      String[] @default([])
+  fields    Json? // extra spreadsheet columns, usable as {{merge}} fields
+  source    String   @default("manual") // manual | paste | import
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sends MailerSend[]
+}
+
+// Never email these addresses again: unsubscribed, bounced, complained, or
+// added by hand. Checked when a campaign is queued and again before each send.
+model MailerSuppression {
+  email      String   @id // lowercased
+  reason     String // unsubscribed | bounced | complained | manual
+  campaignId String?
+  note       String?
+  createdBy  String? // the admin, for manual entries
+  createdAt  DateTime @default(now())
+}
+
+model MailerTemplate {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  subject   String
+  preheader String?
+  bodyHtml  String
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum MailerCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model MailerCampaign {
+  id          String               @id @default(cuid())
+  name        String
+  account     MailerAccount?       @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  accountId   String?
+  subject     String
+  preheader   String?
+  bodyHtml    String
+  // { tags: string[] (any of), excludeTags: string[] }; no tags = everyone
+  audience    Json
+  status      MailerCampaignStatus @default(DRAFT)
+  scheduledAt DateTime?
+  // Counts, recomputed from the sends as they change.
+  total       Int                  @default(0)
+  sent        Int                  @default(0)
+  failed      Int                  @default(0)
+  skipped     Int                  @default(0)
+  delivered   Int                  @default(0)
+  bounced     Int                  @default(0)
+  complained  Int                  @default(0)
+  opened      Int                  @default(0)
+  clicked     Int                  @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdBy   String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  sends MailerSend[]
+
+  @@index([status, scheduledAt])
+}
+
+// One email to one person: the queue and the log in one table. Rows are
+// claimed with FOR UPDATE SKIP LOCKED; claimedAt tells a stuck row apart.
+model MailerSend {
+  id                String         @id @default(cuid())
+  campaign          MailerCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaignId        String
+  contact           MailerContact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contactId         String?
+  email             String
+  name              String?
+  vars              Json? // merge values, copied when queued
+  status            String         @default("PENDING") // PENDING | SENDING | SENT | FAILED | SKIPPED
+  attempts          Int            @default(0)
+  nextAttemptAt     DateTime       @default(now())
+  claimedAt         DateTime?
+  providerMessageId String?        @unique
+  error             String?
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  bouncedAt         DateTime?
+  complainedAt      DateTime?
+  openedAt          DateTime?
+  clickedAt         DateTime?
+  createdAt         DateTime       @default(now())
+
+  @@unique([campaignId, email])
+  @@index([campaignId, status])
+  @@index([status, nextAttemptAt])
+}
+
+// Images uploaded for emails, kept in Cue's own bucket under mailer/.
+model MailerAsset {
+  id          String   @id @default(cuid())
+  storageKey  String   @unique
+  url         String
+  fileName    String
+  contentType String
+  size        Int
+  createdBy   String
+  createdAt   DateTime @default(now())
+}
+
+// One row ("global"): the mailer's pause switch and footer.
+model MailerSettings {
+  id            String   @id @default("global")
+  paused        Boolean  @default(false)
+  footerName    String   @default("Cue")
+  footerAddress String? // optional postal address line (needed for US recipients)
+  updatedBy     String?
+  updatedAt     DateTime @updatedAt
 }

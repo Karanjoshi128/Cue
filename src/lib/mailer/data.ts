@@ -3,10 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { requirePlatformAdmin } from "@/lib/admin-guard";
 import { parseAudience } from "@/lib/mailer/audience";
 import { getMailerSettings } from "@/lib/mailer/settings";
+import { PAGE_SIZE } from "@/lib/admin-data";
 
 // Read side of /admin/mailer. Every loader re-checks the platform admin.
 
-export const MAILER_PAGE_SIZE = 50;
+// Same as the rest of the admin panel, so the shared Pager counts pages right.
+export const MAILER_PAGE_SIZE = PAGE_SIZE;
 
 /** Every tag in use, with how many contacts have it. */
 export async function tagCounts(): Promise<{ tag: string; count: number }[]> {
@@ -45,7 +47,7 @@ export async function getCampaignEditor(campaignId?: string, templateId?: string
   const [accounts, templates, tags, fields, campaign, template] = await Promise.all([
     prisma.mailerAccount.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, fromName: true, fromEmail: true, active: true, lastVerifiedAt: true },
+      select: { id: true, name: true, fromName: true, fromEmail: true, replyTo: true, active: true, lastVerifiedAt: true },
     }),
     prisma.mailerTemplate.findMany({
       orderBy: { name: "asc" },
@@ -96,9 +98,12 @@ export async function getCampaignReport(campaignId: string, opts: { filter: Send
   await requirePlatformAdmin();
   const campaign = await prisma.mailerCampaign.findUnique({
     where: { id: campaignId },
-    include: { account: { select: { name: true, fromName: true, fromEmail: true } } },
+    include: { account: { select: { name: true, fromName: true, fromEmail: true, webhookSecret: true } } },
   });
   if (!campaign) return null;
+  // Only whether delivery tracking is set up; the secret itself stays here.
+  const tracking = !!campaign.account?.webhookSecret;
+  if (campaign.account) campaign.account.webhookSecret = null;
   const where: Prisma.MailerSendWhereInput = {
     campaignId,
     ...sendWhere(opts.filter),
@@ -114,7 +119,7 @@ export async function getCampaignReport(campaignId: string, opts: { filter: Send
     prisma.mailerSend.count({ where }),
     prisma.mailerSend.count({ where: { campaignId, status: { in: ["PENDING", "SENDING"] } } }),
   ]);
-  return { campaign: { ...campaign, audience: parseAudience(campaign.audience) }, sends, total, waiting };
+  return { campaign: { ...campaign, audience: parseAudience(campaign.audience) }, sends, total, waiting, tracking };
 }
 
 export async function getContactsPage(opts: { q?: string; tag?: string; page: number }) {
@@ -179,6 +184,8 @@ export async function getSendingPage() {
     })),
     settings,
     heartbeat,
+    // pg_cron runs it every minute; 5 quiet minutes means it isn't running.
+    workerStale: !heartbeat || Date.now() - heartbeat.lastRunAt.getTime() > 5 * 60_000,
   };
 }
 

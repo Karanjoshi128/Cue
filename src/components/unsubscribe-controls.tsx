@@ -7,7 +7,17 @@ import { resubscribeWithToken, unsubscribeWithToken } from "@/lib/mailer/public-
 type State = "subscribed" | "unsubscribed" | "blocked";
 
 /** The unsubscribe page's buttons. Nothing changes until a button is pressed. */
-export function UnsubscribeControls({ token, email, initial }: { token: string; email: string; initial: State }) {
+export function UnsubscribeControls({
+  token,
+  email,
+  sender,
+  initial,
+}: {
+  token: string;
+  email: string;
+  sender: string;
+  initial: State;
+}) {
   const [state, setState] = useState<State>(initial);
   const [error, setError] = useState(false);
   const [pending, start] = useTransition();
@@ -33,7 +43,7 @@ export function UnsubscribeControls({ token, email, initial }: { token: string; 
             <h1 className="headline text-[1.75rem]">Unsubscribe?</h1>
             <p className="text-muted-foreground text-sm leading-relaxed">
               <strong className="text-foreground font-medium">{email}</strong> will stop getting news and
-              updates from Cue. Emails about your own Cue account, like sign-in codes, aren&apos;t affected.
+              updates from {sender}. Emails about your own Cue account, like sign-in codes, aren&apos;t affected.
             </p>
           </div>
           <Button size="lg" className="w-full" disabled={pending} onClick={() => act(unsubscribeWithToken, "unsubscribed")}>

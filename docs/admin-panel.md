@@ -29,6 +29,7 @@ workspace.
 | Storage | Workspaces using their own bucket: re-test, disconnect. |
 | Audit log | Every action taken in the panel: who, what, when, why, details. Never edited; survives deletions. |
 | Themes | Pick the site theme (Cue or Diwali) for every page at once. |
+| Mailer | Marketing email to contacts you add or import: campaigns, templates, contacts, Resend sending accounts, the do-not-email list. See `docs/mailer.md`. |
 | Platform | Pause all publishing; the announcement banner; the publisher heartbeat; who the platform admins are. |
 
 ## What the switches actually do

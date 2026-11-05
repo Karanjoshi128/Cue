@@ -4,6 +4,7 @@ import { Logo } from "@/components/brand/logo";
 import { UnsubscribeControls } from "@/components/unsubscribe-controls";
 import { prisma } from "@/lib/prisma";
 import { verifyUnsubscribeToken } from "@/lib/mailer/suppression";
+import { getMailerSettings } from "@/lib/mailer/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +16,10 @@ export const metadata: Metadata = {
 export default async function UnsubscribePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const email = verifyUnsubscribeToken(token);
-  const row = email
-    ? await prisma.mailerSuppression.findUnique({ where: { email }, select: { reason: true } })
-    : null;
+  const [row, settings] = await Promise.all([
+    email ? prisma.mailerSuppression.findUnique({ where: { email }, select: { reason: true } }) : null,
+    getMailerSettings(),
+  ]);
 
   return (
     <div className="bg-canvas text-foreground flex min-h-dvh items-center justify-center px-4 py-16">
@@ -29,6 +31,7 @@ export default async function UnsubscribePage({ params }: { params: Promise<{ to
           <UnsubscribeControls
             token={token}
             email={email}
+            sender={settings.footerName}
             initial={row ? (row.reason === "unsubscribed" ? "unsubscribed" : "blocked") : "subscribed"}
           />
         ) : (

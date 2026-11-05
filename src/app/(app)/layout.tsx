@@ -14,6 +14,14 @@ import { getTimeZone } from "@/lib/timezone-server";
 import { zoned } from "@/lib/timezone";
 import { getPlatformSettings } from "@/lib/platform-settings";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
+import { HELP_GUIDES } from "@/lib/help";
+
+// Titles and search words for the command palette's Help group.
+const HELP_TOPICS = HELP_GUIDES.map((g) => ({
+  slug: g.slug,
+  title: g.title,
+  keywords: g.keywords.join(" "),
+}));
 
 export default async function AppLayout({
   children,
@@ -112,6 +120,7 @@ export default async function AppLayout({
               clients={clients}
               scopeClientId={scopeClientId}
               nextCue={nextCue}
+              helpTopics={HELP_TOPICS}
             />
             <main className="flex-1 px-4 pt-7 pb-16 sm:px-6 shell:px-10 shell:pt-10">
               {children}

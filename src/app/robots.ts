@@ -16,6 +16,7 @@ export default function robots(): MetadataRoute.Robots {
         "/queue",
         "/clients",
         "/settings",
+        "/guide",
         "/onboarding",
         "/api/",
         "/auth/",

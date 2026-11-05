@@ -5,6 +5,7 @@ import {
   ListOrdered,
   Users,
   Settings2,
+  LifeBuoy,
   type LucideIcon,
 } from "lucide-react";
 
@@ -24,6 +25,7 @@ export const navItems: NavItem[] = [
   { label: "Queue", href: "/queue", icon: ListOrdered, key: "q", group: "publish" },
   { label: "Clients", href: "/clients", icon: Users, key: "l", group: "manage" },
   { label: "Settings", href: "/settings", icon: Settings2, key: "s", group: "manage" },
+  { label: "Help", href: "/guide", icon: LifeBuoy, key: "h", group: "manage" },
 ];
 
 export const navGroups: { key: NavItem["group"]; label: string }[] = [

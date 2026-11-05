@@ -10,6 +10,7 @@ const NAV = [
   { href: "/#how", label: "How it works" },
   { href: "/#platforms", label: "Platforms" },
   { href: "/#trust", label: "Trust" },
+  { href: "/help", label: "Help" },
 ];
 
 /** Public-site header: logo, section links, sign-in. */
@@ -58,6 +59,7 @@ export function SiteFooter() {
             { href: "/#product", label: "Features" },
             { href: "/#how", label: "How it works" },
             { href: "/#platforms", label: "Platforms" },
+            { href: "/help", label: "Help centre" },
             { href: "/login", label: "Sign in" },
           ]}
         />

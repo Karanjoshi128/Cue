@@ -11,7 +11,9 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "help:check": "tsx scripts/check-help.ts",
+    "help:shots": "python scripts/help-screenshots.py"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

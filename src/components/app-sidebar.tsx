@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import {
   Check,
   ChevronsUpDown,
+  LifeBuoy,
   LogOut,
   Monitor,
   Moon,
@@ -315,6 +316,9 @@ export function UserMenu({
             <DropdownMenuSeparator />
           </>
         )}
+        <DropdownMenuItem render={<Link href="/guide" prefetch={false} />}>
+          <LifeBuoy /> Help & guide
+        </DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/settings" />}>
           <Settings2 /> Settings
         </DropdownMenuItem>

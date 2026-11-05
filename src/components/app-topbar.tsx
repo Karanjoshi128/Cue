@@ -9,7 +9,7 @@ import { Logo, LogoMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ClientSwitcher, type ClientOption } from "@/components/client-switcher";
-import { CommandMenu } from "@/components/command-menu";
+import { CommandMenu, type HelpTopic } from "@/components/command-menu";
 import {
   NavList,
   NextCueCard,
@@ -88,12 +88,14 @@ export function AppTopbar({
   clients,
   scopeClientId,
   nextCue,
+  helpTopics,
 }: {
   user: ShellUser;
   workspaceName: string;
   clients: ClientOption[];
   scopeClientId?: string;
   nextCue: NextCueData | null;
+  helpTopics?: HelpTopic[];
 }) {
   const pathname = usePathname();
   const page = navItems.find((i) => isActive(pathname, i.href));
@@ -136,7 +138,7 @@ export function AppTopbar({
       </nav>
 
       <div className="ml-auto flex items-center gap-1.5">
-        <CommandMenu clients={clients} />
+        <CommandMenu clients={clients} helpTopics={helpTopics} />
         <ThemeToggle />
         <Button
           render={<Link href="/composer" />}

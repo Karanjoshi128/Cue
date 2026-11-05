@@ -27,7 +27,7 @@ export async function requirePlatformAdmin(): Promise<string> {
 export interface AuditEntry {
   actor: string;
   action: string;
-  targetType: "workspace" | "user" | "post" | "target" | "apiKey" | "storage" | "platform";
+  targetType: "workspace" | "user" | "post" | "target" | "apiKey" | "storage" | "platform" | "mailer";
   targetId?: string | null;
   workspaceId?: string | null;
   reason?: string | null;

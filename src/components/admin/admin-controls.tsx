@@ -44,7 +44,7 @@ import { ThemeMiniature } from "@/components/theme-miniature";
 // Client controls for the admin panel. Each one calls a server action from
 // src/lib/admin-actions.ts, shows its message, and refreshes the page.
 
-function useRun() {
+export function useRun() {
   const router = useRouter();
   const [pending, start] = useTransition();
   function run(fn: () => Promise<AdminResult | undefined>, after?: () => void) {

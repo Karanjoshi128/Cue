@@ -3,8 +3,7 @@ import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getAuth } from "@/lib/auth";
 import { getScopeClientId } from "@/lib/client-scope";
-import { workspaceHasFeature } from "@/lib/plans";
-import { automationsEnabled } from "@/lib/automations/config";
+import { workspaceFeatureAvailable, workspaceHasFeature } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +24,10 @@ function cell(value: string | number | null | undefined): string {
 export async function GET() {
   const { user } = await getAuth();
   if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
-  if (!automationsEnabled() || !(await workspaceHasFeature(user.workspaceId, "ig_automations"))) {
+  if (
+    !(await workspaceFeatureAvailable(user.workspaceId, "ig_automations")) ||
+    !(await workspaceHasFeature(user.workspaceId, "ig_automations"))
+  ) {
     return NextResponse.json({ error: "Instagram automations aren't on." }, { status: 404 });
   }
   const clientId = await getScopeClientId();

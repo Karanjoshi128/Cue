@@ -1,7 +1,7 @@
 import type { Platform, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureFreshAccessToken } from "@/lib/tokens";
-import { hasFeature } from "@/lib/plans";
+import { featureAvailable, hasFeature } from "@/lib/plans";
 import { IG_COMMENT_SCOPE } from "@/lib/automations/config";
 import { listComments, listRecentMedia } from "@/lib/automations/instagram-api";
 import { aiEnabled, classifyComments } from "@/lib/ai";
@@ -39,7 +39,7 @@ const accountSelect = {
   refreshToken: true,
   tokenExpires: true,
   inboxSyncedAt: true,
-  client: { select: { workspace: { select: { suspendedAt: true, disabledFeatures: true } } } },
+  client: { select: { workspace: { select: { suspendedAt: true, disabledFeatures: true, earlyFeatures: true } } } },
 } satisfies Prisma.SocialAccountSelect;
 type DeskAccount = Prisma.SocialAccountGetPayload<{ select: typeof accountSelect }>;
 
@@ -146,7 +146,13 @@ function due(account: DeskAccount, now = Date.now()): boolean {
 
 function allowed(account: DeskAccount): boolean {
   const ws = account.client.workspace;
-  return !ws.suspendedAt && hasFeature(ws, "reply_desk") && canReadComments(account.platform, account.scopes);
+  return (
+    !ws.suspendedAt &&
+    // Launched, or unlocked early for this workspace (Admin → Users).
+    featureAvailable(ws, "reply_desk") &&
+    hasFeature(ws, "reply_desk") &&
+    canReadComments(account.platform, account.scopes)
+  );
 }
 
 /**

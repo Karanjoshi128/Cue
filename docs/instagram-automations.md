@@ -16,6 +16,7 @@ text.
 | 28 Oct 2026 | Branch rebased on main and extended with everything in §1. Committed locally only, not pushed. Each feature tested end to end against a local database with the outside services faked (227 checks in `scripts/e2e-*.ts`), and in a browser against a local server. |
 | 12–13 Nov 2026 | Main merged into the branch (invites, security hardening, session proxy, themes, help, mailer). Connector grants and alert recipients moved to memberships, and every new server action parses its arguments. All suites pass. **Tested on real Instagram** (§8) with whattheyknoww (A) and karan_joshi128 (B): comment → public reply + DM, DM keyword, email capture, follow gate, Reply Desk reply, link page with tap counts. Karan **published the Meta app** on 12 Nov: until then Instagram listed no comments at all (§8). |
 | 13 Nov 2026 | **Live on main** (#12). `prisma db push` ran on production first (additive only). Link pages, the connector and alerts are live; both flags stay off. The webhook Callback URL points at trycue.space again, with `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` set in Vercel. A **non-tester** account's comment and DM both got the reply and DM (§2). The two cron jobs (§5) wait until a flag goes on: with the flags off they'd only answer "skipped". |
+| 13 Nov 2026 | **Early access** (§12): Admin → Users unlocks Automations or the Reply Desk for one workspace while the flags stay off. The two cron jobs run every **5 minutes**: webhooks deliver comments and DMs instantly, so the job is the backup, retries and follow-ups. |
 | After Meta round 2 is approved | Record the round 3 video, request the two permissions (§9). Remove `instagram_business_manage_comments` from the round 2 draft before submitting it: it was switched on with "Add to App Review" on 12 Nov. |
 | After round 3 is approved | Turn `NEXT_PUBLIC_IG_AUTOMATIONS` on, redeploy, and add the cron jobs (§5). The webhook fields are already subscribed. |
 | After round 3 and Google's approval of `youtube.force-ssl` | Turn `NEXT_PUBLIC_REPLY_DESK` on (§7). |
@@ -58,7 +59,7 @@ arrive by webhook for an account with an automation.
 ## 3. How automations work
 
 ```
-comment ─► webhook or the every-minute check ─┐
+comment ─► webhook, or the 5-minute check ────┐
 story reply / DM ─► messages webhook ─────────┤
                                               ▼
            first matching rule (keyword, typo-tolerant) ─► AutomationRun
@@ -76,9 +77,9 @@ story reply / DM ─► messages webhook ─────────┤
            the link ─► a nudge later if they go quiet (inside 24 h)
 ```
 
-- **Two ways in for comments.** Webhooks are instant but only arrive after round 3. The
-  every-minute check reads comments itself (the watched post, or the 10 newest posts) and
-  stays on afterwards as a safety net. Story replies, DM keywords, taps and answers only
+- **Two ways in for comments.** Webhooks are instant; Meta sends them once the app is
+  published (it was on 12 Nov 2026). The check every 5 minutes reads comments itself (the
+  watched post, or the 10 newest posts) as a safety net. Story replies, DM keywords, taps and answers only
   arrive by webhook.
 - **Pacing.** At most `IG_DM_HOURLY_CAP` (default 200) first DMs per account per hour; the
   rest wait their turn.
@@ -133,10 +134,12 @@ Copy the header style of the existing `cue-publish-due-posts` job
 (`select jobname, schedule, command from cron.job;`).
 
 ```sql
--- Automations: every minute. Does nothing while the flag is off.
+-- Automations: every 5 minutes. Webhooks deliver comments and DMs as they
+-- happen; this is the backup, plus retries and follow-ups. Does nothing until
+-- the flag is on or a workspace is unlocked early (§12).
 select cron.schedule(
   'cue-instagram-automations',
-  '* * * * *',
+  '*/5 * * * *',
   $$
   select net.http_post(
     url := 'https://trycue.space/api/cron/automations',
@@ -150,7 +153,8 @@ select cron.schedule(
   $$
 );
 
--- Reply Desk: every 5 minutes. Does nothing while the flag is off.
+-- Reply Desk: every 5 minutes. Does nothing until the flag is on or a
+-- workspace is unlocked early (§12).
 select cron.schedule(
   'cue-reply-desk',
   '*/5 * * * *',
@@ -310,3 +314,24 @@ end-to-end result, with captions naming each permission.
 | AI helpers | `src/lib/ai.ts` |
 | Email alerts | `src/lib/alerts.ts` |
 | End-to-end checks | `scripts/e2e-*.ts` (local database only; see each file's header) |
+
+---
+
+## 12. Early access
+
+Until Meta approves round 3 (and Google `youtube.force-ssl`), the flags stay off, but a
+platform admin can unlock either feature for one workspace: **Admin → Users → Early access**.
+It's stored in `Workspace.earlyFeatures` and checked in `src/lib/plans.ts`
+(`featureAvailable`), so the nav, pages, actions, connect dialog, connector tools, cron jobs
+and webhooks all follow it. The workspace's own Features switch still applies on top.
+
+For each client:
+
+1. Add their Instagram account as an **Instagram Tester** on the Meta app; they accept at
+   instagram.com/accounts/manage_access. Their followers don't need anything.
+2. Unlock the feature on their row in Admin → Users. It applies to their whole workspace.
+3. They open Automations and click **Reconnect** to grant comment and message access.
+
+Unlocking or locking re-renders the privacy and data-deletion pages, which describe the
+features once any workspace can use them. Locking again stops everything for that
+workspace, including messages still queued. Once a flag is on, the column disappears.

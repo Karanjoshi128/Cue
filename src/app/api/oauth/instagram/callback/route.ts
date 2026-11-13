@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { connectingUser, endOAuthState, readOAuthState, returnPage } from "@/lib/oauth-guard";
 import { encrypt } from "@/lib/crypto";
-import {
-  automationsEnabled,
-  hasAutomationScopes,
-  instagramScopes,
-} from "@/lib/automations/config";
+import { hasAutomationScopes, instagramScopes } from "@/lib/automations/config";
+import { workspaceFeatureAvailable } from "@/lib/plans";
 import { subscribeToWebhooks } from "@/lib/automations/instagram-api";
 
 export const dynamic = "force-dynamic";
@@ -127,8 +124,8 @@ async function connect(req: NextRequest): Promise<NextResponse> {
   });
 
   // Automations: ask Meta to send this account's comment and message webhooks.
-  // Best effort. Until then (or if it fails) the every-minute check covers it.
-  if (automationsEnabled() && hasAutomationScopes(scopes)) {
+  // Best effort. Until then (or if it fails) the check every 5 minutes covers it.
+  if (hasAutomationScopes(scopes) && (await workspaceFeatureAvailable(user.workspaceId, "ig_automations"))) {
     try {
       await subscribeToWebhooks(long.access_token);
       await prisma.socialAccount.update({

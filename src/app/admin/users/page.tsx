@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { listUsers } from "@/lib/admin-data";
 import { banUser, removeUser, unbanUser } from "@/lib/admin-actions";
-import { ActionButton, RoleSelect } from "@/components/admin/admin-controls";
+import { ActionButton, EarlySwitch, RoleSelect } from "@/components/admin/admin-controls";
+import { EARLY_FEATURES, featureLaunched, FEATURES } from "@/lib/plans";
 import {
   AdminHeader,
   Ago,
@@ -28,13 +29,15 @@ export default async function AdminUsersPage({
   const sp = await searchParams;
   const status = sp.status === "banned" ? "banned" : undefined;
   const data = await listUsers({ q: sp.q, status, page: Number(sp.page) || 1 });
+  // Features still waiting on Meta/Google, each unlockable per workspace.
+  const early = EARLY_FEATURES.filter((f) => !featureLaunched(f));
 
   return (
     <>
       <AdminHeader
         eyebrow="People"
         title="Users"
-        description="Everyone with access to a workspace. Ban someone to lock them out without losing their posts."
+        description="Everyone with access to a workspace. Ban someone to lock them out without losing their posts. Early access unlocks Automations or the Reply Desk for a user's workspace before Meta approves them; their Instagram account must be an Instagram Tester on the Meta app."
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <FilterTabs
@@ -50,12 +53,13 @@ export default async function AdminUsersPage({
         {data.rows.length === 0 ? (
           <Empty>No users match.</Empty>
         ) : (
-          <Table className="min-w-[920px]">
+          <Table className="min-w-[1080px]">
             <thead>
               <tr>
                 <Th>Person</Th>
                 <Th>Workspace</Th>
                 <Th>Role</Th>
+                {early.length > 0 && <Th>Early access</Th>}
                 <Th>Last active</Th>
                 <Th>Joined</Th>
                 <Th>Status</Th>
@@ -76,6 +80,23 @@ export default async function AdminUsersPage({
                     {u.workspace.suspendedAt && <Pill tone="bad" className="ml-2">Suspended</Pill>}
                   </Td>
                   <Td><RoleSelect userId={u.id} role={u.role} /></Td>
+                  {early.length > 0 && (
+                    <Td>
+                      {/* For the whole workspace: everyone in it gets the feature. */}
+                      <div className="flex flex-col gap-1.5">
+                        {early.map((f) => (
+                          <EarlySwitch
+                            key={f}
+                            workspaceId={u.workspace.id}
+                            workspaceName={u.workspace.name}
+                            feature={f}
+                            label={FEATURES[f].label}
+                            unlocked={u.workspace.earlyFeatures.includes(f)}
+                          />
+                        ))}
+                      </div>
+                    </Td>
+                  )}
                   <Td><Ago date={u.lastSeenAt} /></Td>
                   <Td><Ago date={u.createdAt} /></Td>
                   <Td>

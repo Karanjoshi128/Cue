@@ -1,6 +1,8 @@
 import type { Plan, Workspace } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cueMediaBases } from "@/lib/storage";
+import { automationsEnabled } from "@/lib/automations/config";
+import { replyDeskEnabled } from "@/lib/reply-desk/config";
 
 // Plans, limits and per-workspace feature switches. The platform admin panel
 // assigns a plan and switches features off; everything else in the app asks
@@ -102,6 +104,74 @@ export function hasFeature(
   feature: FeatureKey,
 ): boolean {
   return !workspace.disabledFeatures.includes(feature);
+}
+
+/**
+ * Built, but waiting on Meta or Google to approve the permissions they need.
+ * Each is off everywhere until its flag is on (automations/config.ts,
+ * reply-desk/config.ts), except in workspaces a platform admin unlocked early
+ * (Workspace.earlyFeatures, Admin → Users). Unlocked or launched, a workspace
+ * can still have it switched off (disabledFeatures).
+ */
+export const EARLY_FEATURES = ["ig_automations", "reply_desk"] as const;
+export type EarlyFeature = (typeof EARLY_FEATURES)[number];
+
+export function isEarlyFeature(v: string): v is EarlyFeature {
+  return (EARLY_FEATURES as readonly string[]).includes(v);
+}
+
+/** Launched for everyone: the feature's flag is on. */
+export function featureLaunched(feature: EarlyFeature): boolean {
+  return feature === "ig_automations" ? automationsEnabled() : replyDeskEnabled();
+}
+
+/** Launched, or unlocked early for this workspace. */
+export function featureAvailable(
+  workspace: Pick<Workspace, "earlyFeatures">,
+  feature: EarlyFeature,
+): boolean {
+  return featureLaunched(feature) || workspace.earlyFeatures.includes(feature);
+}
+
+/** Every early feature's availability for one workspace, for the nav. */
+export function featuresAvailable(
+  workspace: Pick<Workspace, "earlyFeatures"> | null,
+): Record<EarlyFeature, boolean> {
+  return {
+    ig_automations: workspace ? featureAvailable(workspace, "ig_automations") : featureLaunched("ig_automations"),
+    reply_desk: workspace ? featureAvailable(workspace, "reply_desk") : featureLaunched("reply_desk"),
+  };
+}
+
+export async function workspaceFeatureAvailable(
+  workspaceId: string,
+  feature: EarlyFeature,
+): Promise<boolean> {
+  if (featureLaunched(feature)) return true;
+  const ws = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { earlyFeatures: true },
+  });
+  return !!ws && featureAvailable(ws, feature);
+}
+
+/** Whether any workspace can use it: the background jobs skip their work otherwise. */
+export async function featureAvailableAnywhere(feature: EarlyFeature): Promise<boolean> {
+  if (featureLaunched(feature)) return true;
+  return (await prisma.workspace.count({ where: { earlyFeatures: { has: feature } } })) > 0;
+}
+
+/**
+ * For the privacy and data-deletion pages, which describe a feature once any
+ * workspace can use it. They're static, so a database that can't be reached
+ * (a build without one) falls back to the launch flag.
+ */
+export async function featureInUse(feature: EarlyFeature): Promise<boolean> {
+  try {
+    return await featureAvailableAnywhere(feature);
+  } catch {
+    return featureLaunched(feature);
+  }
 }
 
 /** Looks the workspace up and reports whether a feature is on. */

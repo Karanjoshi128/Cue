@@ -11,6 +11,7 @@ import { TeamManager } from "@/components/team-manager";
 import { ApiKeysManager } from "@/components/api-keys-manager";
 import { StorageManager } from "@/components/storage-manager";
 import {
+  featuresAvailable,
   formatBytes,
   getWorkspaceUsage,
   hasFeature,
@@ -23,7 +24,7 @@ import { Kbd, PageHeader } from "@/components/page-header";
 import { SettingsNav } from "@/components/settings-nav";
 import { AlertsToggle } from "@/components/alerts-toggle";
 import { alertsConfigured } from "@/lib/alerts";
-import { navItems } from "@/components/nav-items";
+import { visibleNavItems } from "@/components/nav-items";
 import { ConnectorSettings } from "@/components/connector-settings";
 import { connectedApps } from "@/lib/connector/oauth";
 import { requestOrigin } from "@/lib/connector/origin";
@@ -278,7 +279,7 @@ export default async function SettingsPage() {
                   <Kbd>N</Kbd>
                 </dd>
               </div>
-              {navItems.map((n) => (
+              {visibleNavItems(featuresAvailable(workspace)).map((n) => (
                 <div key={n.href} className="flex items-center justify-between gap-4">
                   <dt className="text-muted-foreground">Go to {n.label}</dt>
                   <dd className="flex gap-1">

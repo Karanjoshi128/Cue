@@ -1,7 +1,7 @@
 import type { AutomationRule, AutomationRun, RunStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureFreshAccessToken } from "@/lib/tokens";
-import { automationsEnabled } from "./config";
+import { featureAvailableAnywhere } from "@/lib/plans";
 import { findEmail, findPhone, matchesKeywords } from "./match";
 import { getUserProfile, sendMessage, type OutgoingMessage } from "./instagram-api";
 import {
@@ -240,7 +240,8 @@ async function handleOne(account: AutomationAccount, ev: IncomingMessage) {
 
 /** Message and button-tap webhooks, as parsed by webhook.ts. */
 export async function handleIncomingMessages(events: IncomingMessage[]): Promise<void> {
-  if (!automationsEnabled()) return;
+  // Each account is checked below (automationBlocker): launched, or unlocked early.
+  if (!(await featureAvailableAnywhere("ig_automations"))) return;
   for (const ev of events) {
     // Echoes are the account's own messages, Cue's included.
     if (ev.isEcho || ev.senderId === ev.igUserId) continue;

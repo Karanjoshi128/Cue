@@ -635,8 +635,9 @@ export function AutomationEditor({
                   />
                   {draft.scope === "ANY_POST" ? (
                     <p className="text-muted-foreground text-xs leading-relaxed">
-                      Watches every post on the account. Until Meta turns on instant comment
-                      notifications, Cue checks the 10 newest posts every minute.
+                      Watches every post on the account. Instagram tells Cue about new
+                      comments as they arrive, and Cue also checks the 10 newest posts every
+                      few minutes in case one is missed.
                     </p>
                   ) : (
                     <div className="space-y-3">

@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import type { Platform } from "@prisma/client";
 import { Logo, LogoMark } from "@/components/brand/logo";
-import { navGroups, navItems, isActive } from "@/components/nav-items";
+import { navGroupsFor, isActive } from "@/components/nav-items";
+import { useNavItems } from "@/components/nav-features";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/page-header";
 import { Countdown } from "@/components/fx/countdown";
@@ -90,10 +91,11 @@ export function NavList({
   layoutGroup?: string;
 }) {
   const pathname = usePathname();
+  const navItems = useNavItems();
 
   return (
     <div className="flex flex-col gap-5">
-      {navGroups.map((group, gi) => (
+      {navGroupsFor(navItems).map((group, gi) => (
         <div key={group.key}>
           <div
             className={cn(

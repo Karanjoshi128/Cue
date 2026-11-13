@@ -24,6 +24,9 @@ model Workspace {
   // workspace exactly as it was: no limits, every feature on, not suspended.
   plan             Plan      @default(UNLIMITED)
   disabledFeatures String[]  @default([]) // feature keys from src/lib/plans.ts
+  // Features still waiting on Meta/Google approval (EARLY_FEATURES in
+  // src/lib/plans.ts), unlocked here by a platform admin before launch.
+  earlyFeatures    String[]  @default([])
   suspendedAt      DateTime? // set = members locked out, API refused, nothing publishes
   suspendedReason  String?
 

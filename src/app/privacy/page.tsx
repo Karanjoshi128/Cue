@@ -1,8 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
-import { automationsEnabled } from "@/lib/automations/config";
-import { replyDeskEnabled } from "@/lib/reply-desk/config";
+import { featureInUse } from "@/lib/plans";
 import { aiEnabled } from "@/lib/ai";
 
 export const metadata: Metadata = {
@@ -16,12 +15,16 @@ export const metadata: Metadata = {
 const UPDATED = "October 28, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
   // Comment automations, the Reply Desk and AI helpers are described only once
   // they're switched on, so the policy matches what's live (and what Meta and
   // Google are reviewing).
-  const automations = automationsEnabled();
-  const replyDesk = replyDeskEnabled();
+  // Also once a workspace has them early (Admin → Users): that's live too.
+  // Unlocking one re-renders this page (setEarlyFeature).
+  const [automations, replyDesk] = await Promise.all([
+    featureInUse("ig_automations"),
+    featureInUse("reply_desk"),
+  ]);
   const ai = aiEnabled();
   return (
     <LegalShell title="Privacy Policy" updated={UPDATED}>

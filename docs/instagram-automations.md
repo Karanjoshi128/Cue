@@ -14,8 +14,9 @@ text.
 | ---- | ----- |
 | 14 Oct 2026 | Comment automations built on the branch. |
 | 28 Oct 2026 | Branch rebased on main and extended with everything in §1. Committed locally only, not pushed. Each feature tested end to end against a local database with the outside services faked (227 checks in `scripts/e2e-*.ts`), and in a browser against a local server. |
-| Next | Push and merge when Karan decides. Run `pnpm prisma db push` **before** the code deploys (§4). Flags stay off. |
-| After Meta round 2 is approved | Test automations with tester accounts (§8), record the round 3 video, request the two permissions (§9). |
+| 12–13 Nov 2026 | Main merged into the branch (invites, security hardening, session proxy, themes, help, mailer). Connector grants and alert recipients moved to memberships, and every new server action parses its arguments. All suites pass. **Tested on real Instagram** (§8) with whattheyknoww (A) and karan_joshi128 (B): comment → public reply + DM, DM keyword, email capture, follow gate, Reply Desk reply, link page with tap counts. Karan **published the Meta app** on 12 Nov: until then Instagram listed no comments at all (§8). |
+| Next | Push and merge when Karan decides. Run `pnpm prisma db push` **before** the code deploys (§4). Point the webhook Callback URL back at trycue.space (§6); it was left on a local ngrok address after testing. |
+| After Meta round 2 is approved | Record the round 3 video, request the two permissions (§9). Remove `instagram_business_manage_comments` from the round 2 draft before submitting it: it was switched on with "Add to App Review" on 12 Nov. |
 | After round 3 is approved | Turn `NEXT_PUBLIC_IG_AUTOMATIONS` on, add the webhook fields in the App Dashboard (§6), redeploy. |
 | After round 3 and Google's approval of `youtube.force-ssl` | Turn `NEXT_PUBLIC_REPLY_DESK` on (§7). |
 
@@ -42,8 +43,9 @@ Platform admins can switch each feature off for one workspace: Admin → Workspa
 | ---- | ------ |
 | One private reply (DM) per comment, within **7 days** of the comment | Meta: Private Replies |
 | Further messages only within **24 hours** of the person's last message or button tap | Meta: Messaging window |
-| Comment and message webhooks need the app **Live**, **Advanced Access** and **Business Verification**; the account must be public | Meta: Webhooks |
+| Comment and message webhooks need the app **Live**, **Advanced Access** and **Business Verification**; the account must be public. For testers, Live with Standard Access was enough (13 Nov 2026) | Meta: Webhooks |
 | With Standard Access (Development mode), DMs only reach **Instagram Testers** | Reported by developers (error 100/2534001), not in Meta's docs |
+| While the app is in **Development mode**, `GET /{media-id}/comments` returns an empty list (`comments_count` is still right), even for the account's own comments and with the permission "Ready for testing". Publishing the app fixed it at once | Seen on 12 Nov 2026; not in Meta's docs |
 | Whether someone follows the account: `is_user_follow_business` on their profile, readable once they've messaged or tapped | Meta: User Profile API |
 
 Cue starts a conversation only in reply to the person's own comment, story
@@ -206,8 +208,18 @@ stays opt-in, and the Reply Desk flag stays off. To launch it:
 
 ---
 
-## 8. Testing automations in Development mode
+## 8. Testing automations with real accounts
 
+The app must be **published** (Live): in Development mode Instagram lists no comments and
+sends no webhooks (§2). Standard Access is enough for testers.
+
+0. Instagram needs an https address it can reach, for the connect callback and the webhook.
+   On 12–13 Nov this was a local `next start` behind ngrok, on a throwaway database. Add the
+   ngrok callback (`/api/oauth/instagram/callback`) under Business login settings, and
+   `/api/webhooks/instagram` as the webhook Callback URL. Self-hosted `next start` builds
+   redirects from `localhost`, so put a small proxy in front that rewrites `Location` to the
+   ngrok address (Vercel doesn't have this problem). Call `/api/cron/automations` every
+   minute with the `CRON_SECRET`.
 1. Locally, set `NEXT_PUBLIC_IG_AUTOMATIONS=1` and restart the dev server.
 2. Two Instagram accounts, both **Instagram Testers** on the app: **A**, the professional
    account the automation runs on, and **B**, to comment from.
@@ -216,8 +228,8 @@ stays opt-in, and the Reply Desk flag stays off. To launch it:
 5. From B, comment `LINK please`. Click "Check comments now" or wait a minute. The activity
    log shows **Sent**; B has the reply and the DM (maybe in message requests).
 6. Followers only, story replies, DM keywords, email capture and nudges need the messages
-   webhook, so they can only be tested once the app is Live with webhooks (after round 3)
-   or with a local tunnel to `/api/webhooks/instagram`.
+   webhook: subscribe **comments**, **messages** and **messaging_postbacks** (§6). All but
+   story replies and nudges were tried on 13 Nov and worked.
 
 ---
 

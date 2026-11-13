@@ -15,9 +15,9 @@ text.
 | 14 Oct 2026 | Comment automations built on the branch. |
 | 28 Oct 2026 | Branch rebased on main and extended with everything in §1. Committed locally only, not pushed. Each feature tested end to end against a local database with the outside services faked (227 checks in `scripts/e2e-*.ts`), and in a browser against a local server. |
 | 12–13 Nov 2026 | Main merged into the branch (invites, security hardening, session proxy, themes, help, mailer). Connector grants and alert recipients moved to memberships, and every new server action parses its arguments. All suites pass. **Tested on real Instagram** (§8) with whattheyknoww (A) and karan_joshi128 (B): comment → public reply + DM, DM keyword, email capture, follow gate, Reply Desk reply, link page with tap counts. Karan **published the Meta app** on 12 Nov: until then Instagram listed no comments at all (§8). |
-| Next | Push and merge when Karan decides. Run `pnpm prisma db push` **before** the code deploys (§4). Point the webhook Callback URL back at trycue.space (§6); it was left on a local ngrok address after testing. |
+| 13 Nov 2026 | **Live on main** (#12). `prisma db push` ran on production first (additive only). Link pages, the connector and alerts are live; both flags stay off. The webhook Callback URL points at trycue.space again, with `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` set in Vercel. A **non-tester** account's comment and DM both got the reply and DM (§2). The two cron jobs (§5) wait until a flag goes on: with the flags off they'd only answer "skipped". |
 | After Meta round 2 is approved | Record the round 3 video, request the two permissions (§9). Remove `instagram_business_manage_comments` from the round 2 draft before submitting it: it was switched on with "Add to App Review" on 12 Nov. |
-| After round 3 is approved | Turn `NEXT_PUBLIC_IG_AUTOMATIONS` on, add the webhook fields in the App Dashboard (§6), redeploy. |
+| After round 3 is approved | Turn `NEXT_PUBLIC_IG_AUTOMATIONS` on, redeploy, and add the cron jobs (§5). The webhook fields are already subscribed. |
 | After round 3 and Google's approval of `youtube.force-ssl` | Turn `NEXT_PUBLIC_REPLY_DESK` on (§7). |
 
 ---
@@ -44,7 +44,7 @@ Platform admins can switch each feature off for one workspace: Admin → Workspa
 | One private reply (DM) per comment, within **7 days** of the comment | Meta: Private Replies |
 | Further messages only within **24 hours** of the person's last message or button tap | Meta: Messaging window |
 | Comment and message webhooks need the app **Live**, **Advanced Access** and **Business Verification**; the account must be public. For testers, Live with Standard Access was enough (13 Nov 2026) | Meta: Webhooks |
-| With Standard Access (Development mode), DMs only reach **Instagram Testers** | Reported by developers (error 100/2534001), not in Meta's docs |
+| Until round 3, only the **connected** account needs a role on the app (Instagram Tester): Standard Access permissions "can only be requested from app users who have a role on the requesting app". The people commenting or messaging don't: with the app Live, a non-tester's comment and DM both got the reply and DM. Developers report DMs reaching testers only, but that's in Development mode | Meta: Access levels; tested 13 Nov 2026 |
 | While the app is in **Development mode**, `GET /{media-id}/comments` returns an empty list (`comments_count` is still right), even for the account's own comments and with the permission "Ready for testing". Publishing the app fixed it at once | Seen on 12 Nov 2026; not in Meta's docs |
 | Whether someone follows the account: `is_user_follow_business` on their profile, readable once they've messaged or tapped | Meta: User Profile API |
 

@@ -44,7 +44,7 @@ const pageSchema = z.object({
     .trim()
     .max(BIO_LIMITS.bio)
     .transform((v) => v || null),
-  accountId: z.string().min(1).nullable(),
+  accountId: z.string().min(1).max(100).nullable(),
   links: z
     .array(
       z.object({
@@ -66,9 +66,13 @@ const pageSchema = z.object({
 
 export type BioPageInput = z.input<typeof pageSchema>;
 
+// Arguments are parsed at runtime: these are public POST endpoints, and an
+// object where an id belongs would read as a filter matching every row.
+const idSchema = z.string().min(1).max(100);
+
 async function ownedClient(workspaceId: string, clientId: string) {
   const client = await prisma.client.findFirst({
-    where: { id: clientId, workspaceId },
+    where: { id: idSchema.parse(clientId), workspaceId },
     select: { id: true, bioPage: { select: { id: true, accountId: true, gridAt: true } } },
   });
   if (!client) throw new ApiError(404, "That client is gone.");

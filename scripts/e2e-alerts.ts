@@ -35,15 +35,25 @@ async function main() {
   if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url) || !db.includes("test")) {
     throw new Error(`Refusing to run against ${db}: needs a local database with "test" in its name.`);
   }
-  for (const t of ["alertLog", "automationRun", "automationRule", "lead", "postTarget", "post", "socialAccount", "client", "user", "workspace"] as const) {
+  for (const t of ["alertLog", "automationRun", "automationRule", "lead", "postTarget", "post", "socialAccount", "client", "membership", "user", "workspace"] as const) {
     // @ts-expect-error every model here has deleteMany
     await prisma[t].deleteMany();
   }
 
   const ws = await prisma.workspace.create({ data: { name: "Alerts WS" } });
-  await prisma.user.create({ data: { email: "admin@example.com", role: "ADMIN", workspaceId: ws.id } });
-  await prisma.user.create({ data: { email: "quiet@example.com", role: "ADMIN", emailAlerts: false, workspaceId: ws.id } });
-  const manager = await prisma.user.create({ data: { email: "mgr@example.com", role: "MANAGER", workspaceId: ws.id } });
+  // Membership is what makes someone part of a workspace (and its admin).
+  const member = (email: string, role: "ADMIN" | "MANAGER", extra: { emailAlerts?: boolean } = {}) =>
+    prisma.user.create({
+      data: { email, role, workspaceId: ws.id, ...extra, memberships: { create: { workspaceId: ws.id, role } } },
+    });
+  await member("admin@example.com", "ADMIN");
+  await member("quiet@example.com", "ADMIN", { emailAlerts: false });
+  const manager = await member("mgr@example.com", "MANAGER");
+  // An admin here only through another workspace's membership gets nothing.
+  const elsewhere = await prisma.workspace.create({ data: { name: "Elsewhere" } });
+  await prisma.user.create({
+    data: { email: "other-admin@example.com", role: "ADMIN", workspaceId: ws.id, memberships: { create: { workspaceId: elsewhere.id, role: "ADMIN" } } },
+  });
   const client = await prisma.client.create({ data: { name: "Acme", workspaceId: ws.id } });
   const ig = await prisma.socialAccount.create({
     data: { clientId: client.id, platform: "INSTAGRAM", externalId: "ig1", displayName: "@acme", accessToken: encrypt("x"), refreshToken: null, tokenExpires: new Date(Date.now() + 2 * 86400_000) },

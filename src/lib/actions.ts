@@ -159,7 +159,7 @@ export async function updateProfile(input: z.infer<typeof profileSchema>) {
 export async function setEmailAlerts(enabled: boolean): Promise<ActionResult> {
   return toResult(async () => {
     const user = await requireUser();
-    await prisma.user.update({ where: { id: user.id }, data: { emailAlerts: enabled } });
+    await prisma.user.update({ where: { id: user.id }, data: { emailAlerts: z.boolean().parse(enabled) } });
     revalidatePath("/settings");
   });
 }

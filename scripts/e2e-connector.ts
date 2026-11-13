@@ -90,12 +90,14 @@ async function main() {
   if (!/@(localhost|127\.0\.0\.1)[:/]/.test(url) || !db.includes("test")) {
     throw new Error(`Refusing to run against ${db}: needs a local database with "test" in its name.`);
   }
-  for (const t of ["oAuthGrant", "oAuthCode", "oAuthClient", "apiKey", "bioClick", "bioPage", "inboxComment", "alertLog", "automationRun", "automationRule", "lead", "postTarget", "post", "socialAccount", "client", "user", "workspace"] as const) {
+  for (const t of ["oAuthGrant", "oAuthCode", "oAuthClient", "apiKey", "bioClick", "bioPage", "inboxComment", "alertLog", "automationRun", "automationRule", "lead", "postTarget", "post", "socialAccount", "client", "membership", "user", "workspace"] as const) {
     // @ts-expect-error every model here has deleteMany
     await prisma[t].deleteMany();
   }
   const ws = await prisma.workspace.create({ data: { name: "Connector WS" } });
-  const user = await prisma.user.create({ data: { email: "mcp@example.com", name: "Asha", role: "ADMIN", workspaceId: ws.id } });
+  const user = await prisma.user.create({
+    data: { email: "mcp@example.com", name: "Asha", role: "ADMIN", workspaceId: ws.id, memberships: { create: { workspaceId: ws.id, role: "ADMIN" } } },
+  });
   const client = await prisma.client.create({ data: { name: "Acme", workspaceId: ws.id } });
   const common = { clientId: client.id, accessToken: encrypt("t"), tokenExpires: new Date(Date.now() + 30 * 86400_000) };
   const li = await prisma.socialAccount.create({ data: { ...common, platform: "LINKEDIN", externalId: "urn:li:person:1", displayName: "Acme on LinkedIn" } });
@@ -227,6 +229,18 @@ async function main() {
   const off = await rpc("ping", {}, { auth: AT });
   check("API switched off for the workspace: 403 saying why", off.status === 403 && /turned off/.test(off.json.error));
   await prisma.workspace.update({ where: { id: ws.id }, data: { disabledFeatures: [] } });
+
+  // People can be in several workspaces; a connection acts in the one it was approved in.
+  await prisma.membership.create({ data: { userId: user.id, workspaceId: otherWs.id, role: "MANAGER" } });
+  await prisma.user.update({ where: { id: user.id }, data: { workspaceId: otherWs.id, role: "MANAGER" } });
+  const switched = await call("list_posts", { status: "SCHEDULED" }, AT);
+  check("switching workspace in Cue: it still acts in the approved one", switched.json.result.structuredContent?.posts.length === 1);
+  await prisma.membership.delete({ where: { userId_workspaceId: { userId: user.id, workspaceId: ws.id } } });
+  const removed = await rpc("ping", {}, { auth: AT });
+  check("removed from that workspace: 403 saying why", removed.status === 403 && /no longer in/.test(removed.json.error));
+  await prisma.membership.create({ data: { userId: user.id, workspaceId: ws.id, role: "ADMIN" } });
+  await prisma.user.update({ where: { id: user.id }, data: { workspaceId: ws.id, role: "ADMIN" } });
+
   await prisma.oAuthGrant.updateMany({ where: { userId: user.id }, data: { revokedAt: new Date() } });
   check("disconnected in Settings: 401", (await rpc("ping", {}, { auth: AT })).status === 401);
 

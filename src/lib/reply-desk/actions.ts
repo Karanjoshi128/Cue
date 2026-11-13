@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
@@ -37,7 +38,8 @@ export async function setDeskState(id: string, state: "OPEN" | "DONE") {
   return toResult(async () => {
     const user = await deskUser();
     const comment = await ownedComment(user.workspaceId, id);
-    await prisma.inboxComment.update({ where: { id: comment.id }, data: { state } });
+    const next = z.enum(["OPEN", "DONE"]).parse(state);
+    await prisma.inboxComment.update({ where: { id: comment.id }, data: { state: next } });
     revalidatePath("/replies");
   });
 }

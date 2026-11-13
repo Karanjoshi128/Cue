@@ -12,7 +12,8 @@ import { replyToYouTubeComment } from "./youtube";
 
 export async function ownedComment(workspaceId: string, id: string) {
   const comment = await prisma.inboxComment.findFirst({
-    where: { id, account: { client: { workspaceId } } },
+    // Parsed: ids arrive from server actions and the connector.
+    where: { id: z.string().min(1).max(100).parse(id), account: { client: { workspaceId } } },
     include: { account: true },
   });
   if (!comment) throw new ApiError(404, "That comment is gone.");

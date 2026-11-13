@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
@@ -41,7 +42,7 @@ export async function disconnectApp(grantId: string) {
   return toResult(async () => {
     const user = await requireUser();
     await prisma.oAuthGrant.updateMany({
-      where: { id: grantId, userId: user.id, revokedAt: null },
+      where: { id: z.string().min(1).max(100).parse(grantId), userId: user.id, revokedAt: null },
       data: { revokedAt: new Date() },
     });
     revalidatePath("/settings");

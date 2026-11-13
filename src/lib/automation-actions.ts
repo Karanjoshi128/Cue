@@ -37,7 +37,7 @@ async function automationUser() {
 /** An Instagram account in the caller's workspace that has comment access. */
 async function ownedAccount(workspaceId: string, accountId: string) {
   const account = await prisma.socialAccount.findFirst({
-    where: { id: accountId, platform: "INSTAGRAM", client: { workspaceId } },
+    where: { id: idSchema.parse(accountId), platform: "INSTAGRAM", client: { workspaceId } },
   });
   if (!account) throw new ApiError(404, "Instagram account not found.");
   if (!hasAutomationScopes(account.scopes)) {
@@ -49,6 +49,11 @@ async function ownedAccount(workspaceId: string, accountId: string) {
   return account;
 }
 
+// Every export is a public POST endpoint and TypeScript types don't exist at
+// runtime, so each argument is parsed before it reaches a query (an object
+// where an id belongs would read as a filter matching every row).
+const idSchema = z.string().min(1).max(100);
+
 const optionalText = (max: number) =>
   z
     .string()
@@ -59,20 +64,20 @@ const optionalText = (max: number) =>
 
 const ruleSchema = z
   .object({
-    accountId: z.string().min(1, "Pick an Instagram account."),
+    accountId: z.string().min(1, "Pick an Instagram account.").max(100),
     name: z.string().trim().min(1, "Give the automation a name.").max(LIMITS.name),
     enabled: z.boolean(),
     trigger: z.enum(["COMMENT", "STORY_REPLY", "DM_KEYWORD"]),
     scope: z.enum(["ANY_POST", "ONE_POST"]),
     media: z
       .object({
-        id: z.string().min(1),
-        permalink: z.string().nullish(),
-        caption: z.string().nullish(),
-        thumbUrl: z.string().nullish(),
+        id: z.string().min(1).max(100),
+        permalink: z.string().max(2000).nullish(),
+        caption: z.string().max(5000).nullish(),
+        thumbUrl: z.string().max(4000).nullish(),
       })
       .nullish(),
-    postId: z.string().nullish(),
+    postId: idSchema.nullish(),
     matchMode: z.enum(["WORD", "CONTAINS", "ANY_COMMENT"]),
     fuzzy: z.boolean(),
     keywords: z
@@ -148,6 +153,7 @@ export type AutomationInput = z.input<typeof ruleSchema>;
 export async function saveAutomation(id: string | null, input: AutomationInput) {
   return toResult(async () => {
     const user = await automationUser();
+    const ruleId = id === null ? null : idSchema.parse(id);
     const data = ruleSchema.parse(input);
     const account = await ownedAccount(user.workspaceId, data.accountId);
 
@@ -224,32 +230,34 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
       aiModeration: data.aiModeration && aiEnabled(),
     };
 
-    if (id) {
+    let savedId: string;
+    if (ruleId) {
       const existing = await prisma.automationRule.findFirst({
-        where: { id, client: { workspaceId: user.workspaceId } },
-        select: { enabled: true },
+        where: { id: ruleId, client: { workspaceId: user.workspaceId } },
+        select: { id: true, enabled: true },
       });
       if (!existing) throw new ApiError(404, "Automation not found.");
       await prisma.automationRule.update({
-        where: { id },
+        where: { id: existing.id },
         data: {
           ...fields,
           // Switched back on: start from now, not from before it was off.
           ...(!existing.enabled && data.enabled ? { activeSince: new Date() } : {}),
         },
       });
+      savedId = existing.id;
     } else {
       const rule = await prisma.automationRule.create({ data: fields, select: { id: true } });
-      id = rule.id;
+      savedId = rule.id;
     }
     revalidatePath("/automations");
-    return { id };
+    return { id: savedId };
   });
 }
 
 async function ownedRule(workspaceId: string, id: string) {
   const rule = await prisma.automationRule.findFirst({
-    where: { id, client: { workspaceId } },
+    where: { id: idSchema.parse(id), client: { workspaceId } },
     select: { id: true, enabled: true },
   });
   if (!rule) throw new ApiError(404, "Automation not found.");
@@ -260,11 +268,12 @@ export async function setAutomationEnabled(id: string, enabled: boolean) {
   return toResult(async () => {
     const user = await automationUser();
     const rule = await ownedRule(user.workspaceId, id);
+    const on = z.boolean().parse(enabled);
     await prisma.automationRule.update({
       where: { id: rule.id },
       data: {
-        enabled,
-        ...(!rule.enabled && enabled ? { activeSince: new Date() } : {}),
+        enabled: on,
+        ...(!rule.enabled && on ? { activeSince: new Date() } : {}),
       },
     });
     revalidatePath("/automations");
@@ -276,11 +285,11 @@ export async function resolveHeld(runId: string, send: boolean) {
   return toResult(async () => {
     const user = await automationUser();
     const run = await prisma.automationRun.findFirst({
-      where: { id: runId, status: "HELD", rule: { client: { workspaceId: user.workspaceId } } },
+      where: { id: idSchema.parse(runId), status: "HELD", rule: { client: { workspaceId: user.workspaceId } } },
       select: { id: true },
     });
     if (!run) throw new ApiError(404, "That held comment is gone.");
-    if (send) {
+    if (z.boolean().parse(send)) {
       await prisma.automationRun.update({
         where: { id: run.id },
         data: { status: "QUEUED", nextAttemptAt: null },
@@ -301,7 +310,8 @@ export async function writeDmVariants(text: string, count: number) {
       throw new ApiError(403, "AI helpers aren't switched on.");
     }
     const clean = z.string().trim().min(1, "Write the DM first.").max(LIMITS.dmLength).parse(text);
-    return writeVariants(clean, Math.min(Math.max(1, count), LIMITS.dmVariants));
+    const n = z.number().int().min(1).max(LIMITS.dmVariants).catch(LIMITS.dmVariants).parse(count);
+    return writeVariants(clean, n);
   });
 }
 
@@ -310,7 +320,7 @@ export async function deleteLead(id: string) {
   return toResult(async () => {
     const user = await automationUser();
     const { count } = await prisma.lead.deleteMany({
-      where: { id, client: { workspaceId: user.workspaceId } },
+      where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } },
     });
     if (!count) throw new ApiError(404, "Lead not found.");
     revalidatePath("/automations");

@@ -726,6 +726,7 @@ model OAuthCode {
   clientId      String
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId        String
+  workspaceId   String // the workspace named on the consent screen
   redirectUri   String
   codeChallenge String
   scope         String

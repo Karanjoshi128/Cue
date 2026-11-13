@@ -219,6 +219,8 @@ export async function issueCode(request: AuthorizeRequest, user: User, origin: s
       hash: hashApiKey(code),
       clientId: request.clientId,
       userId: user.id,
+      // The workspace the consent screen named; the grant acts there.
+      workspaceId: user.workspaceId,
       redirectUri: request.redirectUri,
       codeChallenge: request.codeChallenge,
       scope: SCOPE,
@@ -236,20 +238,32 @@ export async function issueCode(request: AuthorizeRequest, user: User, origin: s
 // Tokens
 // ---------------------------------------------------------------------------
 
-/** Who may keep using a grant: the same checks an API key gets. */
-function accountProblem(user: User & { workspace: { suspendedAt: Date | null; disabledFeatures: string[] } }, workspaceId: string): string | null {
-  if (user.workspaceId !== workspaceId) return "This connection belongs to a workspace you're no longer in.";
-  if (user.bannedAt) return "Your Cue account is suspended. Contact Cue support.";
-  if (user.workspace.suspendedAt) return "This workspace is suspended. Contact Cue support.";
-  if (user.workspace.disabledFeatures.includes("api")) {
-    return "API access, which the connector uses, is turned off for this workspace.";
+/**
+ * The member a grant acts as, or why it can't be used: the same checks an API
+ * key gets. A grant belongs to the workspace it was approved in and works
+ * while they're still a member there, whichever workspace they have open in
+ * Cue, acting with their role in that workspace.
+ */
+async function grantMember(
+  userId: string,
+  workspaceId: string,
+): Promise<{ user: User } | { problem: string }> {
+  const [user, membership] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.membership.findUnique({
+      where: { userId_workspaceId: { userId, workspaceId } },
+      select: { role: true, workspace: { select: { suspendedAt: true, disabledFeatures: true } } },
+    }),
+  ]);
+  if (!user) return { problem: "That account is gone." };
+  if (!membership) return { problem: "This connection belongs to a workspace you're no longer in." };
+  if (user.bannedAt) return { problem: "Your Cue account is suspended. Contact Cue support." };
+  if (membership.workspace.suspendedAt) return { problem: "This workspace is suspended. Contact Cue support." };
+  if (membership.workspace.disabledFeatures.includes("api")) {
+    return { problem: "API access, which the connector uses, is turned off for this workspace." };
   }
-  return null;
+  return { user: { ...user, workspaceId, role: membership.role } };
 }
-
-const userWithWorkspace = {
-  include: { workspace: { select: { suspendedAt: true, disabledFeatures: true } } },
-} as const;
 
 function freshTokens() {
   const access = newSecret(ACCESS_PREFIX);
@@ -318,17 +332,15 @@ export async function exchangeCode(p: {
   });
   if (!claimed.count) throw new OAuthError("invalid_grant", "That code was already used.");
 
-  const user = await prisma.user.findUnique({ where: { id: row.userId }, ...userWithWorkspace });
-  if (!user) throw new OAuthError("invalid_grant", "That account is gone.");
-  const problem = accountProblem(user, user.workspaceId);
-  if (problem) throw new OAuthError("invalid_grant", problem);
+  const member = await grantMember(row.userId, row.workspaceId);
+  if ("problem" in member) throw new OAuthError("invalid_grant", member.problem);
 
   const t = freshTokens();
   const grant = await prisma.oAuthGrant.create({
     data: {
       clientId: row.clientId,
-      userId: user.id,
-      workspaceId: user.workspaceId,
+      userId: row.userId,
+      workspaceId: row.workspaceId,
       scope: row.scope,
       ...t.data,
     },
@@ -347,9 +359,8 @@ export async function refreshGrant(p: { refreshToken?: string; clientId?: string
   if (p.clientId && p.clientId !== grant.clientId) {
     throw new OAuthError("invalid_grant", "That refresh token was issued to another app.");
   }
-  const user = await prisma.user.findUnique({ where: { id: grant.userId }, ...userWithWorkspace });
-  const problem = user ? accountProblem(user, grant.workspaceId) : "That account is gone.";
-  if (problem) throw new OAuthError("invalid_grant", problem);
+  const member = await grantMember(grant.userId, grant.workspaceId);
+  if ("problem" in member) throw new OAuthError("invalid_grant", member.problem);
 
   // Replaced only if it's still the current one: a refresh racing another
   // (or a stolen token used after the app's) gets invalid_grant.
@@ -368,18 +379,15 @@ export async function refreshGrant(p: { refreshToken?: string; clientId?: string
  * connector any more gets a 403 that says why.
  */
 export async function userForAccessToken(token: string): Promise<User | null> {
-  const grant = await prisma.oAuthGrant.findUnique({
-    where: { accessHash: hashApiKey(token) },
-    include: { user: userWithWorkspace },
-  });
+  const grant = await prisma.oAuthGrant.findUnique({ where: { accessHash: hashApiKey(token) } });
   if (!grant || grant.revokedAt || grant.accessExpires < new Date()) return null;
-  const problem = accountProblem(grant.user, grant.workspaceId);
-  if (problem) throw new ApiError(403, problem);
+  const member = await grantMember(grant.userId, grant.workspaceId);
+  if ("problem" in member) throw new ApiError(403, member.problem);
   // Telemetry for Settings; a failed write isn't a reason to refuse.
   await prisma.oAuthGrant
     .update({ where: { id: grant.id }, data: { lastUsedAt: new Date(), useCount: { increment: 1 } } })
     .catch(() => {});
-  return grant.user;
+  return member.user;
 }
 
 // ---------------------------------------------------------------------------

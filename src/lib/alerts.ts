@@ -52,11 +52,12 @@ function escapeHtml(s: string): string {
 }
 
 async function adminEmails(workspaceId: string): Promise<string[]> {
-  const admins = await prisma.user.findMany({
-    where: { workspaceId, role: "ADMIN", emailAlerts: true, bannedAt: null },
-    select: { email: true },
+  // Admins of this workspace, by membership: people can belong to several.
+  const admins = await prisma.membership.findMany({
+    where: { workspaceId, role: "ADMIN", user: { emailAlerts: true, bannedAt: null } },
+    select: { user: { select: { email: true } } },
   });
-  return admins.map((a) => a.email);
+  return admins.map((a) => a.user.email);
 }
 
 /**

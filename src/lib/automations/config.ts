@@ -25,14 +25,15 @@ export const IG_COMMENT_SCOPE = "instagram_business_manage_comments";
 /**
  * The scopes a connect asks for. Publishing always; the extras only when the
  * connect link opts in (?comments=1, ?automations=1), so the default dialog
- * matches App Review. Messages also need the automations flag on.
+ * matches App Review. The connect route passes `automations` only when the
+ * workspace may use them (launched, or unlocked early).
  */
 export function instagramScopes(
   opts: { comments?: boolean; automations?: boolean } = {},
 ): string[] {
   const scopes = [...IG_PUBLISH_SCOPES];
   if (opts.comments || opts.automations) scopes.push(IG_COMMENT_SCOPE);
-  if (opts.automations && automationsEnabled()) {
+  if (opts.automations) {
     scopes.push("instagram_business_manage_messages");
   }
   return scopes;

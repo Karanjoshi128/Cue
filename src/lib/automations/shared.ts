@@ -1,5 +1,5 @@
 import { Prisma, type AutomationRule, type RunStage } from "@prisma/client";
-import { hasFeature } from "@/lib/plans";
+import { featureAvailable, hasFeature } from "@/lib/plans";
 import { COPY, hasAutomationScopes } from "./config";
 import { InstagramApiError, type OutgoingMessage } from "./instagram-api";
 
@@ -18,7 +18,7 @@ export const accountSelect = {
   tokenExpires: true,
   client: {
     select: {
-      workspace: { select: { id: true, suspendedAt: true, disabledFeatures: true } },
+      workspace: { select: { id: true, suspendedAt: true, disabledFeatures: true, earlyFeatures: true } },
     },
   },
 } satisfies Prisma.SocialAccountSelect;
@@ -32,6 +32,8 @@ export function automationBlocker(account: AutomationAccount): string | null {
   const ws = account.client.workspace;
   if (account.platform !== "INSTAGRAM") return "Not an Instagram account.";
   if (ws.suspendedAt) return "The workspace is suspended.";
+  // Launched, or unlocked early for this workspace (Admin → Users).
+  if (!featureAvailable(ws, "ig_automations")) return "Instagram automations aren't available yet.";
   if (!hasFeature(ws, "instagram") || !hasFeature(ws, "ig_automations")) {
     return "Instagram automations are switched off for this workspace.";
   }

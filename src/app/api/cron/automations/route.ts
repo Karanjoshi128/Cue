@@ -4,7 +4,7 @@ import { runAutomations } from "@/lib/automations/cron";
 import { recordHeartbeat } from "@/lib/platform-settings";
 
 export const dynamic = "force-dynamic";
-// Called every minute by Supabase pg_cron (SQL in docs/instagram-automations.md).
+// Called every 5 minutes by Supabase pg_cron (SQL in docs/instagram-automations.md).
 // runAutomations stops starting work at 45 s, well before this.
 export const maxDuration = 60;
 

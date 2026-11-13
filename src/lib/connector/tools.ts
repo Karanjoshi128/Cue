@@ -2,14 +2,14 @@ import type { User } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/api";
-import { workspaceHasFeature } from "@/lib/plans";
+import { workspaceFeatureAvailable, workspaceHasFeature } from "@/lib/plans";
 import {
   apiPostDetailSelect,
   createPostForUser,
   deletePostForUser,
   postSchema,
 } from "@/lib/posts";
-import { replyDeskEnabled, REPLY_LIMIT } from "@/lib/reply-desk/config";
+import { REPLY_LIMIT } from "@/lib/reply-desk/config";
 import { postDeskReply } from "@/lib/reply-desk/reply";
 
 // What an assistant can do in Cue through the connector. Each tool is one
@@ -46,7 +46,8 @@ const STATUSES = ["DRAFT", "SCHEDULED", "PUBLISHING", "PUBLISHED", "PARTIAL", "F
 const NO_ARGS = z.object({}).strict();
 
 const deskOn = async (user: User) =>
-  replyDeskEnabled() && (await workspaceHasFeature(user.workspaceId, "reply_desk"));
+  (await workspaceFeatureAvailable(user.workspaceId, "reply_desk")) &&
+  (await workspaceHasFeature(user.workspaceId, "reply_desk"));
 
 export const TOOLS: Tool[] = [
   tool({

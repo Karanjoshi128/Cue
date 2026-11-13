@@ -6,9 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { toResult } from "@/lib/to-result";
-import { workspaceHasFeature } from "@/lib/plans";
+import { workspaceFeatureAvailable, workspaceHasFeature } from "@/lib/plans";
 import { aiEnabled, draftCommentReply } from "@/lib/ai";
-import { replyDeskEnabled } from "./config";
 import { ownedComment, postDeskReply } from "./reply";
 import { syncReplyDesk } from "./sync";
 
@@ -17,7 +16,10 @@ import { syncReplyDesk } from "./sync";
 
 async function deskUser() {
   const user = await requireUser();
-  if (!replyDeskEnabled()) throw new ApiError(403, "The Reply Desk isn't available yet.");
+  // Launched, or unlocked early for this workspace (Admin → Users).
+  if (!(await workspaceFeatureAvailable(user.workspaceId, "reply_desk"))) {
+    throw new ApiError(403, "The Reply Desk isn't available yet.");
+  }
   if (!(await workspaceHasFeature(user.workspaceId, "reply_desk"))) {
     throw new ApiError(403, "The Reply Desk is switched off for this workspace.");
   }

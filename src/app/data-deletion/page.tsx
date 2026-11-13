@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
-import { automationsEnabled } from "@/lib/automations/config";
+import { featureInUse } from "@/lib/plans";
 
 export const metadata: Metadata = {
   title: "Data Deletion",
@@ -9,7 +9,9 @@ export const metadata: Metadata = {
 
 
 // Meta requires a public Data Deletion Instructions URL for app review.
-export default function DataDeletionPage() {
+export default async function DataDeletionPage() {
+  // Launched, or unlocked early for a workspace (re-rendered by setEarlyFeature).
+  const automations = await featureInUse("ig_automations");
   return (
     <LegalShell title="Data Deletion">
         <div className="text-muted-foreground space-y-10 text-[1rem] leading-[1.75] [&_a]:underline-offset-2 [&_li]:pl-1 [&_strong]:font-medium">
@@ -32,7 +34,7 @@ export default function DataDeletionPage() {
               uploaded media, and deleting a client removes its connected
               accounts, posts, and uploaded media. (Files in storage your
               workspace connected itself stay in your own bucket.)
-              {automationsEnabled() &&
+              {automations &&
                 " Deleting an Instagram comment automation, or disconnecting its account, also deletes the record of the comments and messages it acted on, and disconnecting the account deletes its leads."}{" "}
               Deleting a client&apos;s link page deletes its view and tap
               counts, and disconnecting an AI assistant in Settings ends its

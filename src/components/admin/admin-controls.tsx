@@ -13,6 +13,7 @@ import {
   setPublishingPaused,
   setSiteTheme,
   setUserRole,
+  setEarlyFeature,
   setWorkspaceFeature,
   setWorkspacePlan,
 } from "@/lib/admin-actions";
@@ -236,6 +237,38 @@ export function FeatureSwitch({
         aria-label={label}
       />
     </div>
+  );
+}
+
+/**
+ * Unlocks a feature still waiting on Meta or Google for one workspace, ahead
+ * of launch (Admin → Users). It applies to everyone in that workspace.
+ */
+export function EarlySwitch({
+  workspaceId,
+  workspaceName,
+  feature,
+  label,
+  unlocked,
+}: {
+  workspaceId: string;
+  workspaceName: string;
+  feature: string;
+  label: string;
+  unlocked: boolean;
+}) {
+  const { pending, run } = useRun();
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-xs whitespace-nowrap">
+      <Switch
+        size="sm"
+        checked={unlocked}
+        disabled={pending}
+        onCheckedChange={(on) => run(() => setEarlyFeature(workspaceId, feature, on))}
+        aria-label={`${label} for ${workspaceName}`}
+      />
+      <span className={unlocked ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+    </label>
   );
 }
 

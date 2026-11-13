@@ -778,7 +778,7 @@ function HowItWorks({ canCreate, onNew }: { canCreate: boolean; onNew: () => voi
             Comment, reply, <em>DM.</em>
           </h3>
           <p className="text-muted-foreground text-sm leading-relaxed">
-            Cue checks each account&apos;s comments every minute. Instagram allows one DM per
+            Cue answers new comments as they arrive. Instagram allows one DM per
             comment, sent within 7 days of it.
           </p>
         </div>

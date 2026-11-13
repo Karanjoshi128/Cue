@@ -17,7 +17,7 @@ import {
   Sun,
   UserPlus,
 } from "lucide-react";
-import { navItems } from "@/components/nav-items";
+import { useNavItems } from "@/components/nav-features";
 import { ClientDot } from "@/components/post-bits";
 import { Kbd } from "@/components/page-header";
 import { writeClientScope, type ClientOption } from "@/components/client-switcher";
@@ -76,6 +76,7 @@ export function CommandMenu({
   const [open, setOpen] = useState(false);
   const pendingG = useRef<number | null>(null);
   const modKey = useModKey();
+  const navItems = useNavItems();
 
   const run = useCallback((fn: () => void) => {
     setOpen(false);
@@ -118,7 +119,7 @@ export function CommandMenu({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [router]);
+  }, [router, navItems]);
 
   return (
     <>

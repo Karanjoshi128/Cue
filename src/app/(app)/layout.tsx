@@ -15,6 +15,8 @@ import { zoned } from "@/lib/timezone";
 import { getPlatformSettings } from "@/lib/platform-settings";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { HELP_GUIDES } from "@/lib/help";
+import { featuresAvailable } from "@/lib/plans";
+import { NavFeaturesProvider } from "@/components/nav-features";
 
 // Titles and search words for the command palette's Help group.
 const HELP_TOPICS = HELP_GUIDES.map((g) => ({
@@ -86,6 +88,7 @@ export default async function AppLayout({
   const workspaceName = workspace?.name ?? "Workspace";
 
   return (
+    <NavFeaturesProvider value={featuresAvailable(workspace)}>
     <TooltipProvider delay={300}>
       <div className="bg-canvas min-h-dvh shell:flex">
         <AppSidebar
@@ -129,5 +132,6 @@ export default async function AppLayout({
         </div>
       </div>
     </TooltipProvider>
+    </NavFeaturesProvider>
   );
 }

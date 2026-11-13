@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { automationsEnabled, RUN_RETENTION_DAYS } from "./config";
+import { featureAvailableAnywhere } from "@/lib/plans";
+import { RUN_RETENTION_DAYS } from "./config";
 import { pollAccount, processRun } from "./engine";
 import { sendFollowUps } from "./conversation";
 import { runSpikeAlerts } from "@/lib/alerts";
@@ -24,7 +25,9 @@ export async function runAutomations(budgetMs = 45_000) {
     purged: 0,
     errors: 0,
   };
-  if (!automationsEnabled()) return { ...summary, skipped: true };
+  // Off everywhere until launch, except in workspaces unlocked early; each
+  // account is then checked on its own (automationBlocker).
+  if (!(await featureAvailableAnywhere("ig_automations"))) return { ...summary, skipped: true };
 
   const accounts = await prisma.socialAccount.findMany({
     where: {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizeCron } from "@/lib/cron-auth";
 import { recordHeartbeat } from "@/lib/platform-settings";
-import { replyDeskEnabled } from "@/lib/reply-desk/config";
+import { featureAvailableAnywhere } from "@/lib/plans";
 import { syncReplyDesk } from "@/lib/reply-desk/sync";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
   if (!authorizeCron(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!replyDeskEnabled()) return NextResponse.json({ ok: true, skipped: true });
+  // Launched, or unlocked early somewhere; sync checks each account (allowed()).
+  if (!(await featureAvailableAnywhere("reply_desk"))) return NextResponse.json({ ok: true, skipped: true });
   try {
     const result = await syncReplyDesk();
     await recordHeartbeat("reply-desk", true, { ...result, errors: result.errors.slice(0, 5) });

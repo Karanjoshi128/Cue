@@ -6,7 +6,8 @@ import type {
 import { prisma } from "@/lib/prisma";
 import { ensureFreshAccessToken } from "@/lib/tokens";
 import { isPublishingPaused } from "@/lib/platform-settings";
-import { automationsEnabled, PRIVATE_REPLY_WINDOW_MS } from "./config";
+import { featureAvailableAnywhere } from "@/lib/plans";
+import { PRIVATE_REPLY_WINDOW_MS } from "./config";
 import { matchesKeywords } from "./match";
 import {
   listComments,
@@ -32,9 +33,9 @@ import { aiEnabled } from "@/lib/ai";
 
 /*
  * Instagram automations, the first message. A comment reaches ingestComments()
- * from a webhook (instant, once Meta grants Advanced Access) or from
- * pollAccount() (the every-minute check, which is all that works in
- * Development mode, and a safety net after). Story replies and DM keywords
+ * from a webhook (instant; Meta sends them once the app is published) or
+ * from pollAccount() (the check every 5 minutes, a safety net for anything a
+ * webhook missed). Story replies and DM keywords
  * come in through conversation.ts. Either way each one becomes at most one
  * AutomationRun, which processRun() sends: the DM first, then the public
  * reply, because a reply saying "check your DMs" is wrong when the DM didn't
@@ -528,7 +529,8 @@ export async function pollAccount(accountId: string): Promise<PollResult> {
 export async function handleWebhookComments(
   byAccount: Map<string, IncomingComment[]>,
 ): Promise<void> {
-  if (!automationsEnabled()) return;
+  // Each account is checked below (automationBlocker): launched, or unlocked early.
+  if (!(await featureAvailableAnywhere("ig_automations"))) return;
   for (const [igUserId, comments] of byAccount) {
     // The same Instagram account can be connected to more than one client.
     const accounts = await prisma.socialAccount.findMany({

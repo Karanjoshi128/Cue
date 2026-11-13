@@ -6,10 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { toResult } from "@/lib/to-result";
-import { workspaceHasFeature } from "@/lib/plans";
+import { workspaceFeatureAvailable, workspaceHasFeature } from "@/lib/plans";
 import { ensureFreshAccessToken } from "@/lib/tokens";
 import {
-  automationsEnabled,
   hasAutomationScopes,
   LIMITS,
   type AutomationPreset,
@@ -25,7 +24,8 @@ import { aiEnabled, draftAutomation, writeDmVariants as writeVariants } from "@/
 
 async function automationUser() {
   const user = await requireUser();
-  if (!automationsEnabled()) {
+  // Launched, or unlocked early for this workspace (Admin → Users).
+  if (!(await workspaceFeatureAvailable(user.workspaceId, "ig_automations"))) {
     throw new ApiError(403, "Instagram automations aren't available yet.");
   }
   if (!(await workspaceHasFeature(user.workspaceId, "ig_automations"))) {
@@ -336,7 +336,7 @@ export async function deleteAutomation(id: string) {
   });
 }
 
-/** Reads the account's comments now instead of waiting for the next minute. */
+/** Reads the account's comments now instead of waiting for the next check. */
 export async function checkCommentsNow(accountId: string) {
   return toResult(async () => {
     const user = await automationUser();

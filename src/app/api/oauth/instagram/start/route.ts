@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectingUser, returnPage, startOAuthState } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
 import { instagramScopes } from "@/lib/automations/config";
+import { workspaceFeatureAvailable } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -32,10 +33,12 @@ export async function GET(req: NextRequest) {
   const redirectUri = `${process.env.APP_URL ?? req.nextUrl.origin}/api/oauth/instagram/callback`;
   // Opt-in extras, so a default connect asks only for what App Review covers:
   // ?comments=1 adds comment access (first comments, Reply Desk), and
-  // ?automations=1 adds comments plus messages (comment automations, while
-  // NEXT_PUBLIC_IG_AUTOMATIONS is on).
+  // ?automations=1 adds comments plus messages (comment automations, once
+  // launched or unlocked early for the workspace).
   const comments = req.nextUrl.searchParams.get("comments") === "1";
-  const automations = req.nextUrl.searchParams.get("automations") === "1";
+  const automations =
+    req.nextUrl.searchParams.get("automations") === "1" &&
+    (await workspaceFeatureAvailable(user.workspaceId, "ig_automations"));
   const page = returnPage(req.nextUrl.searchParams.get("next"));
   const { state, attach } = startOAuthState("instagram", {
     clientId,

@@ -4,8 +4,7 @@ import { redirect } from "next/navigation";
 import { Check, TriangleAlert } from "lucide-react";
 import { getAuth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasFeature } from "@/lib/plans";
-import { replyDeskEnabled } from "@/lib/reply-desk/config";
+import { featureAvailable, hasFeature } from "@/lib/plans";
 import { AUTHORIZE_PATH } from "@/lib/connector/config";
 import { checkAuthorizeRequest, hostOf } from "@/lib/connector/oauth";
 import { requestOrigin } from "@/lib/connector/origin";
@@ -59,7 +58,7 @@ export default async function AuthorizePage({
   const workspace = user
     ? await prisma.workspace.findUnique({
         where: { id: user.workspaceId },
-        select: { name: true, disabledFeatures: true },
+        select: { name: true, disabledFeatures: true, earlyFeatures: true },
       })
     : null;
 
@@ -109,7 +108,7 @@ export default async function AuthorizePage({
 
   const host = hostOf(check.request.redirectUri);
   const local = host === "an app on this computer";
-  const desk = replyDeskEnabled() && !!workspace && hasFeature(workspace, "reply_desk");
+  const desk = !!workspace && featureAvailable(workspace, "reply_desk") && hasFeature(workspace, "reply_desk");
   const can = [
     "See your clients, their connected accounts and their posts",
     "Write drafts and schedule posts, and publish when you ask it to",

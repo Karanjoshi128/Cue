@@ -347,7 +347,7 @@ export async function listUsers(opts: { q?: string; status?: "banned"; page?: nu
         lastSeenAt: true,
         bannedAt: true,
         bannedReason: true,
-        workspace: { select: { id: true, name: true, suspendedAt: true } },
+        workspace: { select: { id: true, name: true, suspendedAt: true, earlyFeatures: true } },
         _count: { select: { posts: true } },
       },
     }),
@@ -675,7 +675,7 @@ export async function getPlatformPage() {
   const [settings, heartbeat, automationsHeartbeat] = await Promise.all([
     getPlatformSettings(),
     prisma.cronHeartbeat.findUnique({ where: { name: "publish" } }),
-    // Instagram comment automations' every-minute job (only runs while the flag is on).
+    // Instagram comment automations' job, every 5 minutes (runs once launched or unlocked early).
     prisma.cronHeartbeat.findUnique({ where: { name: "automations" } }),
   ]);
   return { settings, heartbeat, automationsHeartbeat, admins: platformAdminEmails() };

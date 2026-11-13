@@ -1,12 +1,15 @@
 import { getPlatformPage } from "@/lib/admin-data";
 import { AnnouncementControl, PauseControl } from "@/components/admin/admin-controls";
 import { AdminHeader, Ago, Mono, Panel } from "@/components/admin/admin-ui";
-import { automationsEnabled } from "@/lib/automations/config";
+import { featureAvailableAnywhere } from "@/lib/plans";
 
 export const metadata = { title: "Platform" };
 
 export default async function AdminPlatformPage() {
-  const { settings, heartbeat, automationsHeartbeat, admins } = await getPlatformPage();
+  const [{ settings, heartbeat, automationsHeartbeat, admins }, automations] = await Promise.all([
+    getPlatformPage(),
+    featureAvailableAnywhere("ig_automations"),
+  ]);
   return (
     <>
       <AdminHeader
@@ -30,8 +33,8 @@ export default async function AdminPlatformPage() {
           <dd className="min-w-0 break-all"><Mono>{heartbeat?.summary ? JSON.stringify(heartbeat.summary) : "-"}</Mono></dd>
         </dl>
       </Panel>
-      {automationsEnabled() && (
-        <Panel title="Instagram automations heartbeat" description="The every-minute comment check (POST /api/cron/automations).">
+      {automations && (
+        <Panel title="Instagram automations heartbeat" description="The comment check every 5 minutes, behind Meta's webhooks (POST /api/cron/automations).">
           <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
             <dt className="text-muted-foreground">Last run</dt>
             <dd>{automationsHeartbeat ? <Ago date={automationsHeartbeat.lastRunAt} /> : "None recorded yet"}</dd>

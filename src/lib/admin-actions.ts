@@ -13,7 +13,7 @@ import {
   VIEW_AS_COOKIE,
   VIEW_AS_MINUTES,
 } from "@/lib/platform-admin";
-import { isFeatureKey, PLANS } from "@/lib/plans";
+import { FEATURES, isEarlyFeature, isFeatureKey, PLANS } from "@/lib/plans";
 import { updatePlatformSettings } from "@/lib/platform-settings";
 import { SITE_THEME_KEYS, siteTheme } from "@/lib/site-themes";
 import { SITE_THEME_TAG } from "@/lib/site-theme-server";
@@ -121,6 +121,39 @@ export async function setWorkspaceFeature(
     await prisma.workspace.update({ where: { id: ws.id }, data: { disabledFeatures: [...disabled] } });
     await audit({ actor, action: enabled ? "workspace.feature_on" : "workspace.feature_off", targetType: "workspace", targetId: ws.id, workspaceId: ws.id, reason: optionalReason.parse(reason), details: { feature } });
     return done();
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/**
+ * Unlocks a feature that's still waiting on Meta or Google (EARLY_FEATURES)
+ * for one workspace, ahead of its launch, or locks it again. The workspace's
+ * own Features switch still applies on top.
+ */
+export async function setEarlyFeature(
+  workspaceId: string,
+  feature: string,
+  unlocked: boolean,
+): Promise<AdminResult> {
+  const actor = await getPlatformAdminEmail();
+  if (!actor) return NOT_ALLOWED;
+  try {
+    if (!isEarlyFeature(feature)) return { ok: false, error: "Unknown feature." };
+    const on = z.boolean().parse(unlocked);
+    const ws = await prisma.workspace.findUniqueOrThrow({
+      where: { id: id.parse(workspaceId) },
+      select: { id: true, name: true, earlyFeatures: true },
+    });
+    const early = new Set(ws.earlyFeatures);
+    if (on) early.add(feature);
+    else early.delete(feature);
+    await prisma.workspace.update({ where: { id: ws.id }, data: { earlyFeatures: [...early] } });
+    await audit({ actor, action: on ? "workspace.early_on" : "workspace.early_off", targetType: "workspace", targetId: ws.id, workspaceId: ws.id, details: { feature } });
+    // The legal pages describe a feature once any workspace can use it.
+    revalidatePath("/privacy");
+    revalidatePath("/data-deletion");
+    return done(`${FEATURES[feature].label} ${on ? "unlocked for" : "locked again for"} ${ws.name}.`);
   } catch (e) {
     return fail(e);
   }

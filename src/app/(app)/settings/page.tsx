@@ -21,7 +21,13 @@ import {
 import { ThemePicker } from "@/components/theme-picker";
 import { Kbd, PageHeader } from "@/components/page-header";
 import { SettingsNav } from "@/components/settings-nav";
+import { AlertsToggle } from "@/components/alerts-toggle";
+import { alertsConfigured } from "@/lib/alerts";
 import { navItems } from "@/components/nav-items";
+import { ConnectorSettings } from "@/components/connector-settings";
+import { connectedApps } from "@/lib/connector/oauth";
+import { requestOrigin } from "@/lib/connector/origin";
+import { MCP_PATH } from "@/lib/connector/config";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +69,10 @@ export default async function SettingsPage() {
   // Admin-only: getApiKeys() itself refuses non-admins, so don't ask.
   const apiKeys = isAdmin && apiAllowed ? await getApiKeys() : [];
   const usage = workspace ? await getWorkspaceUsage(workspace.id) : null;
+  const [apps, origin] = await Promise.all([
+    user && apiAllowed ? connectedApps(user.id) : [],
+    requestOrigin(),
+  ]);
   const plan = PLANS[workspace?.plan ?? "UNLIMITED"];
 
   const sections = [
@@ -71,6 +81,7 @@ export default async function SettingsPage() {
     { id: "team", label: "Team" },
     { id: "plan", label: "Plan and usage" },
     { id: "storage", label: "Media storage" },
+    ...(apiAllowed ? [{ id: "connector", label: "Claude and ChatGPT" }] : []),
     ...(isAdmin ? [{ id: "api-keys", label: "API keys" }] : []),
     { id: "appearance", label: "Appearance" },
     { id: "shortcuts", label: "Shortcuts" },
@@ -113,6 +124,12 @@ export default async function SettingsPage() {
               email={user?.email ?? "-"}
               role={user?.role ?? "MANAGER"}
             />
+            {/* Alerts go to admins, so only they see the switch. */}
+            {isAdmin && (
+              <div className="mt-5">
+                <AlertsToggle enabled={user?.emailAlerts ?? true} configured={alertsConfigured()} />
+              </div>
+            )}
           </Section>
 
           <Section
@@ -196,6 +213,16 @@ export default async function SettingsPage() {
               customAllowed={!workspace || hasFeature(workspace, "custom_storage")}
             />
           </Section>
+
+          {apiAllowed && (
+            <Section
+              id="connector"
+              title="Claude and ChatGPT"
+              description="Let an AI assistant draft, schedule and check posts for you, as you."
+            >
+              <ConnectorSettings mcpUrl={`${origin}${MCP_PATH}`} apps={apps} />
+            </Section>
+          )}
 
           {isAdmin && (
             <Section

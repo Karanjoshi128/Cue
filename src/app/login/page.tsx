@@ -67,7 +67,7 @@ export default async function LoginPage({
           <p className="text-muted-foreground text-sm">
             Auth isn&apos;t configured yet, so Cue is running in local dev mode.
           </p>
-          <Button render={<Link href="/dashboard" />} size="xl" className="w-full">
+          <Button render={<Link href={safeNext(next) ?? "/dashboard"} />} size="xl" className="w-full">
             Enter app
           </Button>
         </div>

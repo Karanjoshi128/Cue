@@ -53,7 +53,7 @@ export const LIMIT_LABELS: Record<LimitKey, string> = {
 export const FEATURES = {
   api: {
     label: "API access",
-    description: "API keys and the /api/v1 endpoints.",
+    description: "API keys, the /api/v1 endpoints and the Claude and ChatGPT connector.",
   },
   custom_storage: {
     label: "Own storage",
@@ -70,6 +70,22 @@ export const FEATURES = {
   youtube: {
     label: "YouTube",
     description: "Connecting YouTube channels.",
+  },
+  ig_automations: {
+    label: "Instagram automations",
+    description: "Replying to comments and sending DMs when a comment matches a keyword.",
+  },
+  reply_desk: {
+    label: "Reply Desk",
+    description: "One inbox of comments across Instagram and YouTube, with replies from Cue.",
+  },
+  bio_pages: {
+    label: "Link-in-bio pages",
+    description: "A public page per client at trycue.space/b/<name>, with click counts.",
+  },
+  ai: {
+    label: "AI helpers",
+    description: "Writing DM variations and reply drafts, sorting comments, holding abuse.",
   },
 } as const;
 

@@ -1,6 +1,9 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { CONTACT_EMAIL as CONTACT, LegalShell } from "@/components/marketing/site-chrome";
+import { automationsEnabled } from "@/lib/automations/config";
+import { replyDeskEnabled } from "@/lib/reply-desk/config";
+import { aiEnabled } from "@/lib/ai";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -10,10 +13,16 @@ export const metadata: Metadata = {
 // Operating entity: Karan Joshi (individual). Governing law: India.
 // Describes Cue's actual data practices for Meta / LinkedIn / Google review.
 // The YouTube API Services section is required for Google OAuth verification.
-const UPDATED = "October 13, 2026";
+const UPDATED = "October 28, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 
 export default function PrivacyPage() {
+  // Comment automations, the Reply Desk and AI helpers are described only once
+  // they're switched on, so the policy matches what's live (and what Meta and
+  // Google are reviewing).
+  const automations = automationsEnabled();
+  const replyDesk = replyDeskEnabled();
+  const ai = aiEnabled();
   return (
     <LegalShell title="Privacy Policy" updated={UPDATED}>
         <div className="text-muted-foreground space-y-10 text-[1rem] leading-[1.75] [&_a]:underline-offset-2 [&_li]:pl-1 [&_strong]:font-medium">
@@ -54,6 +63,49 @@ export default function PrivacyPage() {
                 Cloudflare R2, or in the storage provider your workspace
                 connects in Settings.
               </li>
+              {automations && (
+                <li>
+                  <strong className="text-foreground">
+                    Instagram comment automations.
+                  </strong>{" "}
+                  If your workspace sets up an automation, Cue reads new
+                  comments on that Instagram account&apos;s posts, and the
+                  direct messages people send it: replies to its stories,
+                  messages with a keyword, and answers to a question the
+                  automation asked. For each one that matches an automation, we
+                  store its id and text, the person&apos;s Instagram username
+                  and Instagram-scoped id, and what Cue sent. If an automation
+                  sends its link to followers only, Cue asks Instagram whether
+                  the person follows the account. If it asks for an email
+                  address or phone number, we store the answer as a lead for
+                  the account&apos;s owner. Comments and messages that don&apos;t
+                  match an automation are read and discarded, not stored.
+                </li>
+              )}
+              {replyDesk && (
+                <li>
+                  <strong className="text-foreground">Reply Desk.</strong> If
+                  your workspace uses the Reply Desk, Cue reads recent comments
+                  on the Instagram and YouTube accounts you connected with
+                  comment access, and stores each comment&apos;s id and text,
+                  its author&apos;s name and id, and the post it&apos;s on, so
+                  your team can answer them from Cue.
+                </li>
+              )}
+              <li>
+                <strong className="text-foreground">Link pages.</strong> If
+                your workspace publishes a link page for a client, Cue counts
+                how many times the page is viewed and each link or post on it
+                is tapped, per day. It doesn&apos;t keep a record of who
+                visited.
+              </li>
+              <li>
+                <strong className="text-foreground">AI assistants you connect.</strong>{" "}
+                If you connect an assistant such as Claude or ChatGPT to Cue,
+                we store which app you approved, when, and when it was last
+                used, with its access tokens stored only as hashes. It acts
+                with your permissions in your workspace.
+              </li>
             </ul>
           </Section>
 
@@ -66,6 +118,31 @@ export default function PrivacyPage() {
                 YouTube accounts you connect, at the times you set.
               </li>
               <li>Show publishing status, history, and account health.</li>
+              {automations && (
+                <li>
+                  Reply to comments, and send the direct messages you wrote,
+                  when someone comments a keyword you chose, replies to a
+                  story, or messages a keyword to an Instagram account you
+                  connect. Cue only messages people who commented or wrote to
+                  the account first, within the time Instagram allows (7 days
+                  after a comment, 24 hours after their last message).
+                </li>
+              )}
+              {replyDesk && (
+                <li>
+                  Show comments on your connected accounts in the Reply Desk,
+                  and post the replies your team writes there, as the account.
+                </li>
+              )}
+              {ai && (
+                <li>
+                  When your team uses Cue&apos;s AI helpers, send the text
+                  involved (a direct message, a comment and the post it&apos;s
+                  on, or the description of an automation) to Anthropic&apos;s
+                  Claude API to write a suggestion, to sort comments, or to
+                  screen comments for abuse when an automation asks for that.
+                </li>
+              )}
             </ul>
             <p>
               We do <strong className="text-foreground">not</strong> sell your
@@ -118,8 +195,15 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong className="text-foreground">Resend</strong> - delivers
-                the sign-in code emails.
+                the sign-in code emails and the alert emails admins can turn
+                on.
               </li>
+              {ai && (
+                <li>
+                  <strong className="text-foreground">Anthropic</strong> - the
+                  Claude API, for the AI helpers described above.
+                </li>
+              )}
               <li>
                 <strong className="text-foreground">Zoho Mail</strong> - our
                 business email, for messages you send us.
@@ -212,6 +296,27 @@ export default function PrivacyPage() {
                 Deleting a client or workspace removes its accounts, posts, and
                 media. Files in storage your workspace connected itself stay in
                 your bucket, under your control.
+              </li>
+              {automations && (
+                <li>
+                  Records of comments and messages an automation acted on are
+                  deleted after 30 days. Deleting the automation, disconnecting
+                  the account, or deleting the client removes them straight
+                  away. Leads are kept until your team deletes them,
+                  disconnects the account, or deletes the client.
+                </li>
+              )}
+              {replyDesk && (
+                <li>Comments in the Reply Desk are deleted after 30 days.</li>
+              )}
+              <li>
+                A link page&apos;s view and tap counts are deleted with the
+                page.
+              </li>
+              <li>
+                An assistant you connected stays connected until you
+                disconnect it in Settings, or until it goes 60 days without
+                renewing its access.
               </li>
             </ul>
           </Section>

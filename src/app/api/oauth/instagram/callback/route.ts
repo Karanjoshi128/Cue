@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { connectingUser, endOAuthState, readOAuthState } from "@/lib/oauth-guard";
+import { connectingUser, endOAuthState, readOAuthState, returnPage } from "@/lib/oauth-guard";
 import { encrypt } from "@/lib/crypto";
+import {
+  automationsEnabled,
+  hasAutomationScopes,
+  instagramScopes,
+} from "@/lib/automations/config";
+import { subscribeToWebhooks } from "@/lib/automations/instagram-api";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The token response lists what was granted, as a string or an array. When it
+ * doesn't, record what was asked for. Written on reconnect too: publish.ts
+ * and the automations read it to tell what an account may do.
+ */
+function grantedScopes(permissions: unknown, requested: string[]): string {
+  if (Array.isArray(permissions)) return permissions.join(",");
+  if (typeof permissions === "string" && permissions) return permissions;
+  return requested.join(",");
+}
 
 export async function GET(req: NextRequest) {
   // Every exit drops the nonce cookie, so a callback link works only once.
@@ -21,7 +38,7 @@ async function connect(req: NextRequest): Promise<NextResponse> {
   if (!state) {
     return NextResponse.redirect(new URL("/clients?error=connect_expired", req.url));
   }
-  const { clientId, comments } = state;
+  const { clientId, comments, automations, next } = state;
 
   // The client is re-checked too: membership can change mid-flow.
   const user = await connectingUser(req, "instagram");
@@ -52,7 +69,12 @@ async function connect(req: NextRequest): Promise<NextResponse> {
   if (!shortRes.ok) {
     return NextResponse.redirect(new URL("/clients?error=instagram_token", req.url));
   }
-  const short = (await shortRes.json()) as { access_token: string; user_id: number };
+  const short = (await shortRes.json()) as {
+    access_token: string;
+    user_id: number;
+    permissions?: unknown;
+  };
+  const scopes = grantedScopes(short.permissions, instagramScopes({ comments, automations }));
 
   // 2. Exchange for a long-lived token (~60 days).
   const longRes = await fetch(
@@ -75,13 +97,7 @@ async function connect(req: NextRequest): Promise<NextResponse> {
   }
   const me = (await meRes.json()) as { user_id: string; username: string };
 
-  // Written on reconnect too: publish.ts reads it to tell an account
-  // connected before comment access was requested.
-  const scopes =
-    "instagram_business_basic,instagram_business_content_publish" +
-    (comments ? ",instagram_business_manage_comments" : "");
-
-  await prisma.socialAccount.upsert({
+  const account = await prisma.socialAccount.upsert({
     where: {
       clientId_platform_externalId: {
         clientId,
@@ -94,6 +110,7 @@ async function connect(req: NextRequest): Promise<NextResponse> {
       refreshToken: encrypt(long.access_token), // IG refreshes the same token
       tokenExpires: new Date(Date.now() + long.expires_in * 1000),
       displayName: `@${me.username}`,
+      // A reconnect can add (or drop) comment access, so always record it.
       scopes,
     },
     create: {
@@ -106,7 +123,24 @@ async function connect(req: NextRequest): Promise<NextResponse> {
       tokenExpires: new Date(Date.now() + long.expires_in * 1000),
       scopes,
     },
+    select: { id: true },
   });
 
-  return NextResponse.redirect(new URL("/clients?connected=instagram", req.url));
+  // Automations: ask Meta to send this account's comment and message webhooks.
+  // Best effort. Until then (or if it fails) the every-minute check covers it.
+  if (automationsEnabled() && hasAutomationScopes(scopes)) {
+    try {
+      await subscribeToWebhooks(long.access_token);
+      await prisma.socialAccount.update({
+        where: { id: account.id },
+        data: { webhooksSubscribedAt: new Date() },
+      });
+    } catch (err) {
+      console.error("[instagram] comment webhook subscription failed:", err);
+    }
+  }
+
+  return NextResponse.redirect(
+    new URL(`${returnPage(next)}?connected=instagram`, req.url),
+  );
 }

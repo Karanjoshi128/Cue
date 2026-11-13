@@ -12,11 +12,20 @@ type OAuthFlow = "linkedin" | "linkedin-page" | "instagram" | "youtube";
 // proves the browser finishing the flow is the one that began it. Without
 // that, anyone could consent with their own account and send a member the
 // callback link, attaching the sender's channel to that member's client.
+/**
+ * Where a connect flow returns to: ?next= when it's one of these pages,
+ * otherwise Clients. A fixed list, so the redirect can't be pointed elsewhere.
+ */
+const RETURN_PAGES = ["/automations", "/replies"] as const;
+
 const stateSchema = z.object({
   clientId: z.string().min(1).max(100),
   nonce: z.string().min(16).max(64),
-  // YouTube only: also asked for the comment scope (see youtube/start).
+  // Also asked for the comment scope (see youtube/start, instagram/start).
   comments: z.boolean().optional(),
+  // Instagram only: comments plus messages, for automations.
+  automations: z.boolean().optional(),
+  next: z.enum(RETURN_PAGES).optional(),
 });
 export type OAuthState = z.infer<typeof stateSchema>;
 
@@ -70,6 +79,13 @@ export function readOAuthState(req: NextRequest, flow: OAuthFlow): OAuthState | 
 export function endOAuthState(res: NextResponse, flow: OAuthFlow): NextResponse {
   res.cookies.delete({ name: stateCookie(flow), path: STATE_COOKIE_OPTIONS.path });
   return res;
+}
+
+/** ?next= when it's one of RETURN_PAGES, otherwise Clients. */
+export function returnPage(
+  value: string | null | undefined,
+): "/clients" | (typeof RETURN_PAGES)[number] {
+  return RETURN_PAGES.find((p) => p === value) ?? "/clients";
 }
 
 /**

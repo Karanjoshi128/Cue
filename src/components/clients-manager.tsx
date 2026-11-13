@@ -64,8 +64,8 @@ interface AccountLite {
   renewable: boolean;
   /** A LinkedIn Company Page rather than a member's profile. */
   isPage: boolean;
-  /** Connected with comment access, which a reconnect must ask for again. */
-  comments: boolean;
+  /** Extra access it was connected with, which a reconnect must ask for again. */
+  extra: "comments" | "automations" | null;
 }
 interface ClientLite {
   id: string;
@@ -301,9 +301,13 @@ export function ClientsManager({
     });
   }
 
-  function connect(clientId: string, route: string, comments = false) {
+  function connect(
+    clientId: string,
+    route: string,
+    extra: AccountLite["extra"] = null,
+  ) {
     window.location.assign(
-      `/api/oauth/${route}/start?clientId=${clientId}${comments ? "&comments=1" : ""}`,
+      `/api/oauth/${route}/start?clientId=${clientId}${extra ? `&${extra}=1` : ""}`,
     );
   }
 
@@ -312,7 +316,8 @@ export function ClientsManager({
    * again updates it in place (same client, platform and id), so this is the
    * whole of "reconnect". Null for a Company Page while that app is off. The
    * callback rewrites the stored scopes, so an account with comment access is
-   * reconnected with &comments=1 (see the call site) to keep it.
+   * reconnected with &comments=1 or &automations=1 (see the call site) to
+   * keep it.
    */
   function reconnectRoute(a: AccountLite): string | null {
     if (a.platform === "INSTAGRAM") return "instagram";
@@ -493,7 +498,7 @@ export function ClientsManager({
                                     render={
                                       <button
                                         type="button"
-                                        onClick={() => connect(c.id, reconnectRoute(a)!, a.comments)}
+                                        onClick={() => connect(c.id, reconnectRoute(a)!, a.extra)}
                                         aria-label={`Reconnect ${a.displayName} (${h.label.toLowerCase()})`}
                                         className={cn(
                                           "-my-1 flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[0.6875rem] font-medium shadow-hairline transition-colors",

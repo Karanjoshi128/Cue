@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/safe-next";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +18,6 @@ export async function GET(req: NextRequest) {
       );
     }
   }
-  return NextResponse.redirect(new URL("/dashboard", req.url));
+  const next = safeNext(req.nextUrl.searchParams.get("next")) ?? "/dashboard";
+  return NextResponse.redirect(new URL(next, req.url));
 }

@@ -544,8 +544,17 @@ function PageEditor({
                           <Image src={t.image} alt="" fill unoptimized sizes="44px" className="object-cover" />
                         </span>
                         <div className="min-w-0 flex-1 space-y-1">
-                          <p className="text-muted-foreground truncate text-xs">
-                            {t.caption || "No caption"} · {taps(stats?.byTarget[t.id])}
+                          {/* The count sits outside the truncated caption, so a long caption can't hide it. */}
+                          <p className="text-muted-foreground flex gap-2 text-xs">
+                            <span className="min-w-0 flex-1 truncate">{t.caption || "No caption"}</span>
+                            <span
+                              className={cn(
+                                "shrink-0 font-mono tabular-nums",
+                                stats?.byTarget[t.id] ? "text-foreground" : "text-muted-foreground",
+                              )}
+                            >
+                              {taps(stats?.byTarget[t.id])}
+                            </span>
                           </p>
                           <Input
                             value={value}

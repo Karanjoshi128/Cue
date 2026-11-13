@@ -1,4 +1,11 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import type {
+  CalendarFilters,
+  CalendarPost,
+  PostKind,
+  StatusFilter,
+} from "@/lib/calendar-shared";
 import { requireAdmin, requireUser, requireWorkspaceId } from "@/lib/auth";
 
 // Every function here self-scopes to the caller's workspace via
@@ -69,12 +76,35 @@ export type StorageSummary = NonNullable<
   Awaited<ReturnType<typeof getStorageSummary>>
 >;
 
-export async function getUsers() {
+/** The workspace's members (with their role here) and its open invites. */
+export async function getTeam() {
   const workspaceId = await requireWorkspaceId();
-  return prisma.user.findMany({
-    where: { workspaceId },
-    orderBy: { createdAt: "asc" },
-  });
+  const [memberships, invites] = await Promise.all([
+    prisma.membership.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "asc" },
+      select: {
+        role: true,
+        user: { select: { id: true, name: true, email: true, lastSeenAt: true } },
+      },
+    }),
+    prisma.invite.findMany({
+      where: { workspaceId, acceptedAt: null, declinedAt: null, revokedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        expiresAt: true,
+        lastSentAt: true,
+        invitedBy: { select: { name: true, email: true } },
+      },
+    }),
+  ]);
+  return {
+    members: memberships.map((m) => ({ ...m.user, role: m.role })),
+    invites,
+  };
 }
 
 export async function getClients() {
@@ -293,21 +323,128 @@ export async function getNextCue(clientId?: string) {
   });
 }
 
+const calendarPostSelect = {
+  id: true,
+  title: true,
+  body: true,
+  status: true,
+  approval: true,
+  scheduledAt: true,
+  link: true,
+  poll: true,
+  client: { select: { id: true, name: true, color: true } },
+  targets: {
+    select: {
+      id: true,
+      platform: true,
+      status: true,
+      error: true,
+      permalink: true,
+      account: { select: { displayName: true } },
+    },
+  },
+  media: {
+    select: { type: true, url: true, title: true },
+    orderBy: { createdAt: "asc" },
+  },
+} satisfies Prisma.PostSelect;
+
+type CalendarRow = Prisma.PostGetPayload<{ select: typeof calendarPostSelect }>;
+
+/** The card glyph: what kind of post this is. */
+function postKind(p: CalendarRow): PostKind {
+  if (p.poll) return "poll";
+  if (p.link) return "link";
+  if (p.media.some((m) => m.type === "DOCUMENT")) return "document";
+  if (p.media.some((m) => m.type === "VIDEO")) return "video";
+  const images = p.media.filter((m) => m.type === "IMAGE").length;
+  return images >= 2 ? "carousel" : images === 1 ? "image" : "text";
+}
+
+/** Plain, serialisable posts for the calendar board. */
+function toCalendarPost(p: CalendarRow): CalendarPost {
+  return {
+    id: p.id,
+    title: p.title,
+    body: p.body,
+    status: p.status,
+    approval: p.approval,
+    scheduledAt: p.scheduledAt?.toISOString() ?? null,
+    kind: postKind(p),
+    client: p.client,
+    targets: p.targets.map((t) => ({
+      id: t.id,
+      platform: t.platform,
+      status: t.status,
+      account: t.account.displayName,
+      error: t.error,
+      permalink: t.permalink,
+    })),
+    media: p.media,
+  };
+}
+
+/** Status chips to a Prisma condition: any one of them matches. */
+function statusWhere(statuses: StatusFilter[]): Prisma.PostWhereInput {
+  if (!statuses.length) return {};
+  const or: Prisma.PostWhereInput[] = [];
+  const s = new Set(statuses);
+  if (s.has("SCHEDULED")) or.push({ status: { in: ["SCHEDULED", "PUBLISHING"] } });
+  if (s.has("DRAFT")) or.push({ status: "DRAFT" });
+  if (s.has("PUBLISHED")) or.push({ status: "PUBLISHED" });
+  if (s.has("FAILED")) or.push({ status: { in: ["FAILED", "PARTIAL"] } });
+  if (s.has("APPROVAL")) or.push({ approval: { in: ["PENDING", "CHANGES_REQUESTED"] } });
+  return { OR: or };
+}
+
+/** Posts dated within [from, to], filtered by client, network and status. */
 export async function getCalendarPosts(
   from: Date,
   to: Date,
-  clientId?: string,
-  platform?: "LINKEDIN" | "INSTAGRAM" | "YOUTUBE",
-) {
+  filters: CalendarFilters,
+): Promise<CalendarPost[]> {
   const workspaceId = await requireWorkspaceId();
-  return prisma.post.findMany({
+  const rows = await prisma.post.findMany({
     where: {
       client: { workspaceId },
       scheduledAt: { gte: from, lte: to },
-      ...(clientId ? { clientId } : {}),
-      ...(platform ? { targets: { some: { platform } } } : {}),
+      ...(filters.clients.length ? { clientId: { in: filters.clients } } : {}),
+      ...(filters.platforms.length
+        ? { targets: { some: { platform: { in: filters.platforms } } } }
+        : {}),
+      ...statusWhere(filters.statuses),
     },
     orderBy: { scheduledAt: "asc" },
-    include: { client: true, targets: true },
+    take: 2000,
+    select: calendarPostSelect,
   });
+  return rows.map(toCalendarPost);
+}
+
+/**
+ * The calendar's "Unscheduled" drawer: drafts with no date, posts waiting on
+ * approval, and anything that failed in the last 14 days. These are the posts
+ * that need a person, and the dated ones may sit outside the visible range.
+ */
+export async function getUnscheduledPosts(clientIds: string[]): Promise<CalendarPost[]> {
+  const workspaceId = await requireWorkspaceId();
+  const since = new Date(Date.now() - 14 * 86_400_000);
+  const rows = await prisma.post.findMany({
+    where: {
+      client: { workspaceId },
+      ...(clientIds.length ? { clientId: { in: clientIds } } : {}),
+      OR: [
+        { status: "DRAFT", scheduledAt: null },
+        {
+          status: { in: ["DRAFT", "SCHEDULED"] },
+          approval: { in: ["PENDING", "CHANGES_REQUESTED"] },
+        },
+        { status: { in: ["FAILED", "PARTIAL"] }, updatedAt: { gte: since } },
+      ],
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 60,
+    select: calendarPostSelect,
+  });
+  return rows.map(toCalendarPost);
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { connectingUser, returnPage } from "@/lib/oauth-guard";
+import { connectingUser, returnPage, startOAuthState } from "@/lib/oauth-guard";
 import { prisma } from "@/lib/prisma";
 import { instagramScopes } from "@/lib/automations/config";
 
@@ -36,10 +36,13 @@ export async function GET(req: NextRequest) {
   // NEXT_PUBLIC_IG_AUTOMATIONS is on).
   const comments = req.nextUrl.searchParams.get("comments") === "1";
   const automations = req.nextUrl.searchParams.get("automations") === "1";
-  const next = returnPage(req.nextUrl.searchParams.get("next"));
-  const state = Buffer.from(
-    JSON.stringify({ clientId, comments, automations, next }),
-  ).toString("base64url");
+  const page = returnPage(req.nextUrl.searchParams.get("next"));
+  const { state, attach } = startOAuthState("instagram", {
+    clientId,
+    comments,
+    automations,
+    next: page === "/clients" ? undefined : page,
+  });
 
   const url = new URL("https://www.instagram.com/oauth/authorize");
   url.searchParams.set("client_id", process.env.META_APP_ID);
@@ -52,5 +55,5 @@ export async function GET(req: NextRequest) {
   // without this the next connect silently reuses whichever account is open.
   url.searchParams.set("force_reauth", "true");
 
-  return NextResponse.redirect(url.toString());
+  return attach(NextResponse.redirect(url.toString()));
 }

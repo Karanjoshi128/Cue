@@ -32,12 +32,12 @@ There are **two independent processes**. Do them in this order.
 | Step | State |
 | ---- | ----- |
 | Cloud project | **shorts-automation-509405** (number 12824634376), shared with the youtubechannel1 tools. Console: [Audience](https://console.cloud.google.com/auth/audience?project=shorts-automation-509405), [Branding](https://console.cloud.google.com/auth/branding?project=shorts-automation-509405), [Verification Center](https://console.cloud.google.com/auth/verification?project=shorts-automation-509405). |
-| Publishing status | **In production, unverified** since 7 Oct 2026, which ended the 7-day token expiry. Unverified apps show a "Google hasn't verified this app" warning and are capped at 100 users. |
+| Publishing status | **In production, verified.** The unverified-app warning and the 100-user cap no longer apply to `youtube.upload`. Existing connections (e.g. HiBeRNaTe) keep working; no reconnect needed. |
 | Logo | Bare blue C rejected ("does not uniquely identify your brand"). Replaced by `cue-app-icon-wordmark-1024.png`. |
 | Branding verification | **Verified 13 Oct 2026** (app name Cue, wordmark logo `cue-app-icon-wordmark-1024.png` uploaded, trycue.space verified in Search Console under the project owner's account, developer contacts ytkaranbusiness006@gmail.com + karan@trycue.space). **Published** the same day: the consent screen now shows "Cue". |
-| OAuth clients in the project | `cue-web` (Web, 28 Sep 2026) and `Desktop client 1` (Desktop, 22 Sep 2026, youtubechannel1's local tools: youtube.readonly, yt-analytics.readonly, youtube.force-ssl). The desktop client must **move to its own project** before the demo video, or the video has to show it and its scopes need justifying. Order: new project, new Desktop client, swap youtubechannel1's `secrets/client_secrets.json`, re-auth, then delete `Desktop client 1` here. |
-| Data access | `youtube.upload` (sensitive) + openid, userinfo.email, userinfo.profile declared 13 Oct 2026. Justification ready (§3.2); demo video not recorded yet. |
-| Quota extension | Not requested. |
+| OAuth clients in the project | Only `cue-web` since 14 Oct 2026. youtubechannel1's tools moved to their own project **yt-tools-511605** (number 796517867282, Desktop client `796517867282-gfveb…`, In production, unverified); old `Desktop client 1` deleted. |
+| Data access | **Verified 16 Oct 2026** (Google email "OAuth Verification Request Acknowledgement", approved for `.../auth/youtube.upload`). Submitted 14 Oct with justification §3.2 and demo https://youtu.be/dZuFv-WN87w. **Any change to the consent screen (branding, logo, links, scopes) needs a new verification**, so don't edit it casually; adding a scope (e.g. youtube.readonly for analytics) means a new review. |
+| Quota extension | **Next step.** Not requested. 10,000 units/day is about 6 uploads/day across all clients (HiBeRNaTe alone uses 2). Apply via §4 once real usage approaches the ceiling. |
 
 ---
 
@@ -142,10 +142,38 @@ their OAuth client lives here, either show its consent too (and declare its
 scopes) or, better, move those tools to their own project first so this project
 holds only Cue's web client. Check **Google Auth Platform → Clients**.
 
-Before recording: same setup as the Meta video (`meta-app-review.md` §3):
-recorder UI kept out of frame, Chrome in English, URL bar visible, zoom
-110-125%, a short test video file ready, a client with **no YouTube channel
-connected**. Captions are optional for Google but help; add them in Clipchamp.
+#### Accounts: use test ones, never the real channel
+
+- **A new Google account with its own YouTube channel.** Shot 9 disconnects the
+  channel, and the test upload lands on whatever channel you connect. Doing that
+  with the HiBeRNaTe account would disconnect the channel its scheduled Shorts
+  publish to, and put a test video on a public channel.
+- **A fresh Cue workspace.** Sign in with an email that isn't in your main
+  workspace (e.g. `karan@trycue.space`; the code arrives in the Zoho Mail app).
+  New workspaces start on Unlimited with YouTube on, and Google's reviewers then
+  see no real client names.
+
+#### Setup, once (about 30 minutes)
+
+1. Move `Desktop client 1` out of the project first (see Status).
+2. Create the Google account (e.g. `cue.review.demo@gmail.com`). Set its language
+   to **English** (myaccount.google.com → Personal info → Language).
+3. On youtube.com, signed in as it: avatar → **Create a channel** (e.g. "Cue Demo").
+4. A clean **Chrome profile** (Chrome avatar → Add → continue without an account),
+   English, bookmarks bar hidden (Ctrl+Shift+B), no extensions, zoom 125%. Sign
+   the test Google account in at accounts.google.com, so the OAuth flow shows the
+   account chooser instead of a password field.
+5. In that profile, sign in to Cue with the fresh email → name the workspace
+   "Cue Demo" → Clients → **Add client** "Demo Brand". Connect nothing yet.
+6. A 10-20 second MP4 of your own footage, no copyrighted music, on the Desktop.
+7. Windows: Do not disturb on (Win+N), other apps closed. Recorder: Snipping
+   Tool → Record (Win+Shift+R), full screen.
+8. Do one dry run of shots 2-7 without recording, then disconnect the channel in
+   Cue so the real take starts clean. Cue always re-shows the consent screen.
+
+#### Shots
+
+Captions are optional for Google but help; add them in Clipchamp.
 
 | # | On screen | Caption (optional) |
 | - | --------- | ------------------ |

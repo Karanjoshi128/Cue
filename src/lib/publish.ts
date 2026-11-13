@@ -75,12 +75,12 @@ function jsonToPoll(poll: unknown): PublishPoll | undefined {
  * Core publishing engine. Finds due targets, publishes each, records results,
  * writes permanent PostHistory, and rolls up parent Post status. Then, with
  * whatever is left of the run budget, posts first comments (postFirstComments)
- * unless `firstComments` is false.
+ * unless `firstComments` is false. With `postId`, only that post's targets.
  * Idempotent: targets are flipped to PROCESSING before sending.
  */
 export async function publishDueTargets(
   now = new Date(),
-  { firstComments = true }: { firstComments?: boolean } = {},
+  { firstComments = true, postId }: { firstComments?: boolean; postId?: string } = {},
 ): Promise<{
   processed: number;
   published: number;
@@ -101,6 +101,7 @@ export async function publishDueTargets(
 
   const due = await prisma.postTarget.findMany({
     where: {
+      ...(postId && { postId }),
       status: "SCHEDULED",
       attempts: { lt: MAX_ATTEMPTS },
       // Only publish posts that are due, approved, and not a lingering draft.
@@ -157,8 +158,11 @@ export async function publishDueTargets(
         externalId: target.account.externalId,
       });
 
-      await prisma.postTarget.update({
-        where: { id: target.id },
+      // Conditional, because the target can be gone by now: its post was
+      // edited, deleted or disconnected while this upload ran. The post is
+      // live either way, so the history below is still written.
+      const recorded = await prisma.postTarget.updateMany({
+        where: { id: target.id, status: "PROCESSING" },
         data: {
           status: "PUBLISHED",
           publishedAt: new Date(),
@@ -167,6 +171,11 @@ export async function publishDueTargets(
           error: null,
         },
       });
+      if (recorded.count === 0) {
+        console.warn(
+          `[publish] target ${target.id} (${target.platform}) went live as ${result.externalPostId}, but was removed while publishing`,
+        );
+      }
 
       await prisma.postHistory.create({
         data: {
@@ -184,23 +193,29 @@ export async function publishDueTargets(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[publish] target ${target.id} (${target.platform}): ${message}`);
-      // Back to SCHEDULED for retry unless we've exhausted attempts.
+      // Back to SCHEDULED for retry unless we've exhausted attempts. Nothing
+      // here may throw: one target's trouble must not end the run for every
+      // other workspace's posts.
       const exhausted = target.attempts + 1 >= MAX_ATTEMPTS;
-      await prisma.postTarget.update({
-        where: { id: target.id },
-        data: {
-          status: exhausted ? "FAILED" : "SCHEDULED",
-          error: message.slice(0, 500),
-        },
-      });
+      await prisma.postTarget
+        .updateMany({
+          where: { id: target.id, status: "PROCESSING" },
+          data: {
+            status: exhausted ? "FAILED" : "SCHEDULED",
+            error: message.slice(0, 500),
+          },
+        })
+        .catch((e) => console.error(`[publish] recording failure of ${target.id}:`, e));
       failed++;
     }
   }
 
   // Roll up parent post statuses for any posts touched.
-  const postIds = [...new Set(due.map((t) => t.postId))];
-  for (const postId of postIds) {
-    await rollUpPostStatus(postId);
+  const touched = [...new Set(due.map((t) => t.postId))];
+  for (const id of touched) {
+    await rollUpPostStatus(id).catch((e) =>
+      console.error(`[publish] rolling up post ${id}:`, e),
+    );
   }
 
   // Comments come last and only on time to spare. Nothing they throw may
@@ -395,7 +410,8 @@ export async function rollUpPostStatus(postId: string): Promise<void> {
   else if (anyPublished) status = "PARTIAL";
   else status = "FAILED";
 
-  await prisma.post.update({ where: { id: postId }, data: { status } });
+  // updateMany: the post may have been deleted since its targets were read.
+  await prisma.post.updateMany({ where: { id: postId }, data: { status } });
 }
 
 /** Publish a single post immediately ("Post now"). */
@@ -424,8 +440,10 @@ export async function publishPostNow(postId: string): Promise<void> {
     data: { status: "SCHEDULED", attempts: 0, error: null },
   });
   // No first comments here: this runs inside the user's request, and a post
-  // just published isn't due for one yet. The next cron sweep posts it.
-  await publishDueTargets(new Date(Date.now() + 1000), { firstComments: false });
+  // just published isn't due for one yet. The next cron sweep posts it. Only
+  // this post: other workspaces' due posts belong to the sweep, not to
+  // someone's "Post now".
+  await publishDueTargets(new Date(Date.now() + 1000), { firstComments: false, postId });
 }
 
 export type DueTarget = PostTarget & { post: Post };

@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CalendarClock,
   CornerDownLeft,
+  BookOpen,
   FileText,
   LogOut,
   Moon,
@@ -56,7 +57,20 @@ const groupClass =
  *   N                  new post
  *   G then D/N/C/Q/L/S jump to a page
  */
-export function CommandMenu({ clients }: { clients: ClientOption[] }) {
+/** A guide's title and search words, passed down from the app layout (the guides' text stays on the server). */
+export interface HelpTopic {
+  slug: string;
+  title: string;
+  keywords: string;
+}
+
+export function CommandMenu({
+  clients,
+  helpTopics = [],
+}: {
+  clients: ClientOption[];
+  helpTopics?: HelpTopic[];
+}) {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
@@ -202,6 +216,22 @@ export function CommandMenu({ clients }: { clients: ClientOption[] }) {
                   </Command.Item>
                 ))}
               </Command.Group>
+
+              {helpTopics.length > 0 && (
+                <Command.Group heading="Help" className={groupClass}>
+                  {helpTopics.map((t) => (
+                    <Command.Item
+                      key={t.slug}
+                      value={`Help ${t.title}`}
+                      keywords={[t.keywords]}
+                      className={itemClass}
+                      onSelect={() => run(() => router.push(`/guide/${t.slug}`))}
+                    >
+                      <BookOpen /> {t.title}
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+              )}
 
               {clients.length > 0 && (
                 <Command.Group heading="Focus on a client" className={groupClass}>

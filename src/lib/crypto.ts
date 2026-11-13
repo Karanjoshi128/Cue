@@ -28,12 +28,17 @@ export function decrypt(payload: string): string {
     throw new Error("Malformed encrypted token");
   }
   const [ivB64, tagB64, dataB64] = parts;
+  const tag = Buffer.from(tagB64, "base64");
+  // encrypt() always writes a 16-byte tag. Node would otherwise accept a
+  // truncated one (as short as 4 bytes), which is far easier to forge.
+  if (tag.length !== 16) throw new Error("Malformed encrypted token");
   const decipher = crypto.createDecipheriv(
     "aes-256-gcm",
     getKey(),
     Buffer.from(ivB64, "base64"),
+    { authTagLength: 16 },
   );
-  decipher.setAuthTag(Buffer.from(tagB64, "base64"));
+  decipher.setAuthTag(tag);
   const dec = Buffer.concat([
     decipher.update(Buffer.from(dataB64, "base64")),
     decipher.final(),

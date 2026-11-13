@@ -20,8 +20,16 @@ const RESEND_COOLDOWN_S = 60;
  * therefore consume the token before the recipient ever clicks, producing
  * "otp_expired". A code can't be prefetched, so sign-in stays reliable.
  */
-export function LoginForm({ next }: { next?: string | null }) {
-  const [email, setEmail] = useState("");
+export function LoginForm({
+  initialEmail,
+  next,
+}: {
+  /** Prefilled from an invite link. */
+  initialEmail?: string;
+  /** Where to go after signing in (a same-site path), e.g. back to the invite. */
+  next?: string;
+} = {}) {
+  const [email, setEmail] = useState(initialEmail ?? "");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [loading, setLoading] = useState(false);
@@ -43,9 +51,7 @@ export function LoginForm({ next }: { next?: string | null }) {
       const { error } = await supabase.auth.signInWithOtp({
         email: address,
         // Only used if a deployment still emails a link; the code is primary.
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback${next ? `?next=${encodeURIComponent(next)}` : ""}`,
-        },
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) throw error;
       setEmail(address);

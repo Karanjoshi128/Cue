@@ -11,9 +11,9 @@ export const dynamic = "force-dynamic";
 export default async function ComposerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ edit?: string; date?: string }>;
+  searchParams: Promise<{ edit?: string; date?: string; time?: string; client?: string }>;
 }) {
-  const { edit, date } = await searchParams;
+  const { edit, date, time, client } = await searchParams;
   const [clients, scopeClientId, timeZone] = await Promise.all([
     getClients(),
     getScopeClientId(),
@@ -72,9 +72,15 @@ export default async function ComposerPage({
     }
   }
 
-  // A date passed from the calendar prefills the schedule field (09:00 local).
+  // A slot picked on the calendar prefills the schedule field: its date, and
+  // its time when the slot had one (week view), else 09:00 local.
+  const slotTime = time && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : "09:00";
   const prefillDate =
-    date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T09:00` : undefined;
+    date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T${slotTime}` : undefined;
+  // The calendar passes a client only when exactly one was filtered, so a new
+  // post never silently inherits a filter. Ignore ids outside this workspace.
+  const prefillClientId =
+    client && clients.some((c) => c.id === client) ? client : scopeClientId;
 
   return (
     <div className="space-y-8">
@@ -111,7 +117,7 @@ export default async function ComposerPage({
         clients={plain}
         initial={initial}
         prefillDate={prefillDate}
-        defaultClientId={scopeClientId}
+        defaultClientId={prefillClientId}
       />
     </div>
   );

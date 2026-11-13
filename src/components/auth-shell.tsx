@@ -38,7 +38,7 @@ export function AuthShell({
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-40 -left-40 size-144 rounded-full bg-[#196bf5]/25 blur-[120px]"
+          className="pointer-events-none absolute -top-40 -left-40 size-144 rounded-full bg-glow/25 blur-[120px]"
         />
         <Link href="/" aria-label="Cue home" className="relative w-fit">
           <Logo className="h-9 w-auto" />

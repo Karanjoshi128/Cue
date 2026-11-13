@@ -8,6 +8,7 @@ import {
   MessageCircleReply,
   Users,
   Settings2,
+  LifeBuoy,
   type LucideIcon,
 } from "lucide-react";
 import { automationsEnabled } from "@/lib/automations/config";
@@ -55,6 +56,7 @@ export const navItems: NavItem[] = [
   { label: "Link in bio", href: "/bio", icon: Link2, key: "b", group: "engage" },
   { label: "Clients", href: "/clients", icon: Users, key: "l", group: "manage" },
   { label: "Settings", href: "/settings", icon: Settings2, key: "s", group: "manage" },
+  { label: "Help", href: "/guide", icon: LifeBuoy, key: "h", group: "manage" },
 ];
 
 export const navGroups: { key: NavItem["group"]; label: string }[] = [

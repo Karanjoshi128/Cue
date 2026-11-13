@@ -19,9 +19,9 @@ pages (checked 13 Oct 2026).
 | Applying entity | **Karan Joshi (Udyam MSME)**, decided 13 Oct 2026. Matches the privacy policy, terms and the Meta submission. |
 | Cue LinkedIn Page | Exists; Karan is super admin. |
 | Business mailbox on trycue.space | **Done, 13 Oct 2026.** `karan@trycue.space` on Zoho Mail (Forever Free, India DC); MX + SPF set in Hostinger DNS; test mail received. Legal pages and site contact switched to it. |
-| New developer app for Pages | Created as `Cue`, linked to the Cue Page (company 142914285). The old `post Auto` app (Google for Startups Page, not verified) still powers personal-profile posting. |
-| Community Management API, Development tier | **Submitted 13 Oct 2026** as legal name **Karan Joshi**, use case **Page Management only**, app verified by the Cue Page. Waiting on: the Microsoft Vetting Services email to `karan@trycue.space` (click to verify), any document request (send the Udyam certificate), and a possible vetting survey in the Developer Portal (21-day limit). |
-| Page connect flow in Cue | **Built 13 Oct 2026**, hidden until the new app's keys are set in Vercel (see §6). |
+| New developer app for Pages | Created as `Cue` (app id 264994524, client id `7707xm8ozvz3hl`), linked to the Cue Page (company 142914285). Status page: https://www.linkedin.com/developers/apps/264994524/products. The old `post Auto` app (Google for Startups Page, not verified) still powers personal-profile posting. |
+| Community Management API, Development tier | **APPROVED by 1 Nov 2026** (Products tab: Added products → Community Management API, Development Tier). Submitted 13 Oct as Karan Joshi, Page Management only; passed form review and identity vetting. Next: switch on per §6 (redirect URL, `LINKEDIN_PAGES_*` in Vercel, redeploy). Standard tier ("Request upgrade") later, within 12 months. |
+| Page connect flow in Cue | **Live since 1 Nov 2026**: `LINKEDIN_PAGES_*` set in Vercel, redirect URLs registered on both apps (post Auto: `/api/oauth/linkedin/callback`; Cue: `/api/oauth/linkedin-page/callback`). First Page connect worked. |
 
 ---
 

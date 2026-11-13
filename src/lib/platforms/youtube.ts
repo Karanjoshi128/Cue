@@ -1,4 +1,5 @@
 import { DEFAULT_YOUTUBE_CATEGORY } from "@/lib/youtube-tags";
+import { fetchMedia } from "./fetch-media";
 import type {
   CommentInput,
   CommentResult,
@@ -51,14 +52,9 @@ export const youtubeAdapter: PlatformAdapter = {
     // Pull the video bytes from its public URL (Cue's R2 bucket or the
     // workspace's own). Buffered in full - fine for the
     // short-form videos this tool posts; revisit if very large files appear.
-    const fileRes = await fetch(video.url, {
-      signal: AbortSignal.timeout(FETCH_VIDEO_TIMEOUT_MS),
-    });
-    if (!fileRes.ok) {
-      throw new Error(`Could not fetch video (${fileRes.status})`);
-    }
-    const bytes = Buffer.from(await fileRes.arrayBuffer());
-    const contentType = fileRes.headers.get("content-type") || "video/*";
+    const file = await fetchMedia(video.url, FETCH_VIDEO_TIMEOUT_MS);
+    const bytes = file.bytes;
+    const contentType = file.contentType || "video/*";
 
     // 1. Open a resumable session - the upload URL comes back in `Location`.
     const initRes = await fetch(UPLOAD_URL, {

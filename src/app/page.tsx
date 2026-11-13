@@ -15,7 +15,7 @@ import {
   InstagramIcon,
   YoutubeIcon,
 } from "@/components/platform-icons";
-import { getAuth } from "@/lib/auth";
+import { AccountButton, AccountLink } from "@/components/marketing/account-links";
 import { CONTACT_EMAIL, SiteFooter, SiteHeader } from "@/components/marketing/site-chrome";
 import { HeroStage } from "@/components/marketing/hero-stage";
 import {
@@ -36,8 +36,9 @@ import { Spotlight } from "@/components/fx/spotlight";
 import { cn } from "@/lib/utils";
 
 // Public marketing home. Kept outside the (app) group so it renders for
-// signed-out visitors - the app itself lives under /dashboard.
-export const dynamic = "force-dynamic";
+// signed-out visitors - the app itself lives under /dashboard. It's static and
+// served from the CDN; the links that depend on being signed in decide that in
+// the browser (see account-links.tsx).
 
 export const metadata: Metadata = {
   title: "Cue - social media scheduling for agencies",
@@ -176,15 +177,10 @@ function Bento({
   );
 }
 
-export default async function HomePage() {
-  const { user } = await getAuth();
-  const signedIn = Boolean(user);
-  const primaryHref = signedIn ? "/dashboard" : "/login";
-  const primaryLabel = signedIn ? "Open dashboard" : "Get started";
-
+export default function HomePage() {
   return (
     <div className="bg-background text-foreground min-h-dvh overflow-x-clip">
-      <SiteHeader signedIn={signedIn} />
+      <SiteHeader />
 
       <main>
         {/* ---------------- Hero ---------------- */}
@@ -200,8 +196,7 @@ export default async function HomePage() {
           />
           <div className="mx-auto grid max-w-7xl items-center gap-16 px-5 pt-14 pb-24 sm:px-8 lg:grid-cols-[1.12fr_1fr] lg:pt-20 lg:pb-32">
             <div>
-              <Link
-                href={primaryHref}
+              <AccountLink
                 className="bg-card text-muted-foreground hover:text-foreground animate-rise inline-flex items-center gap-2 rounded-full py-1 pr-3 pl-1.5 text-xs shadow-[0_0_0_1px_var(--border)] transition-colors"
               >
                 <span className="bg-live/12 text-live-ink flex items-center gap-1.5 rounded-full px-2 py-0.5 font-mono text-[0.625rem] font-semibold tracking-wider uppercase">
@@ -210,7 +205,7 @@ export default async function HomePage() {
                 </span>
                 Publishing to LinkedIn, Instagram and YouTube
                 <ArrowRight className="size-3" />
-              </Link>
+              </AccountLink>
 
               <h1 className="mt-8">
                 <span
@@ -250,14 +245,7 @@ export default async function HomePage() {
                 className="animate-rise mt-9 flex flex-wrap items-center gap-3"
                 style={{ animationDelay: "520ms" }}
               >
-                <Button
-                  render={<Link href={primaryHref} />}
-                  size="xl"
-                  className="group rounded-full pr-5 pl-6"
-                >
-                  {primaryLabel}
-                  <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-                </Button>
+                <AccountButton className="pl-6" />
                 <Button
                   render={<Link href="#how" />}
                   size="xl"
@@ -299,7 +287,7 @@ export default async function HomePage() {
                     className="flex items-center gap-6 pr-6 font-mono text-xs tracking-[0.14em] whitespace-nowrap uppercase"
                   >
                     <span className="opacity-90">{t}</span>
-                    <span className="text-[#4c8dff]">◆</span>
+                    <span className="text-glow-soft">◆</span>
                   </li>
                 ))}
               </ul>
@@ -483,7 +471,7 @@ export default async function HomePage() {
         <section className="dark grain relative isolate overflow-hidden bg-[#07080b] px-5 py-24 text-white sm:px-8 sm:py-32">
           <div
             aria-hidden
-            className="pointer-events-none absolute -bottom-40 -left-40 -z-10 size-[40rem] rounded-full bg-[#196bf5]/20 blur-[140px]"
+            className="pointer-events-none absolute -bottom-40 -left-40 -z-10 size-[40rem] rounded-full bg-glow/20 blur-[140px]"
           />
           <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.1fr_1fr]">
             <Reveal>
@@ -511,12 +499,12 @@ export default async function HomePage() {
             </Reveal>
             <Reveal delay={0.1}>
               <div className="label-caps flex items-center gap-2 text-white/50">
-                <span className="size-1.5 rounded-full bg-[#4c8dff]" />
+                <span className="size-1.5 rounded-full bg-glow-soft" />
                 Why &ldquo;Cue&rdquo;
               </div>
               <h2 className="headline mt-4 text-4xl text-white sm:text-5xl">
                 In theatre, nothing moves until the cue is{" "}
-                <em className="text-[#7aa8ff]">called.</em>
+                <em className="text-glow-text">called.</em>
               </h2>
               <p className="mt-6 max-w-lg text-lg leading-relaxed text-white/60">
                 A stage manager watches the clock and calls every light, sound
@@ -577,28 +565,21 @@ export default async function HomePage() {
             />
             <div
               aria-hidden
-              className="pointer-events-none absolute -top-32 left-1/2 -z-10 h-[38rem] w-[44rem] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,rgb(76_141_255/0.35),transparent_65%)] blur-xl"
+              className="pointer-events-none absolute -top-32 left-1/2 -z-10 h-[38rem] w-[44rem] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,color-mix(in_oklch,var(--glow-soft)_35%,transparent),transparent_65%)] blur-xl"
             />
             <Reveal>
               <div className="font-mono text-[0.6875rem] tracking-[0.3em] text-white/45 uppercase">
                 Places, please
               </div>
               <h2 className="headline mx-auto mt-6 max-w-4xl text-[clamp(3.5rem,10vw,9rem)] leading-[0.9] text-white">
-                Take your <em className="text-[#7aa8ff]">cue.</em>
+                Take your <em className="text-glow-text">cue.</em>
               </h2>
               <p className="mx-auto mt-7 max-w-md text-lg leading-relaxed text-white/60">
                 Set up a workspace, connect your first client, and put next
                 week on the sheet.
               </p>
               <div className="mt-10 flex flex-wrap justify-center gap-3">
-                <Button
-                  render={<Link href={primaryHref} />}
-                  size="xl"
-                  className="group rounded-full pr-5 pl-7"
-                >
-                  {primaryLabel}
-                  <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-                </Button>
+                <AccountButton className="pl-7" />
                 <Button
                   render={<a href={`mailto:${CONTACT_EMAIL}`} />}
                   size="xl"

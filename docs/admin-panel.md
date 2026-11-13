@@ -28,6 +28,8 @@ workspace.
 | API keys | Every key, how often it's used, revoke. |
 | Storage | Workspaces using their own bucket: re-test, disconnect. |
 | Audit log | Every action taken in the panel: who, what, when, why, details. Never edited; survives deletions. |
+| Themes | Pick the site theme (Cue or Diwali) for every page at once. |
+| Mailer | Marketing email to contacts you add or import: campaigns, templates, contacts, Resend sending accounts, the do-not-email list. See `docs/mailer.md`. |
 | Platform | Pause all publishing; the announcement banner; the publisher heartbeat; who the platform admins are. |
 
 ## What the switches actually do
@@ -71,6 +73,21 @@ workspace.
     is left alone.
   - A workspace that a platform admin belongs to can't be deleted.
   - The audit log keeps the record.
+- **Site theme.**
+  - It changes every page at once for everyone: the public site, sign-in and the
+    app. Each person keeps their own light or dark setting; the theme restyles
+    both.
+  - **Diwali** brings a marigold and diya-light palette, a string of lamps across
+    the top of each page, a jaali lattice and rangoli dots behind heroes and empty
+    states, and gold headline accents. Status colours (standby, live, fault) keep
+    their meaning.
+  - The change applies straight away, including the static marketing pages. The
+    theme is cached, and the switch clears the cache.
+  - Each change is logged as `platform.theme`.
+  - To add a theme: add an entry to `src/lib/site-themes.ts`, then add its
+    tokens under `:root[data-skin="<key>"]` (and the `.dark` version) in
+    `src/app/globals.css`. Any decoration beyond colour goes in
+    `src/components/fx/site-theme-decor.tsx`.
 
 ## Data and deploy
 
@@ -88,6 +105,11 @@ pnpm prisma db push
 
 The publisher heartbeat fills in after the first run of the new code. Until
 then the overview shows "No runs recorded yet".
+
+**Site themes (added Nov 2026)** add one column, `PlatformSettings.siteTheme`,
+which defaults to `"default"`. Run `pnpm prisma db push` before deploying this
+code too: the app and admin layouts read every `PlatformSettings` column. The
+root layout falls back to the everyday look if the column can't be read.
 
 ## Not included
 

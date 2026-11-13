@@ -25,7 +25,9 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -42,6 +44,7 @@ import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
 import {
   Building2,
+  ChevronDown,
   Check,
   MoreHorizontal,
   Pencil,
@@ -50,6 +53,7 @@ import {
   Search,
   Trash2,
   Unplug,
+  UserRound,
 } from "lucide-react";
 
 interface AccountLite {
@@ -81,6 +85,8 @@ type ConfirmState = {
 // Friendly messages for the ?error= codes the OAuth connect routes redirect with.
 const CONNECT_ERRORS: Record<string, string> = {
   not_your_client: "That client isn't in your workspace.",
+  connect_expired:
+    "That connection expired or was started in another browser. Please try again from here.",
   read_only: "You're viewing this workspace read-only, so accounts can't be connected.",
   platform_disabled: "Connecting this platform is turned off for your workspace. Contact Cue support.",
   linkedin_not_configured: "LinkedIn isn't set up on the server yet.",
@@ -125,7 +131,7 @@ const SWATCHES = [
 /**
  * The Connect buttons, keyed by their /api/oauth/{route}/start route. A
  * LinkedIn Page is a LINKEDIN account too, connected through a separate app,
- * so it gets its own button (shown once that app is configured).
+ * so LinkedIn is one button that asks which (once that app is configured).
  */
 interface ConnectOption {
   route: string;
@@ -135,22 +141,25 @@ interface ConnectOption {
   another: string;
   page?: boolean;
 }
-const CONNECT_OPTIONS: ConnectOption[] = [
-  {
-    route: "linkedin",
-    platform: "LINKEDIN",
-    label: "LinkedIn profile",
-    hint: "Personal profile",
-    another: "Add another LinkedIn profile",
-  },
+// Page first: agencies post as their clients' Pages far more than as people.
+const LINKEDIN_OPTIONS: ConnectOption[] = [
   {
     route: "linkedin-page",
     platform: "LINKEDIN",
-    label: "LinkedIn Page",
-    hint: "Company Page",
-    another: "Add another LinkedIn Page",
+    label: "Company Page",
+    hint: "Post as a brand's LinkedIn Page",
+    another: "Add another Company Page",
     page: true,
   },
+  {
+    route: "linkedin",
+    platform: "LINKEDIN",
+    label: "Personal profile",
+    hint: "Post as a person's own profile",
+    another: "Add another personal profile",
+  },
+];
+const CONNECT_OPTIONS: ConnectOption[] = [
   {
     route: "instagram",
     platform: "INSTAGRAM",
@@ -317,7 +326,6 @@ export function ClientsManager({
     return "linkedin";
   }
 
-  const connectOptions = CONNECT_OPTIONS.filter((o) => !o.page || linkedinPages);
 
   const accountCount = clients.reduce((n, c) => n + c.accounts.length, 0);
   const q = query.trim().toLowerCase();
@@ -549,29 +557,65 @@ export function ClientsManager({
                     <span className="label-caps mr-auto">
                       {c.accounts.length ? "Add account" : "Connect"}
                     </span>
-                    {connectOptions.map((o) => (
-                      <Tooltip key={o.route}>
-                        <TooltipTrigger
+                    {linkedinPages ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
                           render={
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => connect(c.id, o.route)}
-                              aria-label={`Connect ${o.label} for ${c.name}`}
+                              aria-label={`Connect LinkedIn for ${c.name}`}
                               className="relative w-11 gap-1 px-0"
                             />
                           }
                         >
-                          <PlatformIcon platform={o.platform} brand className="size-3.5" />
-                          {o.page ? (
-                            <Building2 className="text-muted-foreground size-3" />
-                          ) : (
-                            <Plus className="text-muted-foreground size-3" />
-                          )}
-                        </TooltipTrigger>
-                        <TooltipContent>{has(o) ? o.another : o.hint}</TooltipContent>
-                      </Tooltip>
+                          <PlatformIcon platform="LINKEDIN" brand className="size-3.5" />
+                          <ChevronDown className="text-muted-foreground size-3" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-64">
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel>Connect LinkedIn as</DropdownMenuLabel>
+                            {LINKEDIN_OPTIONS.map((o) => (
+                              <DropdownMenuItem
+                                key={o.route}
+                                onClick={() => connect(c.id, o.route)}
+                                className="items-start py-2"
+                              >
+                                {o.page ? (
+                                  <Building2 className="mt-0.5" />
+                                ) : (
+                                  <UserRound className="mt-0.5" />
+                                )}
+                                <span className="flex min-w-0 flex-col">
+                                  <span className="font-medium">{o.label}</span>
+                                  <span className="text-muted-foreground text-xs">
+                                    {has(o) ? o.another : o.hint}
+                                  </span>
+                                </span>
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : (
+                      // Pages app not configured: LinkedIn means a profile, no menu needed.
+                      <ConnectButton
+                        option={LINKEDIN_OPTIONS[1]}
+                        clientName={c.name}
+                        connected={has(LINKEDIN_OPTIONS[1])}
+                        onConnect={() => connect(c.id, "linkedin")}
+                      />
+                    )}
+                    {CONNECT_OPTIONS.map((o) => (
+                      <ConnectButton
+                        key={o.route}
+                        option={o}
+                        clientName={c.name}
+                        connected={has(o)}
+                        onConnect={() => connect(c.id, o.route)}
+                      />
                     ))}
+
                   </div>
                 </motion.article>
               );
@@ -689,5 +733,39 @@ export function ClientsManager({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** One platform's Connect button, with a tooltip saying what it connects. */
+function ConnectButton({
+  option,
+  clientName,
+  connected,
+  onConnect,
+}: {
+  option: ConnectOption;
+  clientName: string;
+  connected: boolean;
+  onConnect: () => void;
+}) {
+  const label = option.platform === "LINKEDIN" ? "LinkedIn profile" : option.label;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onConnect}
+            aria-label={`Connect ${label} for ${clientName}`}
+            className="relative w-11 gap-1 px-0"
+          />
+        }
+      >
+        <PlatformIcon platform={option.platform} brand className="size-3.5" />
+        <Plus className="text-muted-foreground size-3" />
+      </TooltipTrigger>
+      <TooltipContent>{connected ? option.another : option.hint}</TooltipContent>
+    </Tooltip>
   );
 }

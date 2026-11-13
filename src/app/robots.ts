@@ -22,6 +22,8 @@ export default function robots(): MetadataRoute.Robots {
         "/admin",
         // Link pages (/b/<name>) are public; their tap counters aren't pages.
         "/b/*/go/",
+        "/unsubscribe/",
+        "/guide",
         "/onboarding",
         "/api/",
         "/oauth/",

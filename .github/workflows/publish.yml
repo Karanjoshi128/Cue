@@ -7,6 +7,9 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
+# Only calls Cue with a secret; needs no access to this repository.
+permissions: {}
+
 jobs:
   fire:
     runs-on: ubuntu-latest

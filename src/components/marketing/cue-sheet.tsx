@@ -114,14 +114,14 @@ export function CueSheet({
               onClick={() => call(i)}
               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), call(i))}
               className={cn(
-                "relative grid cursor-pointer grid-cols-[2.6rem_1fr_auto] items-center gap-2.5 rounded-xl px-2.5 py-3 sm:grid-cols-[3.25rem_1fr_auto] sm:gap-3 sm:px-3.5 transition-colors duration-500 outline-none hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-[#4c8dff]/60",
+                "relative grid cursor-pointer grid-cols-[2.6rem_1fr_auto] items-center gap-2.5 rounded-xl px-2.5 py-3 sm:grid-cols-[3.25rem_1fr_auto] sm:gap-3 sm:px-3.5 transition-colors duration-500 outline-none hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-glow-soft/60",
                 calling ? "bg-white/[0.07]" : "bg-transparent",
               )}
             >
               {calling && (
                 <motion.span
                   layoutId="cue-playhead"
-                  className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-[#4c8dff] shadow-[0_0_12px_2px_rgb(76_141_255/0.6)]"
+                  className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-glow-soft shadow-[0_0_12px_2px_color-mix(in_oklch,var(--glow-soft)_60%,transparent)]"
                   transition={{ type: "spring", stiffness: 300, damping: 30 }}
                 />
               )}

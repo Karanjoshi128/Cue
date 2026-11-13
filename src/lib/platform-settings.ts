@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_SITE_THEME, isSiteThemeKey, type SiteThemeKey } from "@/lib/site-themes";
 
 // Platform-wide switches (one row, "global") and the publisher's heartbeat.
 // Read by the publisher and the app shell, written only by the admin panel.
@@ -10,6 +11,7 @@ export interface PlatformSettingsView {
   announcement: string | null;
   announcementTone: "info" | "warning";
   announcementAt: Date | null;
+  siteTheme: SiteThemeKey;
   updatedBy: string | null;
   updatedAt: Date | null;
 }
@@ -22,6 +24,7 @@ export async function getPlatformSettings(): Promise<PlatformSettingsView> {
     announcement: row?.announcement ?? null,
     announcementTone: row?.announcementTone === "warning" ? "warning" : "info",
     announcementAt: row?.announcementAt ?? null,
+    siteTheme: isSiteThemeKey(row?.siteTheme) ? row.siteTheme : DEFAULT_SITE_THEME,
     updatedBy: row?.updatedBy ?? null,
     updatedAt: row?.updatedAt ?? null,
   };

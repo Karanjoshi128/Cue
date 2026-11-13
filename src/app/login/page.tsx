@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { AuthShell } from "@/components/auth-shell";
 import { LoginForm } from "@/components/login-form";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
-import { safeNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
+import { safeNext } from "@/lib/safe-next";
 
 export const dynamic = "force-dynamic";
 
@@ -17,18 +17,20 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ email?: string; next?: string }>;
 }) {
   const configured = isSupabaseConfigured();
-  // Back where they were going, e.g. the consent screen for an app.
-  const next = safeNext((await searchParams).next);
+  // An invite link sends people here with their address and a way back.
+  const { email, next } = await searchParams;
+  const initialEmail =
+    typeof email === "string" && /^[^\s@]{1,64}@[^\s@]{1,190}$/.test(email) ? email : undefined;
 
   return (
     <AuthShell
       stageTitle={
         <>
           Every client. Every channel.{" "}
-          <em className="text-[#7aa8ff]">On cue.</em>
+          <em className="text-glow-text">On cue.</em>
         </>
       }
       stageBody="Plan the week for your whole roster, then let Cue call each post at exactly the right moment."
@@ -59,13 +61,13 @@ export default async function LoginPage({
       }
     >
       {configured ? (
-        <LoginForm next={next} />
+        <LoginForm initialEmail={initialEmail} next={safeNext(next)} />
       ) : (
         <div className="space-y-4">
           <p className="text-muted-foreground text-sm">
             Auth isn&apos;t configured yet, so Cue is running in local dev mode.
           </p>
-          <Button render={<Link href={next ?? "/dashboard"} />} size="xl" className="w-full">
+          <Button render={<Link href={safeNext(next) ?? "/dashboard"} />} size="xl" className="w-full">
             Enter app
           </Button>
         </div>

@@ -61,6 +61,11 @@ export function resolveEndpoint(s: StorageSettings): string | null {
 
 export function makeTarget(s: StorageSettings, custom = true): StorageTarget {
   const endpoint = resolveEndpoint(s);
+  // Checked when the settings were saved; repeated here because the
+  // public-only agent below only guards https connections.
+  if (custom && endpoint && !endpoint.startsWith("https://")) {
+    throw new StorageError("The storage endpoint must start with https://");
+  }
   return {
     client: new S3Client({
       region: s.provider === "R2" ? "auto" : s.region,
@@ -163,10 +168,12 @@ export function objectUrl(target: StorageTarget, key: string): string {
 }
 
 /**
- * A short-lived URL the browser can PUT one object to. Content-Type isn't
- * signed, so the uploader may send any. With `contentLength`, the length is
- * signed: the upload must be exactly the size that was declared (and checked
- * against the plan), or the bucket refuses it.
+ * A short-lived URL the browser can PUT one object to. Content-Type is
+ * signed: the upload must send exactly `contentType`, so a file presigned as
+ * an image can't be stored (and then served publicly) as an HTML page. With
+ * `contentLength`, the length is signed too: the upload must be exactly the
+ * size that was declared (and checked against the plan), or the bucket
+ * refuses it.
  */
 export function presignPut(
   target: StorageTarget,
@@ -183,9 +190,12 @@ export function presignPut(
       ContentType: contentType,
       ContentLength: contentLength,
     }),
-    contentLength === undefined
-      ? { expiresIn }
-      : { expiresIn, signableHeaders: new Set(["content-length"]) },
+    {
+      expiresIn,
+      signableHeaders: new Set(
+        contentLength === undefined ? ["content-type"] : ["content-type", "content-length"],
+      ),
+    },
   );
 }
 

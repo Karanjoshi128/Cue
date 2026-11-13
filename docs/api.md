@@ -130,6 +130,7 @@ curl -s -X POST "$CUE/media/presign" \
 ```json
 {
   "uploadUrl": "https://<bucket endpoint>/posts/2f0c...e1.mp4?X-Amz-Signature=...",
+  "contentType": "video/mp4",
   "storageKey": "posts/2f0c...e1.mp4",
   "url": "https://.../posts/2f0c...e1.mp4",
   "type": "VIDEO",
@@ -137,10 +138,18 @@ curl -s -X POST "$CUE/media/presign" \
 }
 ```
 
-Then `PUT` the raw bytes to `uploadUrl`, with the **same `Content-Type`** you
-declared, so the file is served with the right type. The link is locked to the
-`size` you declared: the body must be exactly that many bytes, or storage
-answers `403`. Most HTTP clients set `Content-Length` from the file for you.
+Accepted types: images (JPEG, PNG, GIF, WebP, HEIC/HEIF, AVIF), videos (MP4,
+MOV, WebM, M4V, AVI, MKV, MPEG) and documents (PDF, DOC/DOCX, PPT/PPTX).
+Anything else, including SVG and HTML, is refused with `400`. If `contentType`
+is empty or `application/octet-stream`, the type is taken from the filename's
+extension.
+
+Then `PUT` the raw bytes to `uploadUrl` with **`Content-Type` set to the
+`contentType` in the response**, which is the type you declared unless Cue had
+to work it out from the filename. Both the type and the `size` are signed into
+the link: a different `Content-Type`, or a body that isn't exactly `size`
+bytes, gets `403` from storage. Most HTTP clients set `Content-Length` from the
+file for you.
 
 ```bash
 curl -s -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @short.mp4
@@ -149,8 +158,10 @@ curl -s -X PUT "$UPLOAD_URL" -H "Content-Type: video/mp4" --data-binary @short.m
 `type` is derived from the content type: `VIDEO`, `IMAGE`, or `DOCUMENT` (PDF,
 PPT, DOC). Documents also get a `title` (the original filename). Pass
 `{ type, url, storageKey, title?, sizeBytes }` from this response as a `media`
-item; `sizeBytes` is optional. For files in Cue's storage, Cue reads the real
-size from storage when the post is saved, and that is what counts toward the
+item, with `url` and `storageKey` exactly as returned: a post whose media
+isn't an upload from this workspace's storage is refused with `400`.
+`sizeBytes` is optional. For files in Cue's storage, Cue reads the real size
+from storage when the post is saved, and that is what counts toward the
 workspace's storage allowance.
 
 On a plan with a storage allowance, a presign that would take Cue-hosted media
@@ -189,14 +200,14 @@ Response: `{ "id": "...", "status": "SCHEDULED" }`, with **201** when created an
 | Field | Type | Notes |
 | --- | --- | --- |
 | `clientId` | string | From `GET /clients`. 404 if it isn't in your workspace. |
-| `accountIds` | string[] | At least one. **Every id must belong to `clientId`**, or the request is rejected (400) rather than posting to fewer accounts than asked. |
+| `accountIds` | string[] | 1 to 50. **Every id must belong to `clientId`**, or the request is rejected (400) rather than posting to fewer accounts than asked. |
 | `body` | string | Caption / YouTube description. 1-5000 chars, but **3000 max if any target isn't YouTube**. |
 | `firstComment` | string? | Commented under the post once it's live, on YouTube and Instagram. Max 2200 chars after trimming; empty means none. See [below](#first-comment). |
 | `title` | string? | YouTube title, max 100. **Required when a YouTube account is targeted**, except for drafts. |
 | `youtubePrivacy` | `"public"` \| `"unlisted"` \| `"private"`? | Default `public`. |
 | `youtubeTags` | string[]? | See [YouTube tags](#youtube-tags). |
 | `youtubeCategoryId` | string? | Numeric id, e.g. `"24"`. Default `"22"`. See [categories](#youtube-categories). |
-| `media` | object[]? | Items from `/media/presign`. YouTube needs a `VIDEO` item, except for drafts. |
+| `media` | object[]? | Up to 20 items from `/media/presign`, `url` and `storageKey` exactly as returned. YouTube needs a `VIDEO` item, except for drafts. |
 | `scheduledAt` | string \| null? | ISO-8601 **with a timezone** (`Z` or `+05:30`). A bare local time is rejected. Required when `action` is `schedule`. |
 | `action` | `"draft"` \| `"schedule"` \| `"now"` | See below. |
 

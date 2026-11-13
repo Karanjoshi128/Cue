@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import type { AdminResult } from "@/lib/admin-actions";
 import {
   adminRetestStorage,
@@ -11,6 +11,7 @@ import {
   deleteWorkspace,
   setAnnouncement,
   setPublishingPaused,
+  setSiteTheme,
   setUserRole,
   setWorkspaceFeature,
   setWorkspacePlan,
@@ -37,11 +38,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { SITE_THEMES, type SiteThemeKey } from "@/lib/site-themes";
+import { ThemeMiniature } from "@/components/theme-miniature";
 
 // Client controls for the admin panel. Each one calls a server action from
 // src/lib/admin-actions.ts, shows its message, and refreshes the page.
 
-function useRun() {
+export function useRun() {
   const router = useRouter();
   const [pending, start] = useTransition();
   function run(fn: () => Promise<AdminResult | undefined>, after?: () => void) {
@@ -435,5 +438,86 @@ export function AnnouncementControl({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The site theme selector: one card per theme, previewed in both modes.
+ * Picking one asks first, because it changes every page for everyone.
+ */
+export function SiteThemeSelector({ current }: { current: SiteThemeKey }) {
+  const { pending, run } = useRun();
+  const [chosen, setChosen] = useState<SiteThemeKey | null>(null);
+  const target = SITE_THEMES.find((t) => t.key === chosen);
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Site theme">
+        {SITE_THEMES.map((t) => {
+          const live = t.key === current;
+          const lights = "lights" in t ? t.lights : undefined;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="radio"
+              aria-checked={live}
+              disabled={pending}
+              onClick={() => !live && setChosen(t.key)}
+              className={cn(
+                "group overflow-hidden rounded-xl border text-left transition-all outline-none focus-visible:ring-3 focus-visible:ring-ring/30 disabled:opacity-60",
+                live
+                  ? "border-primary/60 shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_14%,transparent)]"
+                  : "hover:border-[color-mix(in_oklch,var(--border),var(--foreground)_18%)]",
+              )}
+            >
+              <div className="grid h-24 grid-cols-2 overflow-hidden border-b">
+                <ThemeMiniature colors={t.light} lights={lights} />
+                <ThemeMiniature colors={t.dark} lights={lights} />
+              </div>
+              <div className="flex items-start gap-3 px-3.5 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    {t.name}
+                    {live && <span className="label-caps text-live-ink">Live</span>}
+                  </div>
+                  <p className="text-muted-foreground mt-0.5 text-xs">{t.description}</p>
+                </div>
+                <span
+                  className={cn(
+                    "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full transition-all",
+                    live ? "bg-primary text-primary-foreground" : "shadow-[inset_0_0_0_1.5px_var(--border)]",
+                  )}
+                >
+                  {live && <Check className="size-3" strokeWidth={3} />}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <Dialog open={!!target} onOpenChange={(o) => !pending && !o && setChosen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Switch the site to {target?.name}?</DialogTitle>
+            <DialogDescription>
+              Every page changes at once for everyone: the public site, sign-in and the app. Each person keeps
+              their own light or dark setting. You can switch back here any time.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChosen(null)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button
+              disabled={pending || !target}
+              onClick={() => target && run(() => setSiteTheme(target.key), () => setChosen(null))}
+            >
+              {pending && <Loader2 className="animate-spin" />}
+              Make it live
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

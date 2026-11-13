@@ -1,22 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { connectingUser } from "@/lib/oauth-guard";
+import { connectingUser, endOAuthState, readOAuthState } from "@/lib/oauth-guard";
 import { encrypt } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // Every exit drops the nonce cookie, so a callback link works only once.
+  return endOAuthState(await connect(req), "linkedin");
+}
+
+async function connect(req: NextRequest): Promise<NextResponse> {
   const code = req.nextUrl.searchParams.get("code");
-  const state = req.nextUrl.searchParams.get("state");
-  if (!code || !state) {
+  if (!code || !req.nextUrl.searchParams.get("state")) {
     return NextResponse.redirect(new URL("/clients?error=linkedin_denied", req.url));
   }
 
-  const { clientId } = JSON.parse(
-    Buffer.from(state, "base64url").toString("utf8"),
-  ) as { clientId: string };
+  // Refused unless this browser started the flow (see startOAuthState).
+  const state = readOAuthState(req, "linkedin");
+  if (!state) {
+    return NextResponse.redirect(new URL("/clients?error=connect_expired", req.url));
+  }
+  const { clientId } = state;
 
-  // Defense-in-depth: `state` is unsigned, so re-verify workspace ownership.
+  // The client is re-checked too: membership can change mid-flow.
   const user = await connectingUser(req, "linkedin");
   if (user instanceof NextResponse) return user;
   const owned = await prisma.client.findFirst({

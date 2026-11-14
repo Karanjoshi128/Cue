@@ -189,7 +189,7 @@ Admin → Platform.
    - Subscribe to **comments**, **messages** and **messaging_postbacks**.
 3. **Per account.** An account connected with the new permissions is subscribed to the same
    three fields automatically (`webhooksSubscribedAt`). Accounts connected earlier show
-   Reconnect on the Automations page.
+   **Allow access** on the Automations page.
 4. **Business Verification** for the Karan Joshi (Udyam) business, or Meta sends no webhooks
    even after approval.
 
@@ -227,7 +227,7 @@ sends no webhooks (§2). Standard Access is enough for testers.
 1. Locally, set `NEXT_PUBLIC_IG_AUTOMATIONS=1` and restart the dev server.
 2. Two Instagram accounts, both **Instagram Testers** on the app: **A**, the professional
    account the automation runs on, and **B**, to comment from.
-3. Connect A from Automations → Reconnect (the dialog lists four permissions).
+3. Connect A from Automations → **Allow access** (the dialog lists four permissions).
 4. Create an automation on one of A's posts: keyword `LINK`, a reply, a DM with a link button.
 5. From B, comment `LINK please`. Click "Check comments now" or wait a minute. The activity
    log shows **Sent**; B has the reply and the DM (maybe in message requests).
@@ -267,7 +267,7 @@ end-to-end result, with captions naming each permission.
 
 **Screencast shot list**
 
-1. Cue signed in. Automations → **Reconnect** on the account.
+1. Cue signed in. Automations → **Allow access** on the account.
 2. Instagram login (force_reauth). The permission dialog **lists all four**. Hold 4 to 5 s, then Allow.
 3. Back on Automations, the account is ready. Caption: instagram_business_basic.
 4. **New automation**: the account, one post, keyword `LINK`, a public reply, a DM with a link
@@ -330,7 +330,7 @@ For each client:
 1. Add their Instagram account as an **Instagram Tester** on the Meta app; they accept at
    instagram.com/accounts/manage_access. Their followers don't need anything.
 2. Unlock the feature on their row in Admin → Users. It applies to their whole workspace.
-3. They open Automations and click **Reconnect** to grant comment and message access.
+3. They open Automations and click **Allow access** to grant comment and message access.
 
 Unlocking or locking re-renders the privacy and data-deletion pages, which describe the
 features once any workspace can use them. Locking again stops everything for that

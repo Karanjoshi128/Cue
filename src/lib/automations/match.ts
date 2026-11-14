@@ -51,11 +51,16 @@ function distance(a: string, b: string, max: number): number {
  * A typo of a one-word keyword. Short words are where typos turn into other
  * real words ("link" and "line"), so 4-letter keywords only forgive swapped
  * or doubled letters ("lnik", "linkk"), and 5+ letters forgive any one slip.
- * Under 4 letters must be exact.
+ * Under 4 letters must be exact. A plural counts ("menus", "guides"), but a
+ * different ending doesn't: "guided" isn't GUIDE.
  */
 function nearMiss(word: string, kw: string): boolean {
   const len = [...kw].length;
   if (len < 4 || word === kw) return false;
+  if (word === `${kw}s` || word === `${kw}es`) return true;
+  // One letter added at the end makes a new word ("guided", "linker") unless
+  // it repeats the last letter ("guidee").
+  if (word.startsWith(kw) && [...word].length === len + 1 && word.at(-1) !== kw.at(-1)) return false;
   if (len === 4) {
     const doubled = word.replace(/(.)\1/gu, "$1") === kw;
     const swapped =

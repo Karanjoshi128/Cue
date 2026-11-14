@@ -83,7 +83,7 @@ async function main() {
   const ws = await prisma.workspace.create({ data: { name: "Desk WS" } });
   const client = await prisma.client.create({ data: { name: "Acme", workspaceId: ws.id } });
   const common = { clientId: client.id, accessToken: encrypt("t"), refreshToken: encrypt("r"), tokenExpires: new Date(Date.now() + 30 * 86400_000) };
-  await prisma.socialAccount.create({ data: { ...common, platform: "INSTAGRAM", externalId: "IGBIZ", displayName: "@acme.cafe", scopes: "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments" } });
+  const igMain = await prisma.socialAccount.create({ data: { ...common, platform: "INSTAGRAM", externalId: "IGBIZ", displayName: "@acme.cafe", scopes: "instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments" } });
   await prisma.socialAccount.create({ data: { ...common, platform: "INSTAGRAM", externalId: "IGOTHER", displayName: "@nocomments", scopes: "instagram_business_basic,instagram_business_content_publish" } });
   await prisma.socialAccount.create({ data: { ...common, platform: "YOUTUBE", externalId: "google-sub", displayName: "Acme", scopes: "youtube.upload youtube.force-ssl openid email profile" } });
 
@@ -103,6 +103,35 @@ async function main() {
   check("YouTube isn't read again within 30 minutes", calls.filter((c) => c.host === "www.googleapis.com").length === ytCalls && r2.accounts === 0, r2);
   await syncReplyDesk({ workspaceId: ws.id });
   check("Refresh reads YouTube anyway", calls.filter((c) => c.host === "www.googleapis.com").length > ytCalls);
+
+  console.log("\nanswered by an automation");
+  // ig5 was matched and DMed by an automation: the desk shows it as answered.
+  const rule = await prisma.automationRule.create({
+    data: { clientId: client.id, accountId: igMain.id, name: "Cold brew link", keywords: ["cold"], dmText: "Here you go" },
+  });
+  await prisma.automationRun.create({
+    data: {
+      ruleId: rule.id, commentId: "ig5", commenterId: "u5", commentText: "Went yesterday, loved the cold brew",
+      commentedAt: new Date(), source: "WEBHOOK", status: "SENT", dmMessageId: "mid1", dmSentAt: new Date(),
+    },
+  });
+  await syncReplyDesk({ workspaceId: ws.id });
+  const ig5 = await prisma.inboxComment.findFirst({ where: { externalId: "ig5" } });
+  check(
+    "comment the automation answered is shown as answered by it",
+    ig5?.state === "REPLIED" && ig5.replyText === null && ig5.repliedBy === "Cold brew link (automation)",
+    ig5,
+  );
+  const ig1 = await prisma.inboxComment.findFirst({ where: { externalId: "ig1" } });
+  check("comments it didn't answer stay open", ig1?.state === "OPEN");
+
+  console.log("\nrefresh for one client");
+  const other = await prisma.client.create({ data: { name: "Other", workspaceId: ws.id } });
+  const before = calls.length;
+  await syncReplyDesk({ workspaceId: ws.id, clientId: other.id });
+  check("refresh scoped to a client with no accounts reads nothing", calls.length === before);
+  await syncReplyDesk({ workspaceId: ws.id, clientId: client.id });
+  check("refresh scoped to the client reads its accounts", calls.length > before);
 
   console.log("\nreply");
   check("YouTube reply posts under the thread", (await replyToYouTubeComment("t", "yt1", "About 2 weeks!")) === "reply1" && (calls.at(-1)!.body as { snippet: { parentId: string } }).snippet.parentId === "yt1");

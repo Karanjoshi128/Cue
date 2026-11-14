@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { format } from "date-fns";
+import { format, formatDistanceToNowStrict } from "date-fns";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import type { AutomationTrigger, KeywordMatch, LeadField } from "@prisma/client";
@@ -12,7 +12,9 @@ import {
   Check,
   ImageIcon,
   LayoutGrid,
+  Eye,
   Loader2,
+  Play,
   Plus,
   RefreshCw,
   Sparkles,
@@ -28,6 +30,7 @@ import {
 import { unwrap } from "@/lib/action-result";
 import { COPY, LIMITS, type AutomationPreset } from "@/lib/automations/config";
 import { cleanKeywords } from "@/lib/automations/match";
+import { withScheme } from "@/lib/bio/config";
 import type {
   AutomationAccountView,
   AutomationPostView,
@@ -100,6 +103,8 @@ interface Draft {
 }
 
 /** A described automation (AutomationPreset) laid over a new draft. */
+type ProblemField = "account" | "post" | "keywords" | "dm" | "buttonLabel" | "buttonUrl";
+
 function withPreset(d: Draft, p: AutomationPreset | null | undefined): Draft {
   if (!p) return d;
   return {
@@ -112,7 +117,10 @@ function withPreset(d: Draft, p: AutomationPreset | null | undefined): Draft {
     replies: p.replies.length ? p.replies : d.replies,
     dmOn: true,
     dmText: p.dmText || d.dmText,
-    buttonOn: !!p.buttonUrl,
+    // The description asked for a link but gave no address: keep the button on
+    // with an empty address, so the person is asked for it instead of the DM
+    // promising a link that never comes.
+    buttonOn: !!p.buttonUrl || !!p.buttonLabel || /link|pdf|guide|download|menu|catalog/i.test(p.dmText),
     buttonUrl: p.buttonUrl ?? "",
     buttonLabel: p.buttonLabel ?? d.buttonLabel,
     followGate: p.followGate,
@@ -238,24 +246,42 @@ function Segmented<T extends string>({
   value,
   options,
   onChange,
+  label,
 }: {
   id: string;
   value: T;
   options: { key: T; label: string }[];
   onChange: (v: T) => void;
+  /** Read out for the group, e.g. "Trigger". */
+  label: string;
 }) {
+  const move = (e: React.KeyboardEvent, i: number) => {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const next = options[(i + step + options.length) % options.length];
+    onChange(next.key);
+    const group = (e.currentTarget as HTMLElement).parentElement;
+    requestAnimationFrame(() =>
+      (group?.querySelector(`[data-key="${next.key}"]`) as HTMLElement | null)?.focus(),
+    );
+  };
   return (
-    <div className="bg-muted flex gap-0.5 rounded-xl p-1 text-sm">
-      {options.map((o) => {
+    <div role="radiogroup" aria-label={label} className="bg-muted flex gap-0.5 rounded-xl p-1 text-sm">
+      {options.map((o, i) => {
         const active = o.key === value;
         return (
           <button
             key={o.key}
             type="button"
+            role="radio"
+            data-key={o.key}
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => onChange(o.key)}
-            aria-pressed={active}
+            onKeyDown={(e) => move(e, i)}
             className={cn(
-              "relative flex h-8 flex-1 items-center justify-center rounded-lg px-2 font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+              "relative flex min-h-8 flex-1 items-center justify-center rounded-lg px-2 py-1 text-center leading-tight font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
               active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -299,14 +325,23 @@ function Toggle({
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const hintId = useId();
   return (
-    <label className="flex items-start justify-between gap-4 text-sm">
+    <div className="flex items-start justify-between gap-4 text-sm">
       <span>
         <span className="font-medium">{label}</span>
-        <span className="text-muted-foreground block text-xs leading-relaxed">{hint}</span>
+        <span id={hintId} className="text-muted-foreground block text-xs leading-relaxed">
+          {hint}
+        </span>
       </span>
-      <Switch checked={checked} onCheckedChange={onChange} className="mt-0.5" />
-    </label>
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-label={label}
+        aria-describedby={hintId}
+        className="mt-0.5"
+      />
+    </div>
   );
 }
 
@@ -319,6 +354,10 @@ function ChipInput({
   onChange,
   pending,
   onPendingChange,
+  tone = "keyword",
+  inputRef,
+  invalid,
+  describedBy,
 }: {
   label: string;
   values: string[];
@@ -327,32 +366,54 @@ function ChipInput({
   onChange: (values: string[]) => void;
   pending: string;
   onPendingChange: (v: string) => void;
+  /** Hold words look different from the words that trigger. */
+  tone?: "keyword" | "hold";
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
+  const own = useRef<HTMLInputElement>(null);
+  const input = inputRef ?? own;
   const add = (raw: string) => {
-    onChange(
-      cleanKeywords([...values, ...raw.split(",")])
-        .slice(0, max)
-        .map((k) => k.slice(0, LIMITS.keywordLength)),
-    );
+    const typed = cleanKeywords(raw.split(","));
+    const merged = cleanKeywords([...values, ...typed]);
+    const kept = merged.slice(0, max).map((k) => k.slice(0, LIMITS.keywordLength));
+    if (merged.length > max) {
+      toast.info(`${max} is the most. ${merged.length - max} more weren't added.`);
+    } else if (typed.some((k) => k.length > LIMITS.keywordLength)) {
+      toast.info(`Cut to ${LIMITS.keywordLength} characters.`);
+    } else if (typed.length && typed.every((k) => values.includes(k))) {
+      toast.info("Already added.");
+    }
+    onChange(kept);
     onPendingChange("");
   };
   return (
     <div className="bg-card focus-within:border-ring focus-within:ring-ring/15 flex min-h-10 flex-wrap items-center gap-1.5 rounded-lg border px-2 py-1.5 transition-[border-color,box-shadow] focus-within:ring-4">
       {values.map((k) => (
-        <KeywordChip key={k} className="gap-1 pr-1">
+        <KeywordChip
+          key={k}
+          className={cn("gap-0.5 pr-0.5", tone === "hold" && "bg-standby/12 text-standby-ink")}
+        >
           {k}
           <button
             type="button"
             aria-label={`Remove ${k}`}
-            onClick={() => onChange(values.filter((x) => x !== k))}
-            className="hover:bg-primary/15 grid size-4 place-items-center rounded"
+            onClick={() => {
+              onChange(values.filter((x) => x !== k));
+              input.current?.focus();
+            }}
+            className="hover:bg-foreground/10 focus-visible:ring-ring grid size-6 place-items-center rounded outline-none focus-visible:ring-2"
           >
             <X className="size-3" />
           </button>
         </KeywordChip>
       ))}
       <input
+        ref={input}
         aria-label={label}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         value={pending}
         onChange={(e) => {
           const v = e.target.value;
@@ -371,6 +432,11 @@ function ChipInput({
         placeholder={values.length ? "Add another" : placeholder}
         className="placeholder:text-muted-foreground min-w-28 flex-1 bg-transparent px-1 text-sm outline-none"
       />
+      {values.length >= max - 5 && (
+        <span className="text-muted-foreground shrink-0 px-1 font-mono text-[0.6875rem] tabular-nums">
+          {values.length}/{max}
+        </span>
+      )}
     </div>
   );
 }
@@ -391,6 +457,7 @@ export function AutomationEditor({
   timeZone,
   aiOn,
   preset,
+  copyOf,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -404,13 +471,30 @@ export function AutomationEditor({
   aiOn: boolean;
   /** Settings from a described automation, for a new rule. */
   preset?: AutomationPreset | null;
+  /** A rule to duplicate: a new rule with its settings, paused until saved live. */
+  copyOf?: AutomationRuleView | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [writing, setWriting] = useState(false);
-  const [draft, setDraft] = useState<Draft>(() =>
-    withPreset(draftFrom(rule, defaultAccountId ?? accounts[0]?.id ?? ""), rule ? null : preset),
-  );
+  const [draft, setDraft] = useState<Draft>(() => {
+    // One client's accounts (or a single account): start on the first. Across
+    // several clients, make the person pick, so nothing lands on the wrong one.
+    const oneClient = new Set(accounts.map((a) => a.clientId)).size <= 1;
+    const fallback = defaultAccountId ?? (oneClient ? (accounts[0]?.id ?? "") : "");
+    if (copyOf) {
+      const same = accounts.some((a) => a.id === copyOf.accountId);
+      const copy = draftFrom(copyOf, copyOf.accountId);
+      return {
+        ...copy,
+        name: `Copy of ${copyOf.name}`.slice(0, LIMITS.name),
+        // Two live rules on one account would both answer the same comment.
+        enabled: false,
+        ...(same ? {} : { accountId: fallback, media: null, postId: null }),
+      };
+    }
+    return withPreset(draftFrom(rule, fallback), rule ? null : preset);
+  });
   const [keywordInput, setKeywordInput] = useState("");
   const [holdInput, setHoldInput] = useState("");
   const [media, setMedia] = useState<{
@@ -420,7 +504,18 @@ export function AutomationEditor({
     error: string | null;
   } | null>(null);
 
-  const update = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }));
+  const update = (patch: Partial<Draft>) => {
+    setDraft((d) => ({ ...d, ...patch }));
+    // Any change may have fixed it; the next save checks again.
+    setProblem(null);
+  };
+  const dmBox = useRef<HTMLTextAreaElement>(null);
+  const keywordRef = useRef<HTMLInputElement>(null);
+  const buttonUrlRef = useRef<HTMLInputElement>(null);
+  const buttonLabelRef = useRef<HTMLInputElement>(null);
+  const [problem, setProblem] = useState<{ field: ProblemField; message: string } | null>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
   const account = accounts.find((a) => a.id === draft.accountId);
   const accountPosts = posts.filter((p) => p.accountIds.includes(draft.accountId));
   const chosenPost = accountPosts.find((p) => p.id === draft.postId) ?? null;
@@ -473,15 +568,68 @@ export function AutomationEditor({
     setWriting(true);
     startTransition(async () => {
       try {
-        const variants = unwrap(await writeDmVariants(draft.dmText, LIMITS.dmVariants));
-        update({ dmVariants: variants.slice(0, LIMITS.dmVariants) });
-        toast.success("Variations written. Edit or remove any before saving.");
+        const mine = draft.dmVariants.filter((v) => v.trim());
+        const room = LIMITS.dmVariants - mine.length;
+        if (room <= 0) {
+          toast.info("All wording slots are full. Remove one to make room.");
+          return;
+        }
+        const variants = unwrap(await writeDmVariants(draft.dmText, room));
+        update({ dmVariants: [...mine, ...variants].slice(0, LIMITS.dmVariants) });
+        toast.success(
+          mine.length
+            ? "Added to your wordings. Edit or remove any before saving."
+            : "Wordings written. Edit or remove any before saving.",
+        );
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Couldn't write variations.");
       } finally {
         setWriting(false);
       }
     });
+  }
+
+  /** A name from what it does, when none was typed. */
+  function autoName(keywords: string[]): string {
+    const words = keywords.slice(0, 2).map((k) => k.toUpperCase()).join(" / ");
+    const what =
+      draft.trigger === "STORY_REPLY"
+        ? `Story replies${words ? `: ${words}` : ""}`
+        : draft.trigger === "DM_KEYWORD"
+          ? `DMs: ${words || "any"}`
+          : draft.matchMode === "ANY_COMMENT"
+            ? "Every comment"
+            : `${words || "Keyword"} on ${draft.scope === "ANY_POST" ? "any post" : "one post"}`;
+    return what.slice(0, LIMITS.name);
+  }
+
+  /** The first thing that stops a save, found here so it can point at the field. */
+  function check(keywords: string[]): { field: ProblemField; message: string; el?: HTMLElement | null } | null {
+    const dmOn = draft.dmOn || !isComment;
+    if (!draft.accountId) {
+      return { field: "account", message: "Pick an Instagram account.", el: document.getElementById("auto-account") };
+    }
+    if (isComment && draft.scope === "ONE_POST" && !(draft.source === "instagram" ? draft.media : draft.postId)) {
+      return { field: "post", message: "Pick the post this automation watches." };
+    }
+    if (draft.matchMode !== "ANY_COMMENT" && keywords.length === 0) {
+      return { field: "keywords", message: "Add at least one keyword.", el: keywordRef.current };
+    }
+    if (dmOn && !draft.dmText.trim()) return { field: "dm", message: "Write the DM.", el: dmBox.current };
+    if (dmOn && draft.dmText.length > LIMITS.dmLength) {
+      return { field: "dm", message: `Keep the DM under ${LIMITS.dmLength} characters.`, el: dmBox.current };
+    }
+    if (dmOn && draft.buttonOn && !draft.buttonLabel.trim()) {
+      return { field: "buttonLabel", message: "Give the button a label.", el: buttonLabelRef.current };
+    }
+    if (dmOn && draft.buttonOn && !draft.buttonUrl.trim()) {
+      return {
+        field: "buttonUrl",
+        message: "Paste the link the button opens, or switch the button off.",
+        el: buttonUrlRef.current,
+      };
+    }
+    return null;
   }
 
   function save() {
@@ -494,9 +642,20 @@ export function AutomationEditor({
     // Story replies and DMs are always answered with a DM.
     const dmOn = draft.dmOn || !isComment;
     const steps = dmOn;
+    const found = check(keywords);
+    setProblem(found ? { field: found.field, message: found.message } : null);
+    if (found) {
+      toast.error(found.message);
+      found.el?.focus();
+      found.el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    const name = draft.name.trim() || autoName(keywords);
+    const buttonUrl = withScheme(draft.buttonUrl);
+    if (name !== draft.name || buttonUrl !== draft.buttonUrl) update({ name, buttonUrl });
     const input: AutomationInput = {
       accountId: draft.accountId,
-      name: draft.name,
+      name,
       enabled: draft.enabled,
       trigger: draft.trigger,
       scope: draft.scope,
@@ -510,7 +669,7 @@ export function AutomationEditor({
       dmVariants: dmOn ? draft.dmVariants : [],
       rotateEvery: draft.rotateEvery,
       dmButtonLabel: dmOn && draft.buttonOn ? draft.buttonLabel : null,
-      dmButtonUrl: dmOn && draft.buttonOn ? draft.buttonUrl : null,
+      dmButtonUrl: dmOn && draft.buttonOn ? buttonUrl : null,
       oncePerPerson: draft.oncePerPerson,
       followGate: steps && draft.followGate,
       gateText: steps && draft.followGate ? draft.gateText : null,
@@ -547,12 +706,16 @@ export function AutomationEditor({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto p-0 sm:max-w-5xl">
         <div className="grid lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-5 p-5 sm:p-7">
+          <div ref={topRef} className="space-y-5 p-5 sm:p-7">
             <div className="space-y-1.5 pr-8">
               <DialogTitle className="headline text-2xl">
                 {rule ? (
                   <>
                     Edit <em>automation</em>
+                  </>
+                ) : copyOf ? (
+                  <>
+                    Duplicate <em>automation</em>
                   </>
                 ) : (
                   <>
@@ -571,11 +734,17 @@ export function AutomationEditor({
                 <div className="min-w-0 space-y-1.5">
                   <Label htmlFor="auto-account">Instagram account</Label>
                   <Select
-                    value={draft.accountId}
+                    value={draft.accountId || null}
                     items={accountItems}
                     onValueChange={(v) => changeAccount(v as string)}
+                    // A saved automation stays on its account; Duplicate copies it.
+                    disabled={!!rule}
                   >
-                    <SelectTrigger id="auto-account" className="w-full">
+                    <SelectTrigger
+                      id="auto-account"
+                      className="w-full"
+                      aria-invalid={problem?.field === "account" || undefined}
+                    >
                       <SelectValue placeholder="Pick an account" />
                     </SelectTrigger>
                     <SelectContent>
@@ -586,6 +755,16 @@ export function AutomationEditor({
                       ))}
                     </SelectContent>
                   </Select>
+                  {rule && (
+                    <p className="text-muted-foreground text-xs">
+                      For another account, use Duplicate in the card&apos;s menu.
+                    </p>
+                  )}
+                  {copyOf && (
+                    <p className="text-muted-foreground text-xs">
+                      The copy starts paused. Switch it live when it&apos;s ready.
+                    </p>
+                  )}
                 </div>
                 <div className="min-w-0 space-y-1.5">
                   <Label htmlFor="auto-name">Name</Label>
@@ -594,13 +773,14 @@ export function AutomationEditor({
                     value={draft.name}
                     maxLength={LIMITS.name}
                     onChange={(e) => update({ name: e.target.value })}
-                    placeholder="Free guide giveaway"
+                    placeholder="Optional. Named from the keyword if blank"
                   />
                 </div>
               </div>
 
               <Segmented
                 id="auto-trigger"
+                label="What starts it"
                 value={draft.trigger}
                 onChange={changeTrigger}
                 options={[
@@ -626,6 +806,7 @@ export function AutomationEditor({
                 <>
                   <Segmented
                     id="auto-scope"
+                    label="Which posts"
                     value={draft.scope}
                     onChange={(scope) => update({ scope })}
                     options={[
@@ -708,14 +889,18 @@ export function AutomationEditor({
                           )}
                           {mediaItems?.items ? (
                             mediaItems.items.length ? (
-                              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+                              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                                 {mediaItems.items.map((m) => {
                                   const on = draft.media?.id === m.id;
+                                  const video = m.type === "VIDEO" || m.type === "REELS";
                                   return (
                                     <button
                                       key={m.id}
                                       type="button"
                                       title={m.caption ?? undefined}
+                                      aria-label={`${video ? "Reel" : "Post"}${
+                                        m.timestamp ? `, ${formatDistanceToNowStrict(new Date(m.timestamp))} ago` : ""
+                                      }: ${m.caption?.slice(0, 80) || "no caption"}`}
                                       onClick={() =>
                                         update({
                                           media: {
@@ -727,12 +912,32 @@ export function AutomationEditor({
                                         })
                                       }
                                       aria-pressed={on}
-                                      className={cn(
-                                        "relative aspect-square overflow-hidden rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/40",
-                                        on && "ring-primary ring-2 ring-offset-2 ring-offset-popover",
-                                      )}
+                                      className="group/tile min-w-0 space-y-1 rounded-lg text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
                                     >
-                                      <MediaThumb url={m.thumbUrl} className="size-full rounded-none" />
+                                      <span
+                                        className={cn(
+                                          "relative block aspect-square overflow-hidden rounded-lg",
+                                          on && "ring-primary ring-2 ring-offset-2 ring-offset-popover",
+                                        )}
+                                      >
+                                        <MediaThumb url={m.thumbUrl} className="size-full rounded-none" />
+                                        {video && (
+                                          <Play className="absolute top-1.5 right-1.5 size-3.5 fill-white text-white drop-shadow-[0_1px_2px_rgb(0_0_0/0.6)]" />
+                                        )}
+                                        {m.timestamp && (
+                                          <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1 font-mono text-[0.625rem] text-white">
+                                            {formatDistanceToNowStrict(new Date(m.timestamp))
+                                              .replace(/ (seconds?|minutes?)$/, "m")
+                                              .replace(/ hours?$/, "h")
+                                              .replace(/ days?$/, "d")
+                                              .replace(/ months?$/, "mo")
+                                              .replace(/ years?$/, "y")}
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="text-muted-foreground line-clamp-2 text-[0.6875rem] leading-snug">
+                                        {m.caption || "No caption"}
+                                      </span>
                                     </button>
                                   );
                                 })}
@@ -773,6 +978,7 @@ export function AutomationEditor({
             <Step n="02" title={TRIGGER_TITLE[draft.trigger]}>
               <Segmented
                 id="auto-match"
+                label="How to match"
                 value={draft.matchMode}
                 onChange={(matchMode) => update({ matchMode })}
                 options={[
@@ -797,6 +1003,9 @@ export function AutomationEditor({
                     onChange={(keywords) => update({ keywords })}
                     pending={keywordInput}
                     onPendingChange={setKeywordInput}
+                    inputRef={keywordRef}
+                    invalid={problem?.field === "keywords"}
+                    describedBy={problem?.field === "keywords" ? "auto-problem" : undefined}
                   />
                   <p className="text-muted-foreground text-xs leading-relaxed">
                     {draft.matchMode === "WORD"
@@ -886,15 +1095,38 @@ export function AutomationEditor({
                 <div className="space-y-3">
                   <div className="space-y-1.5">
                     <Textarea
+                      ref={dmBox}
                       value={draft.dmText}
                       rows={3}
                       aria-label="DM text"
+                      aria-invalid={problem?.field === "dm" || undefined}
+                      aria-describedby={problem?.field === "dm" ? "auto-problem" : undefined}
                       onChange={(e) => update({ dmText: e.target.value })}
                       placeholder="Hey {username}, here's the guide you asked for"
                     />
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground text-xs">
-                        <span className="font-mono">{"{username}"}</span> becomes their handle.
+                      <span className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          onClick={() => {
+                            const el = dmBox.current;
+                            const at = el?.selectionStart ?? draft.dmText.length;
+                            const end = el?.selectionEnd ?? at;
+                            const next = `${draft.dmText.slice(0, at)}{username}${draft.dmText.slice(end)}`;
+                            update({ dmText: next.slice(0, LIMITS.dmLength) });
+                            requestAnimationFrame(() => {
+                              el?.focus();
+                              el?.setSelectionRange(at + 10, at + 10);
+                            });
+                          }}
+                        >
+                          <Plus /> Their name
+                        </Button>
+                        <span>
+                          <span className="font-mono">{"{username}"}</span> becomes their @handle.
+                        </span>
                       </span>
                       <Counter value={draft.dmText.length} max={LIMITS.dmLength} />
                     </div>
@@ -947,7 +1179,7 @@ export function AutomationEditor({
                       )}
                       {draft.dmVariants.length > 0 && (
                         <label className="text-muted-foreground flex items-center gap-2 text-xs">
-                          Switch every
+                          Next wording after every
                           <Input
                             type="number"
                             min={1}
@@ -956,7 +1188,7 @@ export function AutomationEditor({
                             onChange={(e) => update({ rotateEvery: Math.max(1, Number(e.target.value) || 1) })}
                             className="h-7 w-16 px-2 text-xs"
                           />
-                          DMs
+                          links sent
                         </label>
                       )}
                     </div>
@@ -974,20 +1206,34 @@ export function AutomationEditor({
                     {draft.buttonOn && (
                       <div className="mt-3 grid gap-2 sm:grid-cols-[10rem_minmax(0,1fr)]">
                         <Input
+                          ref={buttonLabelRef}
                           aria-label="Button label"
+                          aria-invalid={problem?.field === "buttonLabel" || undefined}
                           value={draft.buttonLabel}
                           maxLength={LIMITS.buttonLabel}
                           onChange={(e) => update({ buttonLabel: e.target.value })}
                           placeholder="Get the guide"
                         />
                         <Input
+                          ref={buttonUrlRef}
                           aria-label="Button link"
+                          aria-describedby={problem?.field === "buttonUrl" ? "auto-problem" : undefined}
                           type="url"
                           inputMode="url"
                           value={draft.buttonUrl}
                           onChange={(e) => update({ buttonUrl: e.target.value })}
-                          placeholder="https://"
+                          onBlur={() => draft.buttonUrl.trim() && update({ buttonUrl: withScheme(draft.buttonUrl) })}
+                          aria-invalid={problem?.field === "buttonUrl" || undefined}
+                          placeholder="yoursite.com/guide"
                         />
+                        <div className="text-muted-foreground flex items-center justify-between gap-2 text-xs sm:col-span-2">
+                          {draft.buttonUrl.trim() ? (
+                            <span>Opens {draft.buttonUrl.replace(/^https?:\/\//, "").slice(0, 60)}</span>
+                          ) : (
+                            <span className="text-standby-ink font-medium">Paste the link the button opens.</span>
+                          )}
+                          <Counter value={draft.buttonLabel.length} max={LIMITS.buttonLabel} />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1022,6 +1268,7 @@ export function AutomationEditor({
                     <div className="text-sm font-medium">Ask for</div>
                     <Segmented
                       id="auto-collect"
+                      label="Ask for"
                       value={draft.collect ?? "NONE"}
                       onChange={(v) => update({ collect: v === "NONE" ? null : (v as LeadField) })}
                       options={[
@@ -1050,7 +1297,7 @@ export function AutomationEditor({
                     <div className="space-y-2">
                       <Toggle
                         label="Nudge if they go quiet"
-                        hint="One reminder, sent while Instagram still allows it: within 24 hours of their last tap or reply."
+                        hint="One reminder for people who tapped or replied, then stopped part-way. Instagram allows it within 24 hours of their last tap or reply."
                         checked={draft.followUpOn}
                         onChange={(followUpOn) => update({ followUpOn })}
                       />
@@ -1098,6 +1345,7 @@ export function AutomationEditor({
                   <div className="text-sm font-medium">Hold for review</div>
                   <ChipInput
                     label="Hold words"
+                    tone="hold"
                     values={draft.holdWords}
                     max={LIMITS.holdWords}
                     placeholder="scam, fake, refund"
@@ -1123,14 +1371,31 @@ export function AutomationEditor({
 
             <div className="bg-popover sticky bottom-0 -mx-5 flex flex-wrap items-center justify-between gap-3 border-t px-5 pt-4 pb-5 sm:-mx-7 sm:px-7">
               <label className="flex items-center gap-2.5 text-sm font-medium">
-                <Switch checked={draft.enabled} onCheckedChange={(v) => update({ enabled: v })} />
-                {draft.enabled ? "Live" : "Paused"}
+                <Switch
+                  checked={draft.enabled}
+                  onCheckedChange={(v) => update({ enabled: v })}
+                  aria-label="Automation live"
+                />
+                <span aria-hidden>{draft.enabled ? "Live" : "Paused"}</span>
               </label>
-              <div className="flex gap-2">
+              {problem && (
+                <p id="auto-problem" role="alert" className="text-fault-ink order-last w-full text-xs font-medium sm:order-none sm:w-auto sm:flex-1">
+                  {problem.message}
+                </p>
+              )}
+              <div className="ml-auto flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="lg:hidden"
+                  onClick={() => previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                >
+                  <Eye /> Preview
+                </Button>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel
                 </Button>
-                <Button type="button" onClick={save} disabled={pending || !draft.accountId}>
+                <Button type="button" onClick={save} disabled={pending}>
                   {pending && !writing && <Loader2 className="animate-spin" />}
                   {rule ? "Save changes" : "Create automation"}
                 </Button>
@@ -1138,9 +1403,20 @@ export function AutomationEditor({
             </div>
           </div>
 
-          <aside className="bg-canvas/60 border-t p-5 lg:border-t-0 lg:border-l sm:p-6">
+          <aside ref={previewRef} className="bg-canvas/60 scroll-mt-4 border-t p-5 lg:border-t-0 lg:border-l sm:p-6">
             <div className="lg:sticky lg:top-6">
-              <div className="label-caps mb-3">Live preview</div>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="label-caps">Live preview</div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  className="lg:hidden"
+                  onClick={() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                >
+                  Back to editing
+                </Button>
+              </div>
               <AutomationPreview
                 accountName={account?.displayName ?? ""}
                 trigger={draft.trigger}
@@ -1155,6 +1431,7 @@ export function AutomationEditor({
                 gateText={draft.followGate ? draft.gateText : null}
                 collect={draft.collect}
                 askText={draft.collect ? draft.askText : null}
+                holdWords={holdInput.trim() ? cleanKeywords([...draft.holdWords, holdInput]) : draft.holdWords}
               />
             </div>
           </aside>

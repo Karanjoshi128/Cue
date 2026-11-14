@@ -29,7 +29,8 @@ export interface BioViewData {
   color: string | null;
   avatarUrl: string | null;
   links: { id: string; label: string; href: string }[];
-  tiles: { id: string; image: string; caption: string; video: boolean; href: string }[];
+  /** `linked`: the tile opens an address the page set (a product page), not the post. */
+  tiles: { id: string; image: string; caption: string; video: boolean; href: string; linked?: boolean }[];
 }
 
 const loadPublished = cache(async (slug: string) => {
@@ -96,6 +97,7 @@ export async function getPublicBioPage(
             caption: t.caption,
             video: t.video,
             href: go(t.id),
+            linked: !!readPostLinks(page.postLinks)[t.id],
           }))
         : [],
     },
@@ -210,7 +212,13 @@ export async function getBioEditor(scopeClientId: string | undefined, requested:
     slug: c.bioPage?.slug ?? null,
     published: c.bioPage?.published ?? false,
   }));
-  const selected = clients.find((c) => c.id === requested) ?? clients[0];
+  // With no client asked for, open on one that has a page (a live one first)
+  // rather than the first name in the list.
+  const selected =
+    clients.find((c) => c.id === requested) ??
+    clients.find((c) => c.bioPage?.published) ??
+    clients.find((c) => c.bioPage) ??
+    clients[0];
   if (!selected) return { featureOn, siteUrl: SITE_URL, clients: list, editor: null };
 
   const [accounts, page] = await Promise.all([

@@ -68,6 +68,8 @@ export const COPY = {
   tapLabel: "Send me the link",
   notFollowing: "Almost there! Follow {handle} first, then tap the button again 👇",
   followUp: "Still want it? Tap below 👇",
+  /** The default nudge for someone asked a question: there's no button to tap. */
+  followUpAnswer: "Still want it? Just reply here and I'll send it over.",
   ask: {
     EMAIL: "What's your email? Reply here and I'll send it over.",
     PHONE: "What's your phone number? Reply here and I'll send it over.",
@@ -100,4 +102,12 @@ export interface AutomationPreset {
   followGate: boolean;
   collect: "EMAIL" | "PHONE" | null;
   followUp: boolean;
+}
+
+/** The Automations page's sections, as ?tab= in its address. */
+export const AUTOMATIONS_TABS = ["automations", "activity", "leads"] as const;
+export type AutomationsTab = (typeof AUTOMATIONS_TABS)[number];
+
+export function isAutomationsTab(v: string | undefined): v is AutomationsTab {
+  return !!v && (AUTOMATIONS_TABS as readonly string[]).includes(v);
 }

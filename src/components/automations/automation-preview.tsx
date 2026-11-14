@@ -8,7 +8,7 @@ import { ExternalLink, ImageIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { PlatformIcon } from "@/components/post-bits";
 import { COPY } from "@/lib/automations/config";
-import { matchesKeywords } from "@/lib/automations/match";
+import { matchesKeywords, normalize } from "@/lib/automations/match";
 import { fillPreview } from "@/components/automations/bits";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +34,8 @@ export interface PreviewProps {
   /** What's asked before the link, when anything is. */
   collect: LeadField | null;
   askText: string | null;
+  /** Words that hold a comment for review instead of answering it. */
+  holdWords?: string[];
 }
 
 function hostOf(url: string): string {
@@ -59,13 +61,13 @@ function Bubble({ from, children }: { from: "them" | "you"; children: React.Reac
 
 function ButtonCard({ label, hint }: { label: string; hint?: string }) {
   return (
-    <div className="bg-card flex max-w-[85%] items-center justify-between gap-2 rounded-xl border px-3.5 py-2 text-[0.8125rem] font-semibold">
-      <span className="truncate">{label}</span>
+    <div className="bg-card max-w-[85%] rounded-xl border px-3.5 py-2 text-[0.8125rem] font-semibold">
+      <div className="break-words">{label}</div>
       {hint && (
-        <span className="text-muted-foreground flex min-w-0 items-center gap-1 text-[0.6875rem] font-normal">
+        <div className="text-muted-foreground flex min-w-0 items-center gap-1 text-[0.6875rem] font-normal">
           <span className="truncate">{hint}</span>
           <ExternalLink className="size-3 shrink-0" />
-        </span>
+        </div>
       )}
     </div>
   );
@@ -99,7 +101,12 @@ export function AutomationPreview(p: PreviewProps) {
   const [tryText, setTryText] = useState<string | null>(null);
   const [brokenThumb, setBrokenThumb] = useState<string | null>(null);
   const text = tryText ?? sample;
-  const hit = text.trim() !== "" && matchesKeywords(text, p.keywords, p.matchMode, p.fuzzy);
+  const matched = text.trim() !== "" && matchesKeywords(text, p.keywords, p.matchMode, p.fuzzy);
+  // Same check as the engine's hold words (automations/moderation.ts).
+  const heldBy = matched
+    ? ((p.holdWords ?? []).map(normalize).find((w) => w && normalize(text).includes(w)) ?? null)
+    : null;
+  const hit = matched && !heldBy;
   const showThumb = p.thumbUrl && brokenThumb !== p.thumbUrl;
   const isComment = p.trigger === "COMMENT";
 
@@ -196,7 +203,13 @@ export function AutomationPreview(p: PreviewProps) {
               <>
                 <Bubble from="you">{fillPreview(p.gateText || COPY.gate, SAMPLE_USER)}</Bubble>
                 <ButtonCard label={COPY.tapLabel} />
-                <Step>they tap, and they follow you</Step>
+                <Step>they tap</Step>
+                <div className="space-y-2 rounded-lg border border-dashed p-2.5">
+                  <div className="text-muted-foreground text-[0.6875rem]">If they don&apos;t follow you yet:</div>
+                  <Bubble from="you">{COPY.notFollowing.replaceAll("{handle}", `@${handle}`)}</Bubble>
+                  <ButtonCard label={COPY.tapLabel} />
+                </div>
+                <Step>once they follow you</Step>
               </>
             )}
             {p.collect && (
@@ -214,18 +227,25 @@ export function AutomationPreview(p: PreviewProps) {
       </AnimatePresence>
 
       <div className="space-y-1.5">
-        <label htmlFor="auto-try" className="label-caps flex items-center justify-between">
-          Try {isComment ? "a comment" : "a message"}
+        <div className="label-caps flex items-center justify-between">
+          <label htmlFor="auto-try">Try {isComment ? "a comment" : "a message"}</label>
           <span
+            role="status"
+            aria-live="polite"
             className={cn(
               "flex items-center gap-1.5 normal-case",
-              hit ? "text-live-ink" : "text-muted-foreground",
+              hit ? "text-live-ink" : heldBy ? "text-standby-ink" : "text-muted-foreground",
             )}
           >
-            <span className={cn("tally size-1.5", hit ? "text-live" : "text-muted-foreground/40")} />
-            {hit ? "Triggers" : "No match"}
+            <span
+              className={cn(
+                "tally size-1.5",
+                hit ? "text-live" : heldBy ? "text-standby" : "text-muted-foreground/40",
+              )}
+            />
+            {hit ? "Triggers" : heldBy ? `Held: has “${heldBy}”` : "No match"}
           </span>
-        </label>
+        </div>
         <Input
           id="auto-try"
           value={text}

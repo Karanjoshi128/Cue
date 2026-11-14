@@ -54,11 +54,11 @@ async function ownedAccount(workspaceId: string, accountId: string) {
 // where an id belongs would read as a filter matching every row).
 const idSchema = z.string().min(1).max(100);
 
-const optionalText = (max: number) =>
+const optionalText = (max: number, what: string) =>
   z
     .string()
     .trim()
-    .max(max)
+    .max(max, `${what} is over ${max} characters.`)
     .nullish()
     .transform((v) => v || null);
 
@@ -89,20 +89,20 @@ const ruleSchema = z
       )
       .max(LIMITS.replies, `Up to ${LIMITS.replies} reply variations.`)
       .transform((list) => list.filter(Boolean)),
-    dmText: optionalText(LIMITS.dmLength),
+    dmText: optionalText(LIMITS.dmLength, "The DM"),
     dmVariants: z
       .array(z.string().trim().max(LIMITS.dmLength, `Keep DMs under ${LIMITS.dmLength} characters.`))
       .max(LIMITS.dmVariants, `Up to ${LIMITS.dmVariants} DM variations.`)
       .transform((list) => list.filter(Boolean)),
     rotateEvery: z.number().int().min(1).max(1000),
-    dmButtonLabel: optionalText(LIMITS.buttonLabel),
-    dmButtonUrl: optionalText(2000),
+    dmButtonLabel: optionalText(LIMITS.buttonLabel, "The button label"),
+    dmButtonUrl: optionalText(2000, "The button link"),
     oncePerPerson: z.boolean(),
     followGate: z.boolean(),
-    gateText: optionalText(LIMITS.dmLength),
+    gateText: optionalText(LIMITS.dmLength, "The first DM"),
     collect: z.enum(["EMAIL", "PHONE"]).nullish().transform((v) => v ?? null),
-    askText: optionalText(LIMITS.dmLength),
-    followUpText: optionalText(LIMITS.dmLength),
+    askText: optionalText(LIMITS.dmLength, "The question"),
+    followUpText: optionalText(LIMITS.dmLength, "The follow-up"),
     followUpMinutes: z
       .number()
       .int()
@@ -234,9 +234,13 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
     if (ruleId) {
       const existing = await prisma.automationRule.findFirst({
         where: { id: ruleId, client: { workspaceId: user.workspaceId } },
-        select: { id: true, enabled: true },
+        select: { id: true, enabled: true, accountId: true },
       });
       if (!existing) throw new ApiError(404, "Automation not found.");
+      // Moving a rule would take its counts and history to another client.
+      if (existing.accountId !== account.id) {
+        throw new ApiError(400, "An automation stays on its account. Duplicate it to use it on another one.");
+      }
       await prisma.automationRule.update({
         where: { id: existing.id },
         data: {

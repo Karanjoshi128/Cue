@@ -134,8 +134,44 @@ export async function syncAccount(account: DeskAccount): Promise<number> {
     })),
     skipDuplicates: true,
   });
+  if (account.platform === "INSTAGRAM") await markAutoAnswered(account.id);
   await prisma.socialAccount.update({ where: { id: account.id }, data: { inboxSyncedAt: new Date() } });
   return count;
+}
+
+/**
+ * Open comments an Instagram automation already replied to or DMed are shown
+ * as answered by it, so a busy keyword post doesn't bury the real questions.
+ * Automations only act within a few days of a comment, so a week is enough.
+ */
+async function markAutoAnswered(accountId: string) {
+  const open = await prisma.inboxComment.findMany({
+    where: { accountId, state: "OPEN", postedAt: { gt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+    select: { id: true, externalId: true },
+  });
+  if (!open.length) return;
+  const runs = await prisma.automationRun.findMany({
+    where: {
+      commentId: { in: open.map((c) => c.externalId) },
+      status: { in: ["SENT", "PARTIAL"] },
+      rule: { accountId },
+    },
+    select: { commentId: true, dmSentAt: true, updatedAt: true, rule: { select: { name: true } } },
+  });
+  const byComment = new Map(open.map((c) => [c.externalId, c.id]));
+  for (const run of runs) {
+    const id = byComment.get(run.commentId);
+    if (!id) continue;
+    await prisma.inboxComment.updateMany({
+      where: { id, state: "OPEN" },
+      data: {
+        state: "REPLIED",
+        replyText: null,
+        repliedBy: `${run.rule.name} (automation)`,
+        repliedAt: run.dmSentAt ?? run.updatedAt,
+      },
+    });
+  }
 }
 
 function due(account: DeskAccount, now = Date.now()): boolean {
@@ -160,13 +196,17 @@ function allowed(account: DeskAccount): boolean {
  * deletes comments older than 30 days. `workspaceId` limits it to one
  * workspace (the page's Refresh), which also ignores the YouTube spacing.
  */
-export async function syncReplyDesk(opts: { budgetMs?: number; workspaceId?: string } = {}) {
+export async function syncReplyDesk(
+  opts: { budgetMs?: number; workspaceId?: string; clientId?: string } = {},
+) {
   const started = Date.now();
   const budget = opts.budgetMs ?? 45_000;
   const accounts = await prisma.socialAccount.findMany({
     where: {
       platform: { in: ["INSTAGRAM", "YOUTUBE"] },
-      ...(opts.workspaceId ? { client: { workspaceId: opts.workspaceId } } : {}),
+      ...(opts.workspaceId
+        ? { client: { workspaceId: opts.workspaceId, ...(opts.clientId ? { id: opts.clientId } : {}) } }
+        : {}),
     },
     select: accountSelect,
     orderBy: { inboxSyncedAt: { sort: "asc", nulls: "first" } },

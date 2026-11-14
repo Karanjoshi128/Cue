@@ -55,9 +55,12 @@ export function isUniqueViolation(err: unknown): boolean {
   );
 }
 
-/** Fills {username} the way the editor's preview does. */
+/**
+ * Fills {username} the way the editor's preview does. People often type
+ * "@{username}", so an @ already in front isn't doubled.
+ */
 export function fill(template: string, username: string | null): string {
-  return template.replaceAll("{username}", username ? `@${username}` : "there");
+  return template.replace(/@?\{username\}/g, username ? `@${username}` : "there");
 }
 
 /** Instagram opens a 24-hour window after a person's message or tap. */

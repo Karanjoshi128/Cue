@@ -10,6 +10,7 @@ import { workspaceFeatureAvailable, workspaceHasFeature } from "@/lib/plans";
 import { aiEnabled, draftCommentReply } from "@/lib/ai";
 import { ownedComment, postDeskReply } from "./reply";
 import { syncReplyDesk } from "./sync";
+import { getScopeClientId } from "@/lib/client-scope";
 
 // Reply Desk actions (src/app/(app)/replies). Scoped to the caller's
 // workspace and refused while the desk is off.
@@ -46,11 +47,27 @@ export async function setDeskState(id: string, state: "OPEN" | "DONE") {
   });
 }
 
+/** Marks several open comments done at once, e.g. every noise comment in view. */
+export async function markDeskDone(ids: string[]) {
+  return toResult(async () => {
+    const user = await deskUser();
+    const list = z.array(z.string().min(1).max(100)).min(1).max(200).parse(ids);
+    const { count } = await prisma.inboxComment.updateMany({
+      where: { id: { in: list }, state: "OPEN", account: { client: { workspaceId: user.workspaceId } } },
+      data: { state: "DONE" },
+    });
+    revalidatePath("/replies");
+    return count;
+  });
+}
+
 /** Reads every account's comments now instead of waiting for the next run. */
 export async function refreshDesk() {
   return toResult(async () => {
     const user = await deskUser();
-    const summary = await syncReplyDesk({ workspaceId: user.workspaceId, budgetMs: 25_000 });
+    // Only the client in view, when one is picked, so it's reached in time.
+    const clientId = await getScopeClientId();
+    const summary = await syncReplyDesk({ workspaceId: user.workspaceId, clientId, budgetMs: 25_000 });
     revalidatePath("/replies");
     return summary;
   });

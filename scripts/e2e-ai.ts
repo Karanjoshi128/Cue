@@ -3,7 +3,7 @@
  * Instagram faked (no tokens spent). Same safety checks as
  * scripts/e2e-automations.ts:
  *   DATABASE_URL=postgresql://postgres@localhost:55432/cue_test \
- *   TOKEN_ENC_KEY=<64 hex> ANTHROPIC_API_KEY=test npx tsx scripts/e2e-ai.ts
+ *   TOKEN_ENC_KEY=<64 hex> ANTHROPIC_API_KEY=test NEXT_PUBLIC_REPLY_DESK=1 npx tsx scripts/e2e-ai.ts
  */
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";

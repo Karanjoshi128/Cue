@@ -103,6 +103,12 @@ export default async function AppLayout({
             id="app-panel"
             className="bg-background flex min-h-dvh flex-col shell:h-[calc(100dvh-1rem)] shell:min-h-0 shell:overflow-y-auto shell:rounded-2xl shell:shadow-[0_0_0_1px_var(--border),0_1px_3px_0_rgb(20_20_40/0.04),0_12px_32px_-12px_rgb(20_20_40/0.08)]"
           >
+            <a
+              href="#main"
+              className="bg-primary text-primary-foreground sr-only z-50 rounded-lg px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+            >
+              Skip to content
+            </a>
             <AppBanners
               viewAs={viewAs ? { workspaceName: viewAs.workspaceName, expiresAt: viewAs.expiresAt } : null}
               paused={platform.publishingPaused}
@@ -125,7 +131,7 @@ export default async function AppLayout({
               nextCue={nextCue}
               helpTopics={HELP_TOPICS}
             />
-            <main className="flex-1 px-4 pt-7 pb-16 sm:px-6 shell:px-10 shell:pt-10">
+            <main id="main" tabIndex={-1} className="flex-1 px-4 pt-7 pb-16 outline-none sm:px-6 shell:px-10 shell:pt-10">
               {children}
             </main>
           </div>

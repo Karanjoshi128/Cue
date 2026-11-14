@@ -4,26 +4,39 @@ import { requireWorkspaceId } from "@/lib/auth";
 import { hasFeature } from "@/lib/plans";
 import { aiEnabled } from "@/lib/ai";
 import { canReadComments } from "./sync";
-import type { DeskFilter } from "./config";
+import { DESK_MAX, DESK_PAGE, type DeskFilter } from "./config";
 
 // The Reply Desk page, self-scoped to the caller's workspace.
 
 const WHERE: Record<DeskFilter, Prisma.InboxCommentWhereInput> = {
   questions: { state: "OPEN", kind: "QUESTION" },
-  open: { state: "OPEN", kind: { in: ["QUESTION", "OTHER"] } },
-  noise: { state: "OPEN", kind: { in: ["NOISE", "ABUSE"] } },
+  // Everything open that isn't a question or low priority.
+  open: { state: "OPEN", kind: "OTHER" },
+  abuse: { state: "OPEN", kind: "ABUSE" },
+  noise: { state: "OPEN", kind: "NOISE" },
   replied: { state: "REPLIED" },
   done: { state: "DONE" },
 };
 
-export async function getReplyDeskPage(filter: DeskFilter, clientId?: string) {
+export async function getReplyDeskPage(
+  filter: DeskFilter,
+  clientId?: string,
+  opts: { oldestFirst?: boolean; limit?: number } = {},
+) {
   const workspaceId = await requireWorkspaceId();
+  const limit = Math.min(Math.max(opts.limit ?? DESK_PAGE, DESK_PAGE), DESK_MAX);
+  // Replies sort by when they went out; the rest by when the comment came in,
+  // newest first unless asked for the oldest (the ones waiting longest).
+  const orderBy: Prisma.InboxCommentOrderByWithRelationInput =
+    filter === "replied"
+      ? { repliedAt: "desc" }
+      : { postedAt: opts.oldestFirst ? "asc" : "desc" };
   const inScope: Prisma.InboxCommentWhereInput = {
     account: { client: { workspaceId } },
     ...(clientId ? { clientId } : {}),
   };
 
-  const [workspace, accounts, comments, groups] = await Promise.all([
+  const [workspace, accounts, comments, groups, elsewhere] = await Promise.all([
     prisma.workspace.findUnique({ where: { id: workspaceId }, select: { disabledFeatures: true } }),
     prisma.socialAccount.findMany({
       where: {
@@ -43,8 +56,8 @@ export async function getReplyDeskPage(filter: DeskFilter, clientId?: string) {
     }),
     prisma.inboxComment.findMany({
       where: { ...inScope, ...WHERE[filter] },
-      orderBy: { postedAt: "desc" },
-      take: 100,
+      orderBy,
+      take: limit,
       include: {
         account: { select: { displayName: true, client: { select: { name: true, color: true } } } },
       },
@@ -54,6 +67,12 @@ export async function getReplyDeskPage(filter: DeskFilter, clientId?: string) {
       where: inScope,
       _count: { _all: true },
     }),
+    // Viewing one client: questions waiting in the others, so they aren't missed.
+    clientId
+      ? prisma.inboxComment.count({
+          where: { account: { client: { workspaceId } }, clientId: { not: clientId }, ...WHERE.questions },
+        })
+      : Promise.resolve(0),
   ]);
 
   const count = (where: Prisma.InboxCommentWhereInput) =>
@@ -71,6 +90,9 @@ export async function getReplyDeskPage(filter: DeskFilter, clientId?: string) {
   return {
     featureOn: !!workspace && hasFeature(workspace, "reply_desk"),
     aiOn: aiEnabled() && !!workspace && hasFeature(workspace, "ai"),
+    limit,
+    oldestFirst: !!opts.oldestFirst && filter !== "replied",
+    questionsElsewhere: elsewhere,
     counts: Object.fromEntries(
       (Object.keys(WHERE) as DeskFilter[]).map((f) => [f, count(WHERE[f])]),
     ) as Record<DeskFilter, number>,

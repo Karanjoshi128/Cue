@@ -11,14 +11,17 @@ export const dynamic = "force-dynamic";
 export default async function RepliesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ show?: string; connected?: string }>;
+  searchParams: Promise<{ show?: string; connected?: string; sort?: string; limit?: string }>;
 }) {
   // Hidden until Instagram and Google approve comment access (reply-desk/config.ts),
   // except in workspaces unlocked early.
   const { user } = await getAuth();
   if (!user || !(await workspaceFeatureAvailable(user.workspaceId, "reply_desk"))) notFound();
-  const [{ show, connected }, clientId] = await Promise.all([searchParams, getScopeClientId()]);
+  const [{ show, connected, sort, limit }, clientId] = await Promise.all([searchParams, getScopeClientId()]);
   const filter: DeskFilter = DESK_FILTERS.includes(show as DeskFilter) ? (show as DeskFilter) : "questions";
-  const data = await getReplyDeskPage(filter, clientId);
+  const data = await getReplyDeskPage(filter, clientId, {
+    oldestFirst: sort === "oldest",
+    limit: Number(limit) || undefined,
+  });
   return <ReplyDeskView data={data} filter={filter} justConnected={!!connected} />;
 }

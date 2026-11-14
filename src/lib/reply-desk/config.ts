@@ -8,5 +8,9 @@ export function replyDeskEnabled(): boolean {
 
 export const REPLY_LIMIT = 2000;
 
-export const DESK_FILTERS = ["questions", "open", "noise", "replied", "done"] as const;
+/** Comments per page of the desk, and the most "Show more" goes to. */
+export const DESK_PAGE = 50;
+export const DESK_MAX = 500;
+
+export const DESK_FILTERS = ["questions", "open", "abuse", "noise", "replied", "done"] as const;
 export type DeskFilter = (typeof DESK_FILTERS)[number];

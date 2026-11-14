@@ -8,7 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { ApiError } from "@/lib/api";
 import { toResult } from "@/lib/to-result";
 import { workspaceHasFeature } from "@/lib/plans";
-import { BIO_LIMITS, LINK_ID, isWebUrl, slugProblem, withScheme } from "./config";
+import { BIO_LIMITS, LINK_ID, isLinkTarget, isWebUrl, linkTarget, slugProblem, withScheme } from "./config";
 import { refreshGrid } from "./grid";
 
 // Link page actions (src/app/(app)/bio). Scoped to the caller's workspace and
@@ -28,6 +28,14 @@ const webUrl = z
   .max(BIO_LIMITS.url, "That link is too long.")
   .transform(withScheme)
   .refine(isWebUrl, "Links need to be web addresses, like https://example.com.");
+
+// Link buttons may also call or email.
+const linkUrl = z
+  .string()
+  .trim()
+  .max(BIO_LIMITS.url, "That link is too long.")
+  .transform(linkTarget)
+  .refine(isLinkTarget, "Use a web address, a phone number or an email address.");
 
 const pageSchema = z.object({
   slug: z
@@ -50,14 +58,17 @@ const pageSchema = z.object({
       z.object({
         id: z.string().regex(LINK_ID),
         label: z.string().trim().min(1, "Every link needs a label.").max(BIO_LIMITS.label),
-        url: webUrl,
+        url: linkUrl,
       }),
     )
     .max(BIO_LIMITS.links, `Up to ${BIO_LIMITS.links} links.`)
     .refine((ls) => new Set(ls.map((l) => l.id)).size === ls.length, "Two links share an id."),
   // Instagram media ids are digits. A blank address means "the post itself".
   postLinks: z
-    .record(z.string().regex(/^\d{1,40}$/), z.string())
+    .record(
+      z.string().regex(/^\d{1,40}$/, "A post on this page is no longer on Instagram. Refresh the posts, then save."),
+      z.string(),
+    )
     .transform((r) => Object.entries(r).filter(([, url]) => url.trim()))
     .pipe(z.array(z.tuple([z.string(), webUrl])).max(BIO_LIMITS.grid * 4))
     .transform((entries) => Object.fromEntries(entries)),

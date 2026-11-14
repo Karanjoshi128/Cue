@@ -25,7 +25,7 @@ import {
 } from "@/lib/automations/engine";
 import { handleIncomingMessages, sendFollowUps, type IncomingMessage } from "@/lib/automations/conversation";
 import { runAutomations } from "@/lib/automations/cron";
-import { accountSelect, tapPayload } from "@/lib/automations/shared";
+import { accountSelect, fill, tapPayload } from "@/lib/automations/shared";
 
 let passed = 0;
 let failed = 0;
@@ -434,6 +434,14 @@ async function main() {
   check("leads survive the purge", (await prisma.lead.count()) > 0);
   void ingestComments;
   void user;
+
+  console.log("\n{username} and plurals");
+  check("@{username} doesn't double the @", fill("Sent you a DM, @{username}!", "ana") === "Sent you a DM, @ana!");
+  check("{username} gets an @", fill("Hi {username}", "ana") === "Hi @ana");
+  check("no username: 'there', with no stray @", fill("Hi @{username}", null) === "Hi there");
+  check("a plural matches", matchesKeywords("can I see the menus", ["menu"], "WORD", true));
+  check("a different ending doesn't", !matchesKeywords("guided workout?", ["guide"], "WORD", true));
+  check("a doubled last letter still does", matchesKeywords("guidee", ["guide"], "WORD", true));
 
   console.log(`\n${passed} passed, ${failed} failed`);
   await prisma.$disconnect();

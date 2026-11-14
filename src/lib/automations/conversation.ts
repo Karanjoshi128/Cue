@@ -288,7 +288,12 @@ export async function sendFollowUps(limit = 50): Promise<number> {
       data: { followUpSentAt: now },
     });
     if (!claim.count) continue;
-    const text = fill(run.rule.followUpText!, run.commenterUsername);
+    // The default nudge says "tap below"; someone asked a question has no button.
+    const template =
+      run.stage === "WAIT_ANSWER" && run.rule.followUpText === COPY.followUp
+        ? COPY.followUpAnswer
+        : run.rule.followUpText!;
+    const text = fill(template, run.commenterUsername);
     const msg: OutgoingMessage =
       run.stage === "WAIT_ANSWER"
         ? { text }

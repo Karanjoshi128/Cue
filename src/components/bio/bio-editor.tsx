@@ -23,7 +23,9 @@ import { unwrap } from "@/lib/action-result";
 import {
   BIO_LIMITS,
   bioPath,
+  isLinkTarget,
   isWebUrl,
+  linkTarget,
   newLinkId,
   slugProblem,
   withScheme,
@@ -75,7 +77,7 @@ function normalized(d: Draft): string {
     slug: d.slug.trim().toLowerCase(),
     title: d.title.trim(),
     bio: d.bio.trim(),
-    links: d.links.map((l) => ({ ...l, label: l.label.trim(), url: withScheme(l.url) })),
+    links: d.links.map((l) => ({ ...l, label: l.label.trim(), url: linkTarget(l.url) })),
     postLinks: Object.fromEntries(
       Object.entries(d.postLinks)
         .filter(([, url]) => url.trim())
@@ -86,6 +88,11 @@ function normalized(d: Draft): string {
 
 function badUrl(url: string): boolean {
   return !!url.trim() && !isWebUrl(withScheme(url));
+}
+
+/** Link buttons can also call or email. */
+function badLink(url: string): boolean {
+  return !!url.trim() && !isLinkTarget(linkTarget(url));
 }
 
 export function BioEditorView({ data }: { data: BioEditorData }) {
@@ -239,6 +246,8 @@ function PageEditor({
   );
   const [draft, setDraft] = useState<Draft>(initial);
   const [busy, setBusy] = useState<"save" | "refresh" | "delete" | null>(null);
+  // Just created: the next step is putting the address in the Instagram bio.
+  const [created, setCreated] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [, startTransition] = useTransition();
 
@@ -276,13 +285,14 @@ function PageEditor({
     avatarUrl: sameAccount ? saved.avatarUrl : null,
     links: draft.links
       .filter((l) => l.label.trim())
-      .map((l) => ({ id: l.id, label: l.label, href: isWebUrl(withScheme(l.url)) ? withScheme(l.url) : "#" })),
+      .map((l) => ({ id: l.id, label: l.label, href: isLinkTarget(linkTarget(l.url)) ? linkTarget(l.url) : "#" })),
     tiles: grid.map((t) => ({
       id: t.id,
       image: t.image,
       caption: t.caption,
       video: t.video,
       href: draft.postLinks[t.id]?.trim() ? withScheme(draft.postLinks[t.id]) : t.permalink,
+      linked: !!draft.postLinks[t.id]?.trim(),
     })),
   };
 
@@ -314,6 +324,7 @@ function PageEditor({
       );
       if (r.warning) toast.warning(r.warning);
       else toast.success(saved ? "Saved" : draft.published ? "Your page is live" : "Saved as a draft");
+      if (!saved) setCreated(true);
       router.refresh();
     });
 
@@ -348,6 +359,25 @@ function PageEditor({
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="min-w-0 space-y-4">
+      {created && saved && (
+        <div className="border-live/30 bg-live/8 flex flex-wrap items-center gap-3 rounded-2xl border p-4 text-sm" role="status">
+          <div className="min-w-0 flex-1 basis-60">
+            <p className="font-medium">
+              {saved.published ? "The page is live." : "Saved as a draft."} Next, put the address in the Instagram bio.
+            </p>
+            <p className="text-muted-foreground mt-0.5 text-xs">
+              In Instagram: Edit profile, then Links, then Add external link. Paste {address}.
+            </p>
+          </div>
+          <Button size="sm" onClick={copy}>
+            <Copy /> Copy link
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setCreated(false)} aria-label="Close">
+            <X />
+          </Button>
+        </div>
+      )}
       <div className="bg-card overflow-hidden rounded-2xl border">
         <Section title="Page" hint="What visitors see at the top.">
           <div className="space-y-1.5">
@@ -421,10 +451,11 @@ function PageEditor({
           {draft.links.length ? (
             <ul className="space-y-2.5">
               {draft.links.map((l, i) => {
-                const urlBad = badUrl(l.url);
+                const urlBad = badLink(l.url);
+                const n = stats?.byTarget[l.id];
                 return (
                   <li key={l.id} className="bg-muted/35 rounded-xl border p-3">
-                    <div className="flex items-start gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                       <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
                         <Input
                           value={l.label}
@@ -439,14 +470,14 @@ function PageEditor({
                           maxLength={BIO_LIMITS.url}
                           inputMode="url"
                           spellCheck={false}
-                          placeholder="https://"
+                          placeholder="Web address, phone or email"
                           aria-label={`Link ${i + 1} address`}
                           aria-invalid={urlBad}
                           onChange={(e) => setLink(l.id, { url: e.target.value })}
                           className="bg-card"
                         />
                       </div>
-                      <div className="flex shrink-0 items-center">
+                      <div className="flex shrink-0 items-center justify-end">
                         <Button size="icon-sm" variant="ghost" aria-label="Move up" disabled={i === 0} onClick={() => moveLink(i, -1)}>
                           <ArrowUp />
                         </Button>
@@ -469,9 +500,13 @@ function PageEditor({
                         </Button>
                       </div>
                     </div>
-                    {(urlBad || stats?.byTarget[l.id] !== undefined) && (
+                    {(urlBad || (stats && saved?.links.some((x) => x.id === l.id))) && (
                       <p className={cn("mt-2 text-xs", urlBad ? "text-fault-ink" : "text-muted-foreground")}>
-                        {urlBad ? "Use a web address, like https://example.com." : `${taps(stats?.byTarget[l.id])} in 30 days`}
+                        {urlBad
+                          ? "Use a web address (example.com), a phone number or an email address."
+                          : n
+                            ? `${taps(n)} in 30 days${stats?.views ? ` · ${Math.round((n / stats.views) * 100)}% of views` : ""}`
+                            : "No taps in 30 days"}
                       </p>
                     )}
                   </li>
@@ -606,6 +641,7 @@ function PageEditor({
           {/* The address's own problem already shows under it. */}
           {problem && dirty && !slugIssue && <p className="text-fault-ink w-full text-right text-xs">{problem}</p>}
         </div>
+      </div>
       </div>
 
       <aside className="space-y-4 lg:sticky lg:top-6">

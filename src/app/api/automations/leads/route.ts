@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { getAuth } from "@/lib/auth";
@@ -20,8 +20,16 @@ function cell(value: string | number | null | undefined): string {
   return `"${s.replaceAll('"', '""')}"`;
 }
 
-/** The leads list as CSV: the client in the top bar, or every client. */
-export async function GET() {
+/** File-name safe: "Kiln Coffee" becomes "kiln-coffee". */
+function slug(s: string): string {
+  return s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+}
+
+/**
+ * The leads list as CSV: the client in the top bar, or every client.
+ * ?with=email or ?with=phone keeps only people who shared one.
+ */
+export async function GET(req: NextRequest) {
   const { user } = await getAuth();
   if (!user) return NextResponse.json({ error: "Sign in first." }, { status: 401 });
   if (
@@ -31,8 +39,12 @@ export async function GET() {
     return NextResponse.json({ error: "Instagram automations aren't on." }, { status: 404 });
   }
   const clientId = await getScopeClientId();
+  const only = req.nextUrl.searchParams.get("with");
   const leads = await prisma.lead.findMany({
-    where: { client: { workspaceId: user.workspaceId, ...(clientId ? { id: clientId } : {}) } },
+    where: {
+      client: { workspaceId: user.workspaceId, ...(clientId ? { id: clientId } : {}) },
+      ...(only === "email" ? { email: { not: null } } : only === "phone" ? { phone: { not: null } } : {}),
+    },
     orderBy: { lastSeenAt: "desc" },
     include: {
       client: { select: { name: true } },
@@ -71,10 +83,14 @@ export async function GET() {
   );
   // A byte-order mark so Excel reads the file as UTF-8 (names in any script).
   const csv = "﻿" + [header.map(cell).join(","), ...rows].join("\r\n");
+  const client = clientId ? await prisma.client.findFirst({ where: { id: clientId }, select: { name: true } }) : null;
+  const name = ["cue-leads", client ? slug(client.name) : null, only === "email" || only === "phone" ? `with-${only}` : null]
+    .filter(Boolean)
+    .join("-");
   return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="cue-leads-${format(new Date(), "yyyy-MM-dd")}.csv"`,
+      "Content-Disposition": `attachment; filename="${name}-${format(new Date(), "yyyy-MM-dd")}.csv"`,
       "Cache-Control": "no-store",
     },
   });

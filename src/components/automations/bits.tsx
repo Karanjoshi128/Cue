@@ -8,7 +8,7 @@ const RUN_STATUS: Record<
   AutomationRunStatus,
   { label: string; dot: string; text: string; live?: boolean }
 > = {
-  QUEUED: { label: "Queued", dot: "text-primary", text: "text-primary", live: true },
+  QUEUED: { label: "Sending", dot: "text-primary", text: "text-primary", live: true },
   SENT: { label: "Sent", dot: "text-live", text: "text-live-ink" },
   PARTIAL: { label: "Partly sent", dot: "text-standby", text: "text-standby-ink" },
   FAILED: { label: "Failed", dot: "text-fault", text: "text-fault-ink" },
@@ -19,14 +19,19 @@ const RUN_STATUS: Record<
 export function RunBadge({
   status,
   retrying,
+  dismissed,
   className,
 }: {
   status: AutomationRunStatus;
   /** Queued again after a temporary failure. */
   retrying?: boolean;
+  /** A held comment someone dismissed (stored as skipped). */
+  dismissed?: boolean;
   className?: string;
 }) {
-  const s = RUN_STATUS[status];
+  const s = dismissed
+    ? { label: "Dismissed", dot: "text-muted-foreground/50", text: "text-muted-foreground", live: false }
+    : RUN_STATUS[status];
   return (
     <span
       className={cn(
@@ -54,7 +59,7 @@ export function KeywordChip({
   return (
     <span
       className={cn(
-        "bg-primary/8 text-primary inline-flex h-6 items-center rounded-md px-2 font-mono text-[0.75rem] font-medium tracking-wide uppercase",
+        "bg-primary/8 text-secondary-foreground inline-flex h-6 items-center rounded-md px-2 font-mono text-[0.75rem] font-medium tracking-wide uppercase",
         className,
       )}
     >
@@ -93,7 +98,10 @@ export function TriggerSummary({
   );
 }
 
-/** Replaces {username} the way the engine does, for previews. */
+/**
+ * Replaces {username} the way the engine does (fill in automations/shared.ts),
+ * for previews. "@{username}" doesn't double the @.
+ */
 export function fillPreview(template: string, username: string): string {
-  return template.replaceAll("{username}", `@${username}`);
+  return template.replace(/@?\{username\}/g, `@${username}`);
 }

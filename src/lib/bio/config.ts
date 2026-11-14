@@ -106,6 +106,25 @@ export function isWebUrl(value: string): boolean {
   }
 }
 
+/**
+ * A link button's address: a web address, or a phone number (tel:) or email
+ * address (mailto:) so a shop can have Call and Email buttons. Nothing else
+ * (no javascript: or data:).
+ */
+export function isLinkTarget(value: string): boolean {
+  if (isWebUrl(value)) return true;
+  if (/^tel:\+?\d{6,15}$/.test(value)) return true;
+  return /^mailto:[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value);
+}
+
+/** What someone typed into a link's address, as an address: phones and emails too. */
+export function linkTarget(value: string): string {
+  const v = value.trim();
+  if (/^\+?[\d\s().-]{6,}$/.test(v) && /\d{6,}/.test(v.replace(/\D/g, ""))) return `tel:${v.replace(/[^\d+]/g, "")}`;
+  if (/^[^\s@:/]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return `mailto:${v}`;
+  return withScheme(v);
+}
+
 /** "example.com/shop" → "https://example.com/shop": people paste without it. */
 export function withScheme(value: string): string {
   const v = value.trim();

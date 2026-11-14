@@ -1,4 +1,4 @@
-import type { AutomationRunStatus } from "@prisma/client";
+import type { AutomationRunStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceId } from "@/lib/auth";
 import { hasFeature } from "@/lib/plans";
@@ -14,7 +14,15 @@ export async function getAutomationsPage(clientId?: string) {
   const inScope = { workspaceId, ...(clientId ? { id: clientId } : {}) };
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [workspace, accounts, rules, runs, posts, leads, leadTotal] = await Promise.all([
+  const runInclude = {
+    rule: {
+      select: {
+        name: true,
+        client: { select: { name: true, color: true } },
+      },
+    },
+  } as const;
+  const [workspace, accounts, rules, runs, held, heldTotal, failed, posts, leads, leadTotal] = await Promise.all([
     prisma.workspace.findUnique({
       where: { id: workspaceId },
       select: { disabledFeatures: true },
@@ -45,14 +53,23 @@ export async function getAutomationsPage(clientId?: string) {
       where: { rule: { client: inScope } },
       orderBy: { createdAt: "desc" },
       take: 40,
-      include: {
-        rule: {
-          select: {
-            name: true,
-            client: { select: { name: true, color: true } },
-          },
-        },
-      },
+      include: runInclude,
+    }),
+    // Held comments wait for a person however old they are, so they're read
+    // apart from the newest-40 log.
+    prisma.automationRun.findMany({
+      where: { status: "HELD", rule: { client: inScope } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: runInclude,
+    }),
+    prisma.automationRun.count({ where: { status: "HELD", rule: { client: inScope } } }),
+    // This week's failures, also apart from the newest 40, to match the cards.
+    prisma.automationRun.findMany({
+      where: { status: { in: ["FAILED", "PARTIAL"] }, createdAt: { gte: weekAgo }, rule: { client: inScope } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: runInclude,
     }),
     // Cue posts headed for Instagram that haven't gone out yet: a rule can be
     // set on one now and starts watching it once it publishes.
@@ -91,6 +108,24 @@ export async function getAutomationsPage(clientId?: string) {
     where: { ruleId: { in: rules.map((r) => r.id) }, createdAt: { gte: weekAgo } },
     _count: { _all: true },
   });
+  // People part-way through a conversation, by the step they stopped at.
+  const stages = await prisma.automationRun.groupBy({
+    by: ["ruleId", "stage"],
+    where: {
+      ruleId: { in: rules.map((r) => r.id) },
+      status: { in: ["SENT", "PARTIAL"] },
+      deliveredAt: null,
+      stage: { in: ["WAIT_TAP", "WAIT_FOLLOW", "WAIT_ANSWER"] },
+    },
+    _count: { _all: true },
+  });
+  const waiting = new Map<string, Partial<Record<"WAIT_TAP" | "WAIT_FOLLOW" | "WAIT_ANSWER", number>>>();
+  for (const s of stages) {
+    const row = waiting.get(s.ruleId) ?? {};
+    row[s.stage as "WAIT_TAP" | "WAIT_FOLLOW" | "WAIT_ANSWER"] = s._count._all;
+    waiting.set(s.ruleId, row);
+  }
+
   const week = new Map<string, Partial<Record<AutomationRunStatus, number>>>();
   for (const c of counts) {
     const row = week.get(c.ruleId) ?? {};
@@ -160,25 +195,12 @@ export async function getAutomationsPage(clientId?: string) {
       heldCount: r.heldCount,
       lastTriggeredAt: r.lastTriggeredAt?.toISOString() ?? null,
       week: week.get(r.id) ?? {},
+      waiting: waiting.get(r.id) ?? {},
     })),
-    runs: runs.map((run) => ({
-      id: run.id,
-      ruleName: run.rule.name,
-      clientName: run.rule.client.name,
-      clientColor: run.rule.client.color,
-      commenter: run.commenterUsername,
-      comment: run.commentText,
-      trigger: run.trigger,
-      status: run.status,
-      stage: run.stage,
-      source: run.source,
-      dmSent: run.dmMessageId !== null,
-      replied: run.replyId !== null,
-      delivered: run.deliveredAt !== null,
-      heldReason: run.heldReason,
-      error: run.dmError ?? run.replyError ?? run.lastError,
-      createdAt: run.createdAt.toISOString(),
-    })),
+    runs: runs.map(runView),
+    held: held.map(runView),
+    heldTotal,
+    failed: failed.map(runView),
     leads: leads.map((l) => ({
       id: l.id,
       clientName: l.client.name,
@@ -201,6 +223,32 @@ export async function getAutomationsPage(clientId?: string) {
       status: p.status,
       accountIds: p.targets.map((t) => t.accountId),
     })),
+  };
+}
+
+type RunRow = Prisma.AutomationRunGetPayload<{
+  include: { rule: { select: { name: true; client: { select: { name: true; color: true } } } } };
+}>;
+
+function runView(run: RunRow) {
+  return {
+    id: run.id,
+    ruleId: run.ruleId,
+    ruleName: run.rule.name,
+    clientName: run.rule.client.name,
+    clientColor: run.rule.client.color,
+    commenter: run.commenterUsername,
+    comment: run.commentText,
+    trigger: run.trigger,
+    status: run.status,
+    stage: run.stage,
+    source: run.source,
+    dmSent: run.dmMessageId !== null,
+    replied: run.replyId !== null,
+    delivered: run.deliveredAt !== null,
+    heldReason: run.heldReason,
+    error: run.dmError ?? run.replyError ?? run.lastError,
+    createdAt: run.createdAt.toISOString(),
   };
 }
 

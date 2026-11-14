@@ -7,10 +7,12 @@ import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import {
   AlertTriangle,
+  ArrowRight,
   ArrowUpRight,
   AtSign,
   CalendarClock,
   Check,
+  Copy,
   Download,
   Lock,
   MessageCircleReply,
@@ -18,6 +20,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Send,
   Trash2,
   Unplug,
@@ -31,16 +34,24 @@ import {
   setAutomationEnabled,
 } from "@/lib/automation-actions";
 import { unwrap } from "@/lib/action-result";
-import { RUN_RETENTION_DAYS, type AutomationPreset } from "@/lib/automations/config";
+import {
+  RUN_RETENTION_DAYS,
+  type AutomationPreset,
+  type AutomationsTab,
+} from "@/lib/automations/config";
 import type {
   AutomationAccountView,
+  AutomationLeadView,
   AutomationRuleView,
+  AutomationRunView,
   AutomationsPageData,
 } from "@/lib/automations/data";
 import { zoned } from "@/lib/timezone";
 import { PageHeader } from "@/components/page-header";
 import { ClientDot, PlatformIcon } from "@/components/post-bits";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { PillTabs } from "@/components/pill-tabs";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -58,7 +69,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AutomationEditor, MediaThumb } from "@/components/automations/automation-editor";
-import { KeywordChip, RunBadge, TriggerSummary } from "@/components/automations/bits";
+import { fillPreview, KeywordChip, RunBadge, TriggerSummary } from "@/components/automations/bits";
 import { DescribeAutomation } from "@/components/automations/describe-automation";
 import { cn } from "@/lib/utils";
 
@@ -67,7 +78,7 @@ function ago(iso: string | null): string {
 }
 
 /** Where a conversation has got to, in words, for the activity log. */
-function stageNote(run: AutomationsPageData["runs"][number]): string | null {
+function stageNote(run: AutomationRunView): string | null {
   if (run.status !== "SENT" && run.status !== "PARTIAL") return null;
   if (run.delivered) return "Link delivered";
   if (run.stage === "WAIT_TAP") return "Waiting for their tap";
@@ -79,26 +90,40 @@ function stageNote(run: AutomationsPageData["runs"][number]): string | null {
 const TRIGGER_NOTE = { COMMENT: "", STORY_REPLY: "story reply · ", DM_KEYWORD: "DM · " } as const;
 const SOURCE_LABEL = { COMMENT: "Comment", STORY_REPLY: "Story reply", DM_KEYWORD: "DM" } as const;
 
+type ActivityFilter = "all" | "held" | "failed" | "waiting";
+
+/** Reconnect with comment and message access, then come back here. */
+export function reconnectHref(clientId: string) {
+  return `/api/oauth/instagram/start?clientId=${clientId}&automations=1&next=/automations`;
+}
+
 export function AutomationsView({
   data,
   timeZone,
   justConnected,
+  initialTab = "automations",
 }: {
   data: AutomationsPageData;
   timeZone: string;
   justConnected: boolean;
+  initialTab?: AutomationsTab;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [tab, setTab] = useState<AutomationsTab>(initialTab);
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editor, setEditor] = useState<{
     key: number;
     rule: AutomationRuleView | null;
     accountId?: string;
     preset?: AutomationPreset;
+    copyOf?: AutomationRuleView;
   }>({ key: 0, rule: null });
   const [toDelete, setToDelete] = useState<AutomationRuleView | null>(null);
+  const [toSend, setToSend] = useState<AutomationRunView | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
+  const [ruleFilter, setRuleFilter] = useState<RuleFilter>("all");
 
   useEffect(() => {
     if (!justConnected) return;
@@ -107,8 +132,26 @@ export function AutomationsView({
   }, [justConnected, router]);
 
   const ready = data.accounts.filter((a) => a.ready);
-  const live = data.rules.filter((r) => r.enabled).length;
-  const ctx = { in: zoned(timeZone) };
+  const accountById = new Map(data.accounts.map((a) => [a.id, a]));
+  // A rule only runs when its account can read comments and send DMs.
+  const blockedBy = (rule: AutomationRuleView) => {
+    const account = accountById.get(rule.accountId);
+    return account && !account.ready ? account : null;
+  };
+  const live = data.featureOn ? data.rules.filter((r) => r.enabled && !blockedBy(r)).length : 0;
+  const failedThisWeek = data.rules.reduce((n, r) => n + (r.week.FAILED ?? 0), 0);
+  const currentRuleFilter = RULE_FILTERS.find((f) => f.key === ruleFilter) ?? RULE_FILTERS[0];
+  const shownRules = data.rules.filter((r) => currentRuleFilter.match(r, !!blockedBy(r)));
+
+  function showTab(next: AutomationsTab, filter?: ActivityFilter) {
+    setTab(next);
+    if (filter) setActivityFilter(filter);
+    // Keep the address shareable without a server round trip.
+    const url = new URL(window.location.href);
+    if (next === "automations") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url);
+  }
 
   function openNew(accountId?: string) {
     setEditor((e) => ({ key: e.key + 1, rule: null, accountId }));
@@ -120,6 +163,10 @@ export function AutomationsView({
   }
   function openEdit(rule: AutomationRuleView) {
     setEditor((e) => ({ key: e.key + 1, rule }));
+    setEditorOpen(true);
+  }
+  function openDuplicate(rule: AutomationRuleView) {
+    setEditor((e) => ({ key: e.key + 1, rule: null, copyOf: rule }));
     setEditorOpen(true);
   }
 
@@ -151,11 +198,21 @@ export function AutomationsView({
     });
   }
 
-  function resolve(runId: string, send: boolean) {
+  function resolve(run: AutomationRunView, send: boolean) {
+    // Sending can't be taken back: show what goes out first.
+    if (send && toSend?.id !== run.id) {
+      setToSend(run);
+      return;
+    }
+    setToSend(null);
     startTransition(async () => {
       try {
-        unwrap(await resolveHeld(runId, send));
-        toast.success(send ? "Sent" : "Dismissed");
+        unwrap(await resolveHeld(run.id, send));
+        toast.success(
+          send
+            ? `Sending to ${run.commenter ? `@${run.commenter}` : "them"} now`
+            : "Dismissed. Nothing was sent.",
+        );
         router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Couldn't update.");
@@ -195,7 +252,7 @@ export function AutomationsView({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto max-w-6xl min-w-0 space-y-8">
       <PageHeader
         eyebrow={
           <>
@@ -210,7 +267,11 @@ export function AutomationsView({
             Comments that <em>answer back.</em>
           </>
         }
-        description="When someone comments a keyword on a client's Instagram post, Cue replies under the comment and sends them a DM with the link, the guide or the price they asked for."
+        description={`When someone comments a keyword on ${
+          new Set(data.accounts.map((a) => a.clientName)).size === 1
+            ? `${data.accounts[0].clientName}'s`
+            : "a client's"
+        } Instagram post, Cue replies under the comment and sends them a DM with the link, the guide or the price they asked for.`}
         actions={
           <Button onClick={() => openNew()} disabled={!ready.length || !data.featureOn}>
             <Plus /> New automation
@@ -226,184 +287,122 @@ export function AutomationsView({
         </div>
       )}
 
-      <AccountsStrip
-        accounts={data.accounts}
-        checking={checking}
-        onCheck={checkNow}
-        onNew={openNew}
-        busy={pending}
-      />
-
-      {data.aiOn && data.featureOn && ready.length > 0 && (
-        <DescribeAutomation accounts={ready} onDraft={openDescribed} />
+      {(data.heldTotal > 0 || failedThisWeek > 0) && (
+        <NeedsYou
+          held={data.held}
+          heldTotal={data.heldTotal}
+          failed={failedThisWeek}
+          timeZone={timeZone}
+          busy={pending}
+          onResolve={resolve}
+          onShow={(filter) => showTab("activity", filter)}
+        />
       )}
 
-      <section className="space-y-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-[0.9375rem] font-semibold tracking-tight">Your automations</h2>
-          <span className="label-caps">{data.rules.length} total</span>
-        </div>
-        {data.rules.length ? (
-          <div className="grid gap-4 lg:grid-cols-2">
-            {data.rules.map((rule) => (
-              <RuleCard
-                key={rule.id}
-                rule={rule}
-                timeZone={timeZone}
-                busy={pending}
-                checking={checking === rule.accountId}
-                onToggle={(v) => toggle(rule, v)}
-                onEdit={() => openEdit(rule)}
-                onCheck={() => checkNow(rule.accountId)}
-                onDelete={() => setToDelete(rule)}
-              />
-            ))}
-          </div>
-        ) : (
-          <HowItWorks canCreate={ready.length > 0 && data.featureOn} onNew={() => openNew()} />
-        )}
-      </section>
+      <PillTabs
+        label="Automations sections"
+        active={tab}
+        onSelect={(t) => showTab(t)}
+        className="w-fit"
+        tabs={[
+          { key: "automations", label: "Automations", count: data.rules.length },
+          { key: "activity", label: "Activity", count: data.heldTotal || undefined, alert: true },
+          { key: "leads", label: "Leads", count: data.leadTotal },
+        ]}
+      />
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <h2 className="text-[0.9375rem] font-semibold tracking-tight">Recent activity</h2>
-            <p className="text-muted-foreground text-xs">
-              Every comment, story reply and DM an automation acted on. Kept for{" "}
-              {RUN_RETENTION_DAYS} days.
-            </p>
-          </div>
-        </div>
-        {data.runs.length ? (
-          <ol className="bg-card divide-y rounded-2xl border">
-            {data.runs.map((run) => (
-              <li key={run.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 px-4 py-3.5 sm:px-5">
-                <time
-                  dateTime={run.createdAt}
-                  className="text-muted-foreground shrink-0 pt-0.5 font-mono text-[0.6875rem] tracking-wide whitespace-nowrap uppercase sm:w-36"
-                >
-                  {format(new Date(run.createdAt), "d MMM · h:mm a", ctx)}
-                </time>
-                <div className="min-w-0 flex-1 basis-56">
-                  <p className="truncate text-sm">
-                    <span className="font-semibold">
-                      {run.commenter ? `@${run.commenter}` : "Someone"}
-                    </span>{" "}
-                    <span className="text-muted-foreground">&ldquo;{run.comment}&rdquo;</span>
-                  </p>
-                  <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
-                    <ClientDot color={run.clientColor} className="size-2" />
-                    {TRIGGER_NOTE[run.trigger]}
-                    {run.clientName} · {run.ruleName}
-                    {run.dmSent && (
-                      <span className="text-live-ink inline-flex items-center gap-1">
-                        · <Send className="size-3" /> DM
-                      </span>
-                    )}
-                    {run.replied && (
-                      <span className="text-live-ink inline-flex items-center gap-1">
-                        · <MessageCircleReply className="size-3" /> Reply
-                      </span>
-                    )}
-                  </p>
-                  {stageNote(run) && (
-                    <p className={cn("mt-1 text-xs", run.delivered ? "text-live-ink" : "text-standby-ink")}>
-                      {stageNote(run)}
-                    </p>
-                  )}
-                  {run.status === "HELD" && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <span className="text-standby-ink text-xs">Held: {run.heldReason}</span>
-                      <Button size="xs" variant="outline" onClick={() => resolve(run.id, true)} disabled={pending}>
-                        <Check /> Send anyway
-                      </Button>
-                      <Button size="xs" variant="ghost" onClick={() => resolve(run.id, false)} disabled={pending}>
-                        <X /> Dismiss
-                      </Button>
-                    </div>
-                  )}
-                  {run.error && run.status !== "SENT" && run.status !== "HELD" && (
-                    <p
-                      className={cn(
-                        "mt-1 text-xs leading-relaxed",
-                        run.status === "QUEUED" ? "text-standby-ink" : "text-fault-ink",
-                      )}
-                    >
-                      {run.error}
-                    </p>
-                  )}
-                </div>
-                <RunBadge status={run.status} retrying={run.status === "QUEUED" && !!run.error} />
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div className="text-muted-foreground rounded-2xl border border-dashed px-5 py-8 text-center text-sm">
-            Nothing yet. Matching comments show up here as they happen.
-          </div>
-        )}
-      </section>
+      {tab === "automations" && (
+        <div className="space-y-8">
+          <AccountsStrip
+            accounts={data.accounts}
+            checking={checking}
+            onCheck={checkNow}
+            onNew={openNew}
+            busy={pending}
+          />
 
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-[0.9375rem] font-semibold tracking-tight">Leads</h2>
-            <p className="text-muted-foreground text-xs">
-              Everyone an automation talked to, with any email or phone they shared.{" "}
-              {data.leadTotal} in total.
-            </p>
-          </div>
-          {data.leadTotal > 0 && (
-            <Button variant="outline" size="sm" render={<a href="/api/automations/leads" download />}>
-              <Download /> Export CSV
-            </Button>
+          {data.aiOn && data.featureOn && ready.length > 0 && (
+            <DescribeAutomation accounts={ready} onDraft={openDescribed} />
           )}
+
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-[0.9375rem] font-semibold tracking-tight">Your automations</h2>
+              {data.rules.length > 3 && (
+                <PillTabs
+                  label="Show automations"
+                  size="sm"
+                  active={ruleFilter}
+                  onSelect={setRuleFilter}
+                  tabs={RULE_FILTERS.map((f) => ({
+                    key: f.key,
+                    label: f.label,
+                    count: data.rules.filter((r) => f.match(r, !!blockedBy(r))).length,
+                    alert: f.key === "attention",
+                  }))}
+                />
+              )}
+            </div>
+            {data.rules.length ? (
+              <div className="space-y-6">
+                {groupByClient(shownRules).map((group) => (
+                  <div key={group.key} className="space-y-3">
+                    {group.show && (
+                      <h3 className="text-muted-foreground flex items-center gap-2 text-xs font-medium">
+                        <ClientDot color={group.color} className="size-2" />
+                        {group.name}
+                        <span className="font-mono tabular-nums">{group.rules.length}</span>
+                      </h3>
+                    )}
+                    <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+                      {group.rules.map((rule) => (
+                        <RuleCard
+                          key={rule.id}
+                          rule={rule}
+                          blockedBy={blockedBy(rule)}
+                          timeZone={timeZone}
+                          busy={pending}
+                          checking={checking === rule.accountId}
+                          onToggle={(v) => toggle(rule, v)}
+                          onEdit={() => openEdit(rule)}
+                          onDuplicate={() => openDuplicate(rule)}
+                          onCheck={() => checkNow(rule.accountId)}
+                          onDelete={() => setToDelete(rule)}
+                          onShowFailed={() => showTab("activity", "failed")}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {shownRules.length === 0 && (
+                  <div className="text-muted-foreground rounded-2xl border border-dashed px-5 py-8 text-center text-sm">
+                    None here.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <HowItWorks canCreate={ready.length > 0 && data.featureOn} onNew={() => openNew()} />
+            )}
+          </section>
         </div>
-        {data.leads.length ? (
-          <ul className="bg-card divide-y rounded-2xl border">
-            {data.leads.map((lead) => (
-              <li key={lead.id} className="group/lead flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-3 sm:px-5">
-                <div className="min-w-0 flex-1 basis-48">
-                  <p className="truncate text-sm font-semibold">
-                    {lead.username ? `@${lead.username}` : "Instagram user"}
-                  </p>
-                  <p className="text-muted-foreground flex items-center gap-1.5 truncate text-xs">
-                    <ClientDot color={lead.clientColor} className="size-2" />
-                    {lead.clientName} · {SOURCE_LABEL[lead.source]}
-                    {lead.lastRule && ` · ${lead.lastRule}`}
-                  </p>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                  {lead.email && (
-                    <span className="inline-flex items-center gap-1.5">
-                      <AtSign className="text-muted-foreground size-3.5" /> {lead.email}
-                    </span>
-                  )}
-                  {lead.phone && <span className="font-mono">{lead.phone}</span>}
-                  <span className="text-muted-foreground" suppressHydrationWarning>
-                    {lead.touches > 1 ? `${lead.touches} times · ` : ""}
-                    {ago(lead.lastSeenAt)}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Remove ${lead.username ?? "this lead"}`}
-                  onClick={() => removeLead(lead.id)}
-                  disabled={pending}
-                  className="sm:opacity-0 sm:group-hover/lead:opacity-100 sm:focus-visible:opacity-100"
-                >
-                  <Trash2 />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="text-muted-foreground rounded-2xl border border-dashed px-5 py-8 text-center text-sm">
-            No leads yet. Everyone an automation talks to is added here.
-          </div>
-        )}
-      </section>
+      )}
+
+      {tab === "activity" && (
+        <Activity
+          runs={data.runs}
+          held={data.held}
+          failed={data.failed}
+          filter={activityFilter}
+          onFilter={setActivityFilter}
+          timeZone={timeZone}
+          busy={pending}
+          onResolve={resolve}
+        />
+      )}
+
+      {tab === "leads" && (
+        <Leads leads={data.leads} total={data.leadTotal} busy={pending} onRemove={removeLead} />
+      )}
 
       {/* Keyed so each open starts from that rule's values (or a blank form). */}
       <AutomationEditor
@@ -417,6 +416,15 @@ export function AutomationsView({
         timeZone={timeZone}
         aiOn={data.aiOn}
         preset={editor.preset}
+        copyOf={editor.copyOf}
+      />
+
+      <SendAnywayDialog
+        run={toSend}
+        rule={toSend ? (data.rules.find((r) => r.id === toSend.ruleId) ?? null) : null}
+        busy={pending}
+        onCancel={() => setToSend(null)}
+        onSend={(run) => resolve(run, true)}
       />
 
       <Dialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
@@ -439,6 +447,505 @@ export function AutomationsView({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** Held comments and this week's failures, above the tabs so they can't be missed. */
+function NeedsYou({
+  held,
+  heldTotal,
+  failed,
+  timeZone,
+  busy,
+  onResolve,
+  onShow,
+}: {
+  held: AutomationRunView[];
+  heldTotal: number;
+  failed: number;
+  timeZone: string;
+  busy: boolean;
+  onResolve: (run: AutomationRunView, send: boolean) => void;
+  onShow: (filter: ActivityFilter) => void;
+}) {
+  const shown = held.slice(0, 3);
+  return (
+    <section
+      aria-labelledby="needs-you"
+      className="border-standby/30 bg-standby/6 space-y-3 rounded-2xl border p-4 sm:p-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="needs-you" className="flex items-center gap-2 text-[0.9375rem] font-semibold tracking-tight">
+          <span aria-hidden className="tally text-standby size-2" />
+          Needs you
+        </h2>
+        <div className="flex flex-wrap gap-1">
+          {heldTotal > shown.length && (
+            <Button size="sm" variant="ghost" onClick={() => onShow("held")}>
+              All {heldTotal} held <ArrowRight />
+            </Button>
+          )}
+          {failed > 0 && (
+            <Button size="sm" variant="ghost" className="text-fault-ink" onClick={() => onShow("failed")}>
+              {failed} failed this week <ArrowRight />
+            </Button>
+          )}
+        </div>
+      </div>
+      {shown.length > 0 && (
+        <>
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            These matched an automation but were held for a hold word or abuse, so nothing was
+            sent. Send anyway replies and DMs them as the automation would. Dismiss drops them.
+          </p>
+          <ol className="bg-card divide-y rounded-xl border">
+            {shown.map((run) => (
+              <RunItem key={run.id} run={run} timeZone={timeZone} busy={busy} onResolve={onResolve} />
+            ))}
+          </ol>
+        </>
+      )}
+    </section>
+  );
+}
+
+const ACTIVITY_FILTERS: {
+  key: ActivityFilter;
+  label: string;
+  match: (r: AutomationRunView) => boolean;
+}[] = [
+  { key: "all", label: "All", match: () => true },
+  { key: "held", label: "Held", match: (r) => r.status === "HELD" },
+  {
+    key: "failed",
+    label: "Failed",
+    match: (r) => r.status === "FAILED" || r.status === "PARTIAL" || (r.status === "QUEUED" && !!r.error),
+  },
+  {
+    key: "waiting",
+    label: "Waiting on them",
+    match: (r) =>
+      (r.status === "SENT" || r.status === "PARTIAL") &&
+      !r.delivered &&
+      (r.stage === "WAIT_TAP" || r.stage === "WAIT_FOLLOW" || r.stage === "WAIT_ANSWER"),
+  },
+];
+
+const ACTIVITY_EMPTY: Record<ActivityFilter, string> = {
+  all: "Nothing yet. Matching comments show up here as they happen.",
+  held: "Nothing held. Comments with a hold word, or abuse when AI holding is on, wait here.",
+  failed: "No failures in the latest activity.",
+  waiting: "Nobody is part-way through a conversation right now.",
+};
+
+function Activity({
+  runs,
+  held,
+  failed,
+  filter,
+  onFilter,
+  timeZone,
+  busy,
+  onResolve,
+}: {
+  runs: AutomationRunView[];
+  held: AutomationRunView[];
+  failed: AutomationRunView[];
+  filter: ActivityFilter;
+  onFilter: (f: ActivityFilter) => void;
+  timeZone: string;
+  busy: boolean;
+  onResolve: (run: AutomationRunView, send: boolean) => void;
+}) {
+  // Held and failed ones come from their own lists, which aren't limited to
+  // the newest 40 (failures: this week's, like the cards' count).
+  const retrying = runs.filter((r) => r.status === "QUEUED" && !!r.error);
+  const source = (key: ActivityFilter) =>
+    key === "held" ? held : key === "failed" ? [...failed, ...retrying.filter((r) => !failed.some((f) => f.id === r.id))] : runs;
+  const current = ACTIVITY_FILTERS.find((f) => f.key === filter) ?? ACTIVITY_FILTERS[0];
+  const shown = source(current.key).filter(current.match);
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-[0.9375rem] font-semibold tracking-tight">Activity</h2>
+          <p className="text-muted-foreground text-xs">
+            The latest comments, story replies and DMs your automations acted on. Kept for{" "}
+            {RUN_RETENTION_DAYS} days.
+          </p>
+        </div>
+        <PillTabs
+          label="Show"
+          size="sm"
+          active={current.key}
+          onSelect={onFilter}
+          tabs={ACTIVITY_FILTERS.map((f) => ({
+            key: f.key,
+            label: f.label,
+            count: source(f.key).filter(f.match).length,
+            alert: f.key === "held",
+          }))}
+        />
+      </div>
+      {shown.length ? (
+        <ol className="bg-card divide-y rounded-2xl border">
+          {shown.map((run) => (
+            <RunItem key={run.id} run={run} timeZone={timeZone} busy={busy} onResolve={onResolve} />
+          ))}
+        </ol>
+      ) : (
+        <div className="text-muted-foreground rounded-2xl border border-dashed px-5 py-8 text-center text-sm">
+          {ACTIVITY_EMPTY[current.key]}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RunItem({
+  run,
+  timeZone,
+  busy,
+  onResolve,
+}: {
+  run: AutomationRunView;
+  timeZone: string;
+  busy: boolean;
+  onResolve: (run: AutomationRunView, send: boolean) => void;
+}) {
+  const ctx = { in: zoned(timeZone) };
+  const note = stageNote(run);
+  return (
+    <li className="flex flex-wrap items-start gap-x-4 gap-y-2 px-4 py-3.5 sm:px-5">
+      <time
+        dateTime={run.createdAt}
+        className="text-muted-foreground shrink-0 pt-0.5 font-mono text-[0.6875rem] tracking-wide whitespace-nowrap uppercase sm:w-36"
+      >
+        {format(new Date(run.createdAt), "d MMM · h:mm a", ctx)}
+      </time>
+      <div className="min-w-0 flex-1 basis-56">
+        <p className={cn("text-sm wrap-break-word", run.status !== "HELD" && "line-clamp-2")}>
+          <span className="font-semibold">{run.commenter ? `@${run.commenter}` : "Someone"}</span>{" "}
+          <span className="text-muted-foreground">&ldquo;{run.comment}&rdquo;</span>
+        </p>
+        <p className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs">
+          <ClientDot color={run.clientColor} className="size-2" />
+          {TRIGGER_NOTE[run.trigger]}
+          {run.clientName} · {run.ruleName}
+          {run.dmSent && (
+            <span className="text-live-ink inline-flex items-center gap-1">
+              · <Send className="size-3" /> DM
+            </span>
+          )}
+          {run.replied && (
+            <span className="text-live-ink inline-flex items-center gap-1">
+              · <MessageCircleReply className="size-3" /> Reply
+            </span>
+          )}
+        </p>
+        {note && (
+          <p className={cn("mt-1 text-xs", run.delivered ? "text-live-ink" : "text-standby-ink")}>{note}</p>
+        )}
+        {run.status === "HELD" && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span className="text-standby-ink text-xs">Held: {run.heldReason}</span>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => onResolve(run, true)}
+              disabled={busy}
+              aria-label={`Send anyway to ${run.commenter ? `@${run.commenter}` : "them"}`}
+            >
+              <Check /> Send anyway
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => onResolve(run, false)}
+              disabled={busy}
+              aria-label={`Dismiss ${run.commenter ? `@${run.commenter}` : "this"}: nothing is sent`}
+            >
+              <X /> Dismiss
+            </Button>
+          </div>
+        )}
+        {run.error && run.status !== "SENT" && run.status !== "HELD" && (
+          <p
+            className={cn(
+              "mt-1 text-xs leading-relaxed",
+              run.status === "QUEUED" ? "text-standby-ink" : "text-fault-ink",
+            )}
+          >
+            {run.error}
+          </p>
+        )}
+      </div>
+      <RunBadge
+        status={run.status}
+        retrying={run.status === "QUEUED" && !!run.error}
+        dismissed={run.status === "SKIPPED" && !!run.heldReason}
+      />
+    </li>
+  );
+}
+
+function Leads({
+  leads,
+  total,
+  busy,
+  onRemove,
+}: {
+  leads: AutomationLeadView[];
+  total: number;
+  busy: boolean;
+  onRemove: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [only, setOnly] = useState<"all" | "email" | "phone">("all");
+  const q = query.trim().toLowerCase();
+  const shown = leads
+    .filter((l) => (only === "email" ? !!l.email : only === "phone" ? !!l.phone : true))
+    .filter((l) =>
+      q ? [l.username, l.email, l.phone, l.lastRule, l.clientName].some((v) => v?.toLowerCase().includes(q)) : true,
+    );
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-[0.9375rem] font-semibold tracking-tight">Leads</h2>
+          <p className="text-muted-foreground text-xs">
+            Everyone an automation talked to, with any email or phone they shared. {total} in total
+            {total > leads.length ? `; the newest ${leads.length} are here and the CSV has them all` : ""}.
+          </p>
+        </div>
+        {total > 0 && (
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+              <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, email, phone"
+                aria-label="Search leads"
+                className="h-8 pl-8"
+              />
+            </div>
+            <PillTabs
+              label="Who"
+              size="sm"
+              active={only}
+              onSelect={setOnly}
+              tabs={[
+                { key: "all", label: "Everyone" },
+                { key: "email", label: "With email", count: leads.filter((l) => l.email).length },
+                { key: "phone", label: "With phone", count: leads.filter((l) => l.phone).length },
+              ]}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              render={<a href={`/api/automations/leads${only === "all" ? "" : `?with=${only}`}`} download />}
+            >
+              <Download /> Export CSV
+            </Button>
+          </div>
+        )}
+      </div>
+      {shown.length ? (
+        <div className="bg-card overflow-hidden rounded-2xl border">
+          <div className="label-caps hidden grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_7rem_2rem] gap-4 border-b px-5 py-2.5 md:grid">
+            <span>Person</span>
+            <span>Contact</span>
+            <span>From</span>
+            <span>Last seen</span>
+            <span />
+          </div>
+          <ul className="divide-y">
+            {shown.map((lead) => (
+              <li
+                key={lead.id}
+                className="group/lead grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_7rem_2rem] md:px-5"
+              >
+                <p className="truncate text-sm font-semibold">
+                  {lead.username ? `@${lead.username}` : "Instagram user"}
+                  {lead.touches > 1 && (
+                    <span className="text-muted-foreground ml-1.5 text-xs font-normal" title={`${lead.touches} conversations`}>
+                      ×{lead.touches}
+                    </span>
+                  )}
+                </p>
+                <div className="col-start-1 row-start-2 min-w-0 text-xs md:col-start-auto md:row-start-auto">
+                  {lead.email || lead.phone ? (
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      {lead.email && <span className="truncate">{lead.email}</span>}
+                      {lead.phone && <span className="truncate font-mono">{lead.phone}</span>}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">No email or phone</span>
+                  )}
+                </div>
+                <p className="text-muted-foreground col-start-1 row-start-3 flex min-w-0 items-center gap-1.5 text-xs md:col-start-auto md:row-start-auto">
+                  <ClientDot color={lead.clientColor} className="size-2 shrink-0" />
+                  <span className="truncate">
+                    {lead.clientName} · {SOURCE_LABEL[lead.source]}
+                    {lead.lastRule && ` · ${lead.lastRule}`}
+                  </span>
+                </p>
+                <span
+                  className="text-muted-foreground col-start-2 row-start-1 text-right text-xs md:col-start-auto md:row-start-auto md:text-left"
+                  suppressHydrationWarning
+                >
+                  {ago(lead.lastSeenAt)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remove ${lead.username ?? "this lead"}`}
+                  onClick={() => onRemove(lead.id)}
+                  disabled={busy}
+                  className="col-start-2 row-span-2 row-start-2 justify-self-end md:col-start-auto md:row-span-1 md:row-start-auto md:opacity-0 md:group-hover/lead:opacity-100 md:focus-visible:opacity-100"
+                >
+                  <Trash2 />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="text-muted-foreground rounded-2xl border border-dashed px-5 py-8 text-center text-sm">
+          {q ? `No leads match "${query.trim()}".` : "No leads yet. Everyone an automation talks to is added here."}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type RuleFilter = "all" | "live" | "paused" | "attention";
+
+const RULE_FILTERS: {
+  key: RuleFilter;
+  label: string;
+  match: (r: AutomationRuleView, blocked: boolean) => boolean;
+}[] = [
+  { key: "all", label: "All", match: () => true },
+  { key: "live", label: "Live", match: (r, blocked) => r.enabled && !blocked },
+  { key: "paused", label: "Paused", match: (r) => !r.enabled },
+  {
+    key: "attention",
+    label: "Needs attention",
+    match: (r, blocked) => (r.enabled && blocked) || (r.week.FAILED ?? 0) > 0,
+  },
+];
+
+/** Rules under their client's name, once there's more than one client. */
+function groupByClient(rules: AutomationRuleView[]) {
+  const groups = new Map<string, { key: string; name: string; color: string | null; rules: AutomationRuleView[] }>();
+  for (const r of rules) {
+    const g = groups.get(r.clientId) ?? { key: r.clientId, name: r.clientName, color: r.clientColor, rules: [] };
+    g.rules.push(r);
+    groups.set(r.clientId, g);
+  }
+  const list = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return list.map((g) => ({ ...g, show: list.length > 1 }));
+}
+
+function pct(part: number, whole: number): number | null {
+  return whole > 0 ? Math.round((part / whole) * 100) : null;
+}
+
+/** Each step of the rule, with its share of the comments it matched. */
+function funnel(rule: AutomationRuleView) {
+  const steps: { label: string; value: number; pct: number | null; title?: string }[] = [
+    { label: "Matched", value: rule.matchedCount, pct: null, title: "Comments or messages that matched" },
+  ];
+  if (rule.dmText !== null) {
+    steps.push({ label: "DM sent", value: rule.dmSentCount, pct: pct(rule.dmSentCount, rule.matchedCount) });
+    steps.push({
+      label: "Got the link",
+      value: rule.deliveredCount,
+      pct: pct(rule.deliveredCount, rule.matchedCount),
+      title: "Reached the final message, after any follow check or question",
+    });
+  } else {
+    steps.push({ label: "Replied", value: rule.replyCount, pct: pct(rule.replyCount, rule.matchedCount) });
+  }
+  if (rule.collect) {
+    steps.push({ label: rule.collect === "EMAIL" ? "Emails" : "Phones", value: rule.leadCount, pct: pct(rule.leadCount, rule.matchedCount) });
+  } else if (rule.trigger === "COMMENT" && rule.dmText !== null && rule.replies.length > 0) {
+    steps.push({ label: "Replied", value: rule.replyCount, pct: pct(rule.replyCount, rule.matchedCount) });
+  } else if (rule.holdWords.length > 0 || rule.aiModeration) {
+    steps.push({ label: "Held", value: rule.heldCount, pct: null });
+  }
+  return steps;
+}
+
+/** People part-way through, in words: "3 haven't tapped, 1 not following yet". */
+function waitingNote(rule: AutomationRuleView): string | null {
+  const w = rule.waiting;
+  const parts = [
+    w.WAIT_TAP ? `${w.WAIT_TAP} haven't tapped yet` : null,
+    w.WAIT_FOLLOW ? `${w.WAIT_FOLLOW} not following yet` : null,
+    w.WAIT_ANSWER ? `${w.WAIT_ANSWER} haven't answered yet` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : null;
+}
+
+/** What Send anyway will send, before it does. */
+function SendAnywayDialog({
+  run,
+  rule,
+  busy,
+  onCancel,
+  onSend,
+}: {
+  run: AutomationRunView | null;
+  rule: AutomationRuleView | null;
+  busy: boolean;
+  onCancel: () => void;
+  onSend: (run: AutomationRunView) => void;
+}) {
+  const who = run?.commenter ? `@${run.commenter}` : "them";
+  return (
+    <Dialog open={!!run} onOpenChange={(o) => !o && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Send to {who}?</DialogTitle>
+          <DialogDescription>
+            It was held for: {run?.heldReason ?? "review"}. Sending can&apos;t be undone.
+          </DialogDescription>
+        </DialogHeader>
+        {run && (
+          <div className="space-y-2 text-sm">
+            <p className="bg-muted/50 rounded-lg px-3 py-2 wrap-break-word">
+              <span className="font-semibold">{who}</span> &ldquo;{run.comment}&rdquo;
+            </p>
+            {rule && rule.replies.length > 0 && run.trigger === "COMMENT" && (
+              <p className="text-muted-foreground">
+                Public reply:{" "}
+                <span className="text-foreground">
+                  &ldquo;{fillPreview(rule.replies[0], run.commenter ?? "them")}&rdquo;
+                </span>
+                {rule.replies.length > 1 ? " (or another of its wordings)" : ""}
+              </p>
+            )}
+            {rule?.dmText && (
+              <p className="text-muted-foreground">
+                DM:{" "}
+                <span className="text-foreground">&ldquo;{fillPreview(rule.dmText, run.commenter ?? "them")}&rdquo;</span>
+              </p>
+            )}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={() => run && onSend(run)} disabled={busy}>
+            <Send /> Send to {who}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -485,12 +992,12 @@ function AccountsStrip({
             <ClientDot color={a.clientColor} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">{a.displayName}</div>
-              <div className="text-muted-foreground truncate text-xs">
+              <div className="text-muted-foreground text-xs">
                 {a.clientName} ·{" "}
                 {a.ready ? (
                   <span suppressHydrationWarning>checked {ago(a.checkedAt)}</span>
                 ) : (
-                  <span className="text-standby-ink">needs comment access</span>
+                  <span className="text-standby-ink">needs comment and DM access</span>
                 )}
               </div>
             </div>
@@ -521,11 +1028,10 @@ function AccountsStrip({
                 variant="outline"
                 size="sm"
                 // A full page load: the connect route redirects on to Instagram.
-                render={
-                  <a href={`/api/oauth/instagram/start?clientId=${a.clientId}&automations=1&next=/automations`} />
-                }
+                render={<a href={reconnectHref(a.clientId)} />}
+                title="Opens Instagram for a minute to allow comments and DMs, then brings you back"
               >
-                <Unplug /> Reconnect
+                <Unplug /> Allow access
               </Button>
             )}
           </li>
@@ -537,22 +1043,29 @@ function AccountsStrip({
 
 function RuleCard({
   rule,
+  blockedBy,
   timeZone,
   busy,
   checking,
   onToggle,
   onEdit,
+  onDuplicate,
   onCheck,
   onDelete,
+  onShowFailed,
 }: {
   rule: AutomationRuleView;
+  /** The account, when it can't run automations yet (no comment access). */
+  blockedBy: AutomationAccountView | null;
   timeZone: string;
   busy: boolean;
   checking: boolean;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
+  onDuplicate: () => void;
   onCheck: () => void;
   onDelete: () => void;
+  onShowFailed: () => void;
 }) {
   const ctx = { in: zoned(timeZone) };
   const failed = rule.week.FAILED ?? 0;
@@ -562,7 +1075,7 @@ function RuleCard({
   return (
     <article
       className={cn(
-        "bg-card flex flex-col gap-4 rounded-2xl border p-5 transition-opacity",
+        "bg-card flex min-w-0 flex-col gap-4 rounded-2xl border p-4 transition-opacity sm:p-5",
         !rule.enabled && "opacity-75",
       )}
     >
@@ -575,8 +1088,20 @@ function RuleCard({
           className="mt-1"
         />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[0.9375rem] font-semibold tracking-tight">{rule.name}</h3>
+          <h3 className="truncate text-[0.9375rem] font-semibold tracking-tight">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="max-w-full truncate rounded text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {rule.name}
+            </button>
+          </h3>
           <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <span className={cn("shrink-0 font-medium", rule.enabled && !blockedBy ? "text-live-ink" : undefined)}>
+              {rule.enabled ? (blockedBy ? "Not running" : "Live") : "Paused"}
+            </span>
+            <span aria-hidden>·</span>
             <ClientDot color={rule.clientColor} className="size-2" />
             <span className="truncate">
               {rule.clientName} · {rule.accountName}
@@ -600,6 +1125,9 @@ function RuleCard({
             <DropdownMenuItem onClick={onEdit}>
               <Pencil /> Edit
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={onDuplicate}>
+              <Copy /> Duplicate
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={onCheck} disabled={busy}>
               <RefreshCw className={cn(checking && "animate-spin")} /> Check comments now
             </DropdownMenuItem>
@@ -610,6 +1138,18 @@ function RuleCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      {blockedBy && (
+        <div className="bg-standby/8 text-standby-ink flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl px-3 py-2.5 text-xs">
+          <AlertTriangle className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 basis-48">
+            Not running: {blockedBy.displayName} needs comment and DM access.
+          </span>
+          <Button variant="outline" size="xs" render={<a href={reconnectHref(blockedBy.clientId)} />}>
+            <Unplug /> Allow access
+          </Button>
+        </div>
+      )}
 
       <div className="space-y-3 text-sm leading-relaxed">
         {rule.trigger !== "COMMENT" ? (
@@ -655,12 +1195,11 @@ function RuleCard({
                 href={rule.mediaPermalink ?? undefined}
                 target="_blank"
                 rel="noreferrer"
-                className="hover:bg-muted inline-flex max-w-full items-center gap-2 rounded-lg py-0.5 pr-1.5 font-medium"
+                title={rule.mediaCaption ?? undefined}
+                className="hover:bg-muted inline-flex max-w-full min-w-0 items-center gap-2 rounded-lg py-0.5 pr-1.5 font-medium"
               >
-                <MediaThumb url={rule.mediaThumbUrl} className="size-6 rounded-md" />
-                <span className="truncate">
-                  {rule.mediaCaption?.slice(0, 40) || "this post"}
-                </span>
+                <MediaThumb url={rule.mediaThumbUrl} className="size-6 shrink-0 rounded-md" />
+                <span className="truncate">{rule.mediaCaption || "this post"}</span>
               </a>
             )}
           </div>
@@ -719,40 +1258,55 @@ function RuleCard({
               </span>
             )}
             {(rule.holdWords.length > 0 || rule.aiModeration) && (
-              <span className="bg-muted inline-flex h-6 items-center rounded-md px-2 text-[0.6875rem] font-medium">
-                Holds {rule.aiModeration ? "abuse" : `${rule.holdWords.length} word${rule.holdWords.length === 1 ? "" : "s"}`}
+              <span
+                className="bg-standby/10 text-standby-ink inline-flex h-6 max-w-full items-center rounded-md px-2 text-[0.6875rem] font-medium"
+                title={rule.holdWords.join(", ") || undefined}
+              >
+                <span className="truncate">
+                  Holds{" "}
+                  {[
+                    rule.holdWords.slice(0, 3).map((w) => w.toUpperCase()).join(", ") +
+                      (rule.holdWords.length > 3 ? ` +${rule.holdWords.length - 3}` : ""),
+                    rule.aiModeration ? "abuse (AI)" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" + ")}
+                </span>
               </span>
             )}
           </div>
         )}
       </div>
 
-      <footer className="mt-auto grid grid-cols-4 gap-2 border-t pt-4">
-        {[
-          { label: "Matched", value: rule.matchedCount },
-          { label: "Delivered", value: rule.deliveredCount },
-          rule.collect
-            ? { label: "Leads", value: rule.leadCount }
-            : rule.trigger === "COMMENT"
-              ? { label: "Replies", value: rule.replyCount }
-              : { label: "Held", value: rule.heldCount },
-        ].map((s) => (
-          <div key={s.label}>
-            <div className="label-caps">{s.label}</div>
-            <div className="headline mt-1 text-xl leading-none">{s.value}</div>
-          </div>
-        ))}
-        <div>
-          <div className="label-caps">Last</div>
-          <div className="text-muted-foreground mt-1.5 text-xs" suppressHydrationWarning>
-            {rule.lastTriggeredAt ? ago(rule.lastTriggeredAt) : "Not yet"}
-          </div>
-        </div>
+      <footer className="mt-auto space-y-3 border-t pt-4">
+        <dl className="grid grid-cols-2 gap-x-2 gap-y-3 sm:grid-cols-4">
+          {funnel(rule).map((s) => (
+            <div key={s.label} className="min-w-0">
+              <dt className="label-caps truncate" title={s.title}>
+                {s.label}
+              </dt>
+              <dd className="mt-1 flex items-baseline gap-1.5">
+                <span className="headline text-xl leading-none">{s.value}</span>
+                {s.pct !== null && (
+                  <span className="text-muted-foreground font-mono text-[0.6875rem] tabular-nums">{s.pct}%</span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-muted-foreground flex flex-wrap gap-x-2 gap-y-1 text-xs" suppressHydrationWarning>
+          <span>All time · last {rule.lastTriggeredAt ? ago(rule.lastTriggeredAt) : "never"}</span>
+          {waitingNote(rule) && <span className="text-standby-ink">· {waitingNote(rule)}</span>}
+        </p>
         {failed > 0 && (
-          <p className="text-fault-ink col-span-4 flex items-center gap-1.5 text-xs">
-            <AlertTriangle className="size-3.5" />
-            {failed} failed this week. See recent activity below.
-          </p>
+          <button
+            type="button"
+            onClick={onShowFailed}
+            className="text-fault-ink col-span-full flex items-center gap-1.5 text-left text-xs hover:underline"
+          >
+            <AlertTriangle className="size-3.5 shrink-0" />
+            {failed} failed this week. See why in Activity.
+          </button>
         )}
       </footer>
     </article>

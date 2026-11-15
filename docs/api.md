@@ -207,7 +207,7 @@ Response: `{ "id": "...", "status": "SCHEDULED" }`, with **201** when created an
 | `youtubePrivacy` | `"public"` \| `"unlisted"` \| `"private"`? | Default `public`. |
 | `youtubeTags` | string[]? | See [YouTube tags](#youtube-tags). |
 | `youtubeCategoryId` | string? | Numeric id, e.g. `"24"`. Default `"22"`. See [categories](#youtube-categories). |
-| `media` | object[]? | Up to 20 items from `/media/presign`, `url` and `storageKey` exactly as returned. YouTube needs a `VIDEO` item, except for drafts. |
+| `media` | object[]? | Up to 20 items from `/media/presign`, `url` and `storageKey` exactly as returned. YouTube needs a `VIDEO` item, except for drafts. LinkedIn takes one MP4 `VIDEO` on its own (no images beside it), or up to 20 images. |
 | `scheduledAt` | string \| null? | ISO-8601 **with a timezone** (`Z` or `+05:30`). A bare local time is rejected. Required when `action` is `schedule`. |
 | `action` | `"draft"` \| `"schedule"` \| `"now"` | See below. |
 

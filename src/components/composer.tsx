@@ -39,6 +39,7 @@ import { ExpandablePreview } from "@/components/post-preview";
 import { Countdown } from "@/components/fx/countdown";
 import { cn } from "@/lib/utils";
 import { canOptimizeMedia } from "@/lib/media-hosts";
+import { linkedInVideoProblem } from "@/lib/linkedin-media";
 import {
   DEFAULT_YOUTUBE_CATEGORY,
   YOUTUBE_CATEGORIES,
@@ -363,6 +364,9 @@ export function Composer({
   // Only YouTube and Instagram take a first comment.
   const commentable = contentType === "media" && (igSelected || ytSelected);
   const hasVideo = media.some((m) => m.type === "VIDEO");
+  // LinkedIn takes one MP4 video on its own (same check as the server).
+  const liVideoProblem =
+    contentType === "media" && selectedPlatforms.has("LINKEDIN") ? linkedInVideoProblem(media) : null;
   // Same cleaning + budget rules the server enforces (src/lib/youtube-tags.ts),
   // so the counter can't disagree with what gets accepted.
   const tags = useMemo(() => cleanYoutubeTags(tagsText.split(",")), [tagsText]);
@@ -492,6 +496,7 @@ export function Composer({
       if (igSelected && media.length === 0 && action !== "draft") {
         return toast.error("Instagram posts need at least one image or video");
       }
+      if (liVideoProblem && action !== "draft") return toast.error(liVideoProblem);
       // Checked for drafts too: the server rejects bad tags whatever the action.
       if (ytSelected && tagsProblem) return toast.error(tagsProblem);
       if (ytSelected && action !== "draft") {
@@ -635,6 +640,7 @@ export function Composer({
     !clientId && "pick a client",
     selected.length === 0 && "choose an account",
     !body.trim() && "write a caption",
+    liVideoProblem && "fix the media for LinkedIn",
   ].filter(Boolean) as string[];
 
   return (
@@ -823,6 +829,13 @@ export function Composer({
                 <CharRing used={body.length} limit={limit} />
               </div>
             </div>
+
+            {liVideoProblem && (
+              <p className="text-standby-ink mt-2 flex items-start gap-1.5 text-xs">
+                <AlertTriangle className="mt-px size-3.5 shrink-0" />
+                {liVideoProblem}
+              </p>
+            )}
 
             {contentType === "media" && selectedPlatforms.size > 1 && (
               <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border px-4 py-3">

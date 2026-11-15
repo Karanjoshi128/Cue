@@ -142,7 +142,7 @@ export const postingToLinkedIn: HelpGuide = {
   platform: "LINKEDIN",
   title: "Posting to LinkedIn",
   summary:
-    "What you can post to LinkedIn from Cue: text, images, documents (carousels), link previews and polls.",
+    "What you can post to LinkedIn from Cue: text, images, a video, documents (carousels), link previews and polls.",
   keywords: ["linkedin carousel", "pdf", "document post", "poll", "link preview", "gallery", "linkedin video"],
   screens: ["src/components/composer.tsx", "src/lib/platforms/linkedin.ts"],
   related: ["write-a-post", "connect-linkedin"],
@@ -157,6 +157,11 @@ export const postingToLinkedIn: HelpGuide = {
             "Text and images",
             "**Text & media** tab, add up to 20 images",
             "Several images post as a gallery.",
+          ],
+          [
+            "Video",
+            "**Text & media** tab, add one MP4 video",
+            "One video per post, on its own (no images with it). MP4, 3 seconds to 30 minutes. LinkedIn processes it for a minute or two before it shows.",
           ],
           [
             "Document (carousel)",
@@ -176,7 +181,7 @@ export const postingToLinkedIn: HelpGuide = {
         ],
       },
       warnings: [
-        "**Video isn't supported for LinkedIn yet.** If you add a video and pick a LinkedIn account, the LinkedIn post goes out as text only. Post videos to LinkedIn directly for now.",
+        "**LinkedIn video must be MP4.** A .mov or .webm file is refused when you schedule it. Export it as MP4 first.",
         "**Document**, **Link** and **Poll** can't be combined with Instagram or YouTube. Make a separate post for those.",
       ],
     },

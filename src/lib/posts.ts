@@ -7,6 +7,7 @@ import { cleanYoutubeTags, youtubeTagsProblem } from "@/lib/youtube-tags";
 import { limitProblem } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { assertWorkspaceMedia, measureMedia, MEDIA_KEY, removeUnusedMedia } from "@/lib/media";
+import { linkedInVideoProblem } from "@/lib/linkedin-media";
 
 // Post creation shared by the composer's server actions and POST /api/v1/posts.
 //
@@ -184,6 +185,10 @@ export function assertPostIsPublishable(
   // Drafts may be incomplete. They pass through here again when scheduled or
   // published, which is when these become hard requirements.
   if (data.action === "draft") return;
+  if (accounts.some((a) => a.platform === "LINKEDIN")) {
+    const problem = linkedInVideoProblem(data.media ?? []);
+    if (problem) throw new ApiError(400, problem);
+  }
   if (accounts.some((a) => a.platform === "YOUTUBE")) {
     if (!data.title?.trim()) {
       throw new ApiError(400, "A title is required when publishing to YouTube.");

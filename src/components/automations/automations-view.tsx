@@ -32,7 +32,12 @@ import {
   deleteLead,
   resolveHeld,
   setAutomationEnabled,
+  retryAutomationRun,
 } from "@/lib/automation-actions";
+import { AUTOMATION_TEMPLATES } from "@/lib/automations/templates";
+import { AutomationOverview } from "./overview";
+import { CommentRecovery } from "./comment-recovery";
+import { LeadDetails } from "./lead-details";
 import { unwrap } from "@/lib/action-result";
 import {
   RUN_RETENTION_DAYS,
@@ -111,7 +116,7 @@ export function AutomationsView({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [tab, setTab] = useState<AutomationsTab>(initialTab);
-  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>((["held", "failed", "waiting"].includes(data.pagination.activityFilter) ? data.pagination.activityFilter : "all") as ActivityFilter);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editor, setEditor] = useState<{
     key: number;
@@ -123,6 +128,9 @@ export function AutomationsView({
   const [toDelete, setToDelete] = useState<AutomationRuleView | null>(null);
   const [toSend, setToSend] = useState<AutomationRunView | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
+  const [ruleQuery, setRuleQuery] = useState("");
+  const [recoveryRule, setRecoveryRule] = useState<AutomationRuleView | null>(null);
+  const [selectedLead, setSelectedLead] = useState<AutomationLeadView | null>(null);
   const [ruleFilter, setRuleFilter] = useState<RuleFilter>("all");
 
   useEffect(() => {
@@ -138,14 +146,20 @@ export function AutomationsView({
     const account = accountById.get(rule.accountId);
     return account && !account.ready ? account : null;
   };
-  const live = data.featureOn ? data.rules.filter((r) => r.enabled && !blockedBy(r)).length : 0;
+  const live = data.featureOn ? data.rules.filter((r) => r.enabled && !blockedBy(r) && (!r.startsAt || new Date(r.startsAt) <= new Date()) && (!r.endsAt || new Date(r.endsAt) > new Date())).length : 0;
   const failedThisWeek = data.rules.reduce((n, r) => n + (r.week.FAILED ?? 0), 0);
   const currentRuleFilter = RULE_FILTERS.find((f) => f.key === ruleFilter) ?? RULE_FILTERS[0];
-  const shownRules = data.rules.filter((r) => currentRuleFilter.match(r, !!blockedBy(r)));
+  const shownRules = data.rules.filter((r) => currentRuleFilter.match(r, !!blockedBy(r)) && [r.name, r.clientName, r.accountName, ...r.keywords].some((text) => text.toLowerCase().includes(ruleQuery.toLowerCase())));
+
+  function navigate(params: Record<string, string>) {
+    const url = new URL(window.location.href);
+    Object.entries(params).forEach(([key, value]) => value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
+    router.push(`${url.pathname}${url.search}`);
+  }
 
   function showTab(next: AutomationsTab, filter?: ActivityFilter) {
     setTab(next);
-    if (filter) setActivityFilter(filter);
+    if (filter) { setActivityFilter(filter); navigate({ activityFilter: filter, activityPage: "1", tab: next }); }
     // Keep the address shareable without a server round trip.
     const url = new URL(window.location.href);
     if (next === "automations") url.searchParams.delete("tab");
@@ -325,7 +339,10 @@ export function AutomationsView({
             <DescribeAutomation accounts={ready} onDraft={openDescribed} />
           )}
 
+          <AutomationOverview report={data.report} onPeriod={(days) => navigate({ period: String(days) })} />
+          <details className="rounded-2xl border p-5" open={data.rules.length === 0 || undefined}><summary className="cursor-pointer text-sm font-semibold">Start with a template</summary><p className="text-muted-foreground mt-2 text-xs">Choose an outcome, then review the account, keyword, message and link before saving.</p><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{AUTOMATION_TEMPLATES.map((template) => <button key={template.id} type="button" disabled={!ready.length || !data.featureOn} className="bg-card hover:border-primary/50 rounded-xl border p-4 text-left transition-colors disabled:opacity-50" onClick={() => openDescribed(template.preset, ready.length === 1 ? ready[0].id : "")}><span className="block text-sm font-semibold">{template.preset.name}</span><span className="text-muted-foreground mt-1 block text-xs leading-relaxed">{template.description}</span></button>)}</div></details>
           <section className="space-y-4">
+            <Input aria-label="Search automations" placeholder="Search automations, keywords or accounts" value={ruleQuery} onChange={(e) => setRuleQuery(e.target.value)} />
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-[0.9375rem] font-semibold tracking-tight">Your automations</h2>
               {data.rules.length > 3 && (
@@ -365,7 +382,8 @@ export function AutomationsView({
                           checking={checking === rule.accountId}
                           onToggle={(v) => toggle(rule, v)}
                           onEdit={() => openEdit(rule)}
-                          onDuplicate={() => openDuplicate(rule)}
+                          onRecover={() => setRecoveryRule(rule)}
+                            onDuplicate={() => openDuplicate(rule)}
                           onCheck={() => checkNow(rule.accountId)}
                           onDelete={() => setToDelete(rule)}
                           onShowFailed={() => showTab("activity", "failed")}
@@ -388,22 +406,24 @@ export function AutomationsView({
       )}
 
       {tab === "activity" && (
-        <Activity
+        <div className="space-y-4"><Activity
           runs={data.runs}
           held={data.held}
           failed={data.failed}
           filter={activityFilter}
-          onFilter={setActivityFilter}
+          onFilter={(filter) => { setActivityFilter(filter); navigate({ activityFilter: filter, activityPage: "1", tab: "activity" }); }}
           timeZone={timeZone}
           busy={pending}
           onResolve={resolve}
-        />
+        /><Pager page={data.pagination.activityPage} size={40} total={data.pagination.activityTotal} onPage={(page) => navigate({ activityPage: String(page), tab: "activity" })} /></div>
       )}
 
       {tab === "leads" && (
-        <Leads leads={data.leads} total={data.leadTotal} busy={pending} onRemove={removeLead} />
+        <div className="space-y-4"><Leads key={data.pagination.leadQuery} leads={data.leads} total={data.leadTotal} busy={pending} onRemove={removeLead} onEdit={setSelectedLead} initialQuery={data.pagination.leadQuery} onSearch={(query) => navigate({ leadQuery: query, leadPage: "1", tab: "leads" })} /><Pager page={data.pagination.leadPage} size={100} total={data.leadTotal} onPage={(page) => navigate({ leadPage: String(page), tab: "leads" })} /></div>
       )}
 
+      {recoveryRule && <CommentRecovery rule={recoveryRule} onClose={() => setRecoveryRule(null)} />}
+      {selectedLead && <LeadDetails key={selectedLead.id} lead={selectedLead} onClose={() => setSelectedLead(null)} />}
       {/* Keyed so each open starts from that rule's values (or a blank form). */}
       <AutomationEditor
         key={editor.key}
@@ -540,8 +560,6 @@ const ACTIVITY_EMPTY: Record<ActivityFilter, string> = {
 
 function Activity({
   runs,
-  held,
-  failed,
   filter,
   onFilter,
   timeZone,
@@ -557,13 +575,8 @@ function Activity({
   busy: boolean;
   onResolve: (run: AutomationRunView, send: boolean) => void;
 }) {
-  // Held and failed ones come from their own lists, which aren't limited to
-  // the newest 40 (failures: this week's, like the cards' count).
-  const retrying = runs.filter((r) => r.status === "QUEUED" && !!r.error);
-  const source = (key: ActivityFilter) =>
-    key === "held" ? held : key === "failed" ? [...failed, ...retrying.filter((r) => !failed.some((f) => f.id === r.id))] : runs;
   const current = ACTIVITY_FILTERS.find((f) => f.key === filter) ?? ACTIVITY_FILTERS[0];
-  const shown = source(current.key).filter(current.match);
+  const shown = runs;
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -582,7 +595,7 @@ function Activity({
           tabs={ACTIVITY_FILTERS.map((f) => ({
             key: f.key,
             label: f.label,
-            count: source(f.key).filter(f.match).length,
+
             alert: f.key === "held",
           }))}
         />
@@ -613,6 +626,8 @@ function RunItem({
   busy: boolean;
   onResolve: (run: AutomationRunView, send: boolean) => void;
 }) {
+  const router = useRouter();
+  const [retrying, startRetry] = useTransition();
   const ctx = { in: zoned(timeZone) };
   const note = stageNote(run);
   return (
@@ -643,6 +658,8 @@ function RunItem({
             </span>
           )}
         </p>
+        {run.clicked && <p className="text-live-ink mt-1 text-xs">Link visited - {run.clickCount} visit{run.clickCount === 1 ? "" : "s"}</p>}
+        {(run.status === "FAILED" || run.status === "PARTIAL") && <Button type="button" size="xs" variant="outline" className="mt-2" disabled={busy || retrying} onClick={() => startRetry(async () => { try { unwrap(await retryAutomationRun(run.id)); toast.success("Unsent replies checked for retry"); router.refresh(); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not retry."); } })}>Retry unsent replies</Button>}
         {note && (
           <p className={cn("mt-1 text-xs", run.delivered ? "text-live-ink" : "text-standby-ink")}>{note}</p>
         )}
@@ -693,20 +710,23 @@ function Leads({
   leads,
   total,
   busy,
-  onRemove,
+  onRemove, onEdit, initialQuery, onSearch,
 }: {
   leads: AutomationLeadView[];
   total: number;
   busy: boolean;
   onRemove: (id: string) => void;
+  onEdit: (lead: AutomationLeadView) => void;
+  initialQuery: string;
+  onSearch: (query: string) => void;
 }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [only, setOnly] = useState<"all" | "email" | "phone">("all");
   const q = query.trim().toLowerCase();
   const shown = leads
     .filter((l) => (only === "email" ? !!l.email : only === "phone" ? !!l.phone : true))
     .filter((l) =>
-      q ? [l.username, l.email, l.phone, l.lastRule, l.clientName].some((v) => v?.toLowerCase().includes(q)) : true,
+      q ? [l.username, l.email, l.phone, l.lastRule, l.clientName, l.notes, ...l.tags].some((v) => v?.toLowerCase().includes(q)) : true,
     );
   return (
     <section className="space-y-4">
@@ -714,22 +734,24 @@ function Leads({
         <div>
           <h2 className="text-[0.9375rem] font-semibold tracking-tight">Leads</h2>
           <p className="text-muted-foreground text-xs">
-            Everyone an automation talked to, with any email or phone they shared. {total} in total
-            {total > leads.length ? `; the newest ${leads.length} are here and the CSV has them all` : ""}.
+            Everyone an automation talked to, with any email or phone they shared. {total} matching
+            {total > leads.length ? `; showing ${leads.length} on this page. CSV exports all leads` : ""}.
           </p>
         </div>
-        {total > 0 && (
+        {(total > 0 || initialQuery) && (
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
               <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search name, email, phone"
+                placeholder="Search name, email, phone or tag"
+                onKeyDown={(e) => { if (e.key === "Enter") onSearch(query); }}
                 aria-label="Search leads"
                 className="h-8 pl-8"
               />
             </div>
+            <Button size="sm" variant="outline" onClick={() => onSearch(query)}>Search all leads</Button>
             <PillTabs
               label="Who"
               size="sm"
@@ -767,7 +789,9 @@ function Leads({
                 className="group/lead grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_7rem_2rem] md:px-5"
               >
                 <p className="truncate text-sm font-semibold">
-                  {lead.username ? `@${lead.username}` : "Instagram user"}
+                  <button type="button" onClick={() => onEdit(lead)} className="text-left hover:underline">{lead.username ? `@${lead.username}` : "Instagram user"}</button>
+                  {lead.automationPaused && <span className="text-standby-ink ml-2 text-xs">Paused</span>}
+                  {lead.tags.length > 0 && <span className="text-muted-foreground block truncate text-xs font-normal">{lead.tags.join(", ")}</span>}
                   {lead.touches > 1 && (
                     <span className="text-muted-foreground ml-1.5 text-xs font-normal" title={`${lead.touches} conversations`}>
                       ×{lead.touches}
@@ -828,7 +852,7 @@ const RULE_FILTERS: {
   match: (r: AutomationRuleView, blocked: boolean) => boolean;
 }[] = [
   { key: "all", label: "All", match: () => true },
-  { key: "live", label: "Live", match: (r, blocked) => r.enabled && !blocked },
+  { key: "live", label: "Live", match: (r, blocked) => r.enabled && !blocked && (!r.startsAt || new Date(r.startsAt) <= new Date()) && (!r.endsAt || new Date(r.endsAt) > new Date()) },
   { key: "paused", label: "Paused", match: (r) => !r.enabled },
   {
     key: "attention",
@@ -1049,6 +1073,7 @@ function RuleCard({
   checking,
   onToggle,
   onEdit,
+  onRecover,
   onDuplicate,
   onCheck,
   onDelete,
@@ -1062,6 +1087,7 @@ function RuleCard({
   checking: boolean;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
+  onRecover: () => void;
   onDuplicate: () => void;
   onCheck: () => void;
   onDelete: () => void;
@@ -1069,8 +1095,8 @@ function RuleCard({
 }) {
   const ctx = { in: zoned(timeZone) };
   const failed = rule.week.FAILED ?? 0;
-  const waitingForPost = rule.scope === "ONE_POST" && !rule.mediaId && !!rule.postId;
-  const postGone = rule.scope === "ONE_POST" && !rule.mediaId && !rule.postId;
+  const waitingForPost = rule.scope === "ONE_POST" && !rule.mediaId && (!!rule.postId || rule.nextPost);
+  const postGone = rule.scope === "ONE_POST" && !rule.mediaId && !rule.postId && !rule.nextPost;
 
   return (
     <article
@@ -1099,7 +1125,7 @@ function RuleCard({
           </h3>
           <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
             <span className={cn("shrink-0 font-medium", rule.enabled && !blockedBy ? "text-live-ink" : undefined)}>
-              {rule.enabled ? (blockedBy ? "Not running" : "Live") : "Paused"}
+              {!rule.enabled ? "Paused" : blockedBy ? "Not running" : rule.endsAt && new Date(rule.endsAt) <= new Date() ? "Ended" : rule.startsAt && new Date(rule.startsAt) > new Date() ? "Scheduled" : "Live"}
             </span>
             <span aria-hidden>·</span>
             <ClientDot color={rule.clientColor} className="size-2" />
@@ -1131,6 +1157,7 @@ function RuleCard({
             <DropdownMenuItem onClick={onCheck} disabled={busy}>
               <RefreshCw className={cn(checking && "animate-spin")} /> Check comments now
             </DropdownMenuItem>
+            {rule.trigger === "COMMENT" && <DropdownMenuItem onClick={onRecover} disabled={busy || !rule.enabled}>Recover missed comments</DropdownMenuItem>}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
               <Trash2 /> Delete
@@ -1181,7 +1208,7 @@ function RuleCard({
             ) : waitingForPost ? (
               <span className="inline-flex items-center gap-1.5 font-medium">
                 <CalendarClock className="text-standby size-3.5" />
-                a scheduled post
+                {rule.nextPost ? "the next published post" : "a scheduled post"}
                 {rule.post?.scheduledAt && (
                   <span className="text-muted-foreground font-normal">
                     ({format(new Date(rule.post.scheduledAt), "d MMM, h:mm a", ctx)})
@@ -1355,4 +1382,9 @@ function HowItWorks({ canCreate, onNew }: { canCreate: boolean; onNew: () => voi
       </div>
     </div>
   );
+}
+
+function Pager({ page, size, total, onPage }: { page: number; size: number; total: number; onPage: (n: number) => void }) {
+  if (total <= size && page === 1) return null;
+  return <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground text-xs">Page {page} of {Math.max(1, Math.ceil(total / size))}</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</Button><Button type="button" variant="outline" size="sm" disabled={page * size >= total} onClick={() => onPage(page + 1)}>Next</Button></div></div>;
 }

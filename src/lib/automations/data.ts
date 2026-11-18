@@ -1,3 +1,4 @@
+import { automationSettings } from "./settings";
 import type { AutomationRunStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireWorkspaceId } from "@/lib/auth";
@@ -9,9 +10,17 @@ import { hasAutomationScopes } from "./config";
 // src/lib/data.ts, and returns plain values so it can go straight to the
 // client component.
 
-export async function getAutomationsPage(clientId?: string) {
+export async function getAutomationsPage(clientId?: string, period: 7 | 30 = 7, activityPage = 1, leadPage = 1, leadQuery = "", activityFilter = "all") {
   const workspaceId = await requireWorkspaceId();
   const inScope = { workspaceId, ...(clientId ? { id: clientId } : {}) };
+  const activityWhere: Prisma.AutomationRunWhereInput = { rule: { client: inScope },
+    ...(activityFilter === "held" ? { status: "HELD" } : activityFilter === "failed" ? { OR: [{ status: { in: ["FAILED", "PARTIAL"] } }, { status: "QUEUED", lastError: { not: null } }] } : activityFilter === "waiting" ? { status: { in: ["SENT", "PARTIAL"] }, stage: { in: ["WAIT_TAP", "WAIT_FOLLOW", "WAIT_ANSWER"] }, deliveredAt: null } : {}),
+  };
+  const reportSince = new Date(Date.now() - period * 24 * 60 * 60 * 1000);
+  activityPage = Math.max(1, Math.min(10000, Math.floor(activityPage) || 1));
+  leadPage = Math.max(1, Math.min(10000, Math.floor(leadPage) || 1));
+  leadQuery = leadQuery.trim().slice(0, 100);
+  const leadWhere: Prisma.LeadWhereInput = { client: inScope, ...(leadQuery ? { OR: [{ username: { contains: leadQuery, mode: "insensitive" } }, { email: { contains: leadQuery, mode: "insensitive" } }, { phone: { contains: leadQuery } }, { tags: { has: leadQuery } }, { notes: { contains: leadQuery, mode: "insensitive" } }] } : {}) };
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const runInclude = {
@@ -50,9 +59,9 @@ export async function getAutomationsPage(clientId?: string) {
       orderBy: { createdAt: "desc" },
     }),
     prisma.automationRun.findMany({
-      where: { rule: { client: inScope } },
+      where: activityWhere,
       orderBy: { createdAt: "desc" },
-      take: 40,
+      take: 40, skip: (activityPage - 1) * 40,
       include: runInclude,
     }),
     // Held comments wait for a person however old they are, so they're read
@@ -92,15 +101,15 @@ export async function getAutomationsPage(clientId?: string) {
     }),
     // The newest leads; the CSV export has all of them.
     prisma.lead.findMany({
-      where: { client: inScope },
+      where: leadWhere,
       orderBy: { lastSeenAt: "desc" },
-      take: 100,
+      take: 100, skip: (leadPage - 1) * 100,
       include: {
         client: { select: { name: true, color: true } },
         account: { select: { displayName: true } },
       },
     }),
-    prisma.lead.count({ where: { client: inScope } }),
+    prisma.lead.count({ where: leadWhere }),
   ]);
 
   const counts = await prisma.automationRun.groupBy({
@@ -133,7 +142,19 @@ export async function getAutomationsPage(clientId?: string) {
     week.set(c.ruleId, row);
   }
 
+  const reportWhere = { rule: { client: inScope }, createdAt: { gte: reportSince } };
+  const [matched, dmSent, delivered, collected, visited, visits, activityTotal] = await Promise.all([
+    prisma.automationRun.count({ where: reportWhere }),
+    prisma.automationRun.count({ where: { ...reportWhere, dmSentAt: { not: null } } }),
+    prisma.automationRun.count({ where: { ...reportWhere, deliveredAt: { not: null } } }),
+    prisma.automationRun.count({ where: { ...reportWhere, collectedAt: { not: null } } }),
+    prisma.automationRun.count({ where: { ...reportWhere, clickedAt: { not: null } } }),
+    prisma.automationRun.aggregate({ where: reportWhere, _sum: { clickCount: true } }),
+    prisma.automationRun.count({ where: activityWhere }),
+  ]);
   return {
+    report: { days: period, matched, dmSent, delivered, collected, visited, visits: visits._sum.clickCount ?? 0 },
+    pagination: { activityFilter, activityPage, activityTotal, leadPage, leadQuery },
     featureOn: !!workspace && hasFeature(workspace, "ig_automations"),
     aiOn: aiEnabled() && !!workspace && hasFeature(workspace, "ai"),
     accounts: accounts.map((a) => ({
@@ -187,6 +208,8 @@ export async function getAutomationsPage(clientId?: string) {
       followUpMinutes: r.followUpMinutes,
       holdWords: r.holdWords,
       aiModeration: r.aiModeration,
+      settings: automationSettings(r.settings), nextPost: r.nextPost,
+      startsAt: r.startsAt?.toISOString() ?? null, endsAt: r.endsAt?.toISOString() ?? null,
       matchedCount: r.matchedCount,
       dmSentCount: r.dmSentCount,
       replyCount: r.replyCount,
@@ -212,6 +235,7 @@ export async function getAutomationsPage(clientId?: string) {
       source: l.source,
       lastRule: l.lastRule,
       touches: l.touches,
+      tags: l.tags, notes: l.notes, automationPaused: l.automationPaused,
       lastSeenAt: l.lastSeenAt.toISOString(),
     })),
     leadTotal,
@@ -246,6 +270,7 @@ function runView(run: RunRow) {
     dmSent: run.dmMessageId !== null,
     replied: run.replyId !== null,
     delivered: run.deliveredAt !== null,
+    clicked: run.clickedAt !== null, clickCount: run.clickCount,
     heldReason: run.heldReason,
     error: run.dmError ?? run.replyError ?? run.lastError,
     createdAt: run.createdAt.toISOString(),

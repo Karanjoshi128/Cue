@@ -11,6 +11,9 @@ import type {
 // "Cannot parse access token" error. The IG user id and content-publishing
 // endpoints (/media, /media_publish) live under this host.
 export const GRAPH = "https://graph.instagram.com/v21.0";
+// Publishing uses the current media schema (20-item carousels and collaborators).
+// Message/comment endpoints keep their established version and permissions.
+export const PUBLISH_GRAPH = "https://graph.instagram.com/v27.0";
 
 // How long to wait for a media container to finish before publishing it.
 // Images are ready within seconds. A video is transcoded first, and a one-minute
@@ -33,107 +36,75 @@ export const instagramAdapter: PlatformAdapter = {
   platform: "INSTAGRAM",
 
   async publish(input: PublishInput): Promise<PublishResult> {
+    const deadline = Math.min(input.deadline ?? Infinity, Date.now() + 240_000);
+    const remaining = (max: number) => { const ms = deadline - Date.now(); if (ms <= 0) throw new Error("Instagram processing timed out."); return Math.min(max, ms); };
     const { accessToken, externalId, body } = input;
-    const images = input.media.filter((m) => m.type === "IMAGE");
-    if (input.media.length === 0) {
-      throw new Error("Instagram requires at least one image or video");
+    const options = input.options?.instagram;
+    const story = options?.placement === "STORY";
+    const media = input.media;
+    if (!media.length || media.some((m) => m.type === "DOCUMENT")) throw new Error("Instagram requires images or videos.");
+    if (media.length > 20) throw new Error("Instagram allows up to 20 carousel items.");
+    if (story && media.length !== 1) throw new Error("A Story needs one image or video.");
+    if (story) {
+      const profile = await fetch(`${PUBLISH_GRAPH}/${externalId}?fields=account_type`, { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15_000) });
+      if (!profile.ok) throw new Error(`Could not check Story eligibility (${profile.status}).`);
+      const details = await profile.json() as { account_type?: string };
+      if (details.account_type !== "BUSINESS") throw new Error("Instagram Story publishing requires a Business account. Creator accounts can publish feed posts and Reels.");
     }
-
-    let creationId: string;
-    let isVideo = false;
-
-    if (images.length >= 2) {
-      // Carousel: an item container per image, then a parent CAROUSEL container.
-      const childIds: string[] = [];
-      for (const img of images.slice(0, 10)) {
-        const p = new URLSearchParams({
-          image_url: img.url,
-          is_carousel_item: "true",
-          access_token: accessToken,
-        });
-        const r = await fetch(`${GRAPH}/${externalId}/media?${p.toString()}`, {
-          method: "POST",
-        });
-        if (!r.ok) {
-          throw new Error(
-            `IG carousel item failed (${r.status}): ${await r.text()}`,
-          );
-        }
-        childIds.push(((await r.json()) as { id: string }).id);
-      }
-      for (const id of childIds) await waitForContainer(id, accessToken);
-
-      const parentParams = new URLSearchParams({
-        media_type: "CAROUSEL",
-        caption: body,
-        children: childIds.join(","),
-        access_token: accessToken,
+    const common: Record<string, string> = story ? {} : { caption: body };
+    if (options?.aiGenerated !== undefined) common.is_ai_generated = String(options.aiGenerated);
+    if (!story && options?.collaborators?.length) common.collaborators = JSON.stringify(options.collaborators);
+    if (!story && options?.locationId) common.location_id = options.locationId;
+    const create = async (params: Record<string, string>) => {
+      const res = await fetch(`${PUBLISH_GRAPH}/${externalId}/media`, {
+        method: "POST", headers: { Authorization: `Bearer ${accessToken}` },
+        body: new URLSearchParams(params), signal: AbortSignal.timeout(remaining(30_000)),
       });
-      const parentRes = await fetch(
-        `${GRAPH}/${externalId}/media?${parentParams.toString()}`,
-        { method: "POST" },
-      );
-      if (!parentRes.ok) {
-        throw new Error(
-          `IG carousel failed (${parentRes.status}): ${await parentRes.text()}`,
-        );
-      }
-      creationId = ((await parentRes.json()) as { id: string }).id;
-    } else {
-      const media = input.media[0];
-      const containerParams = new URLSearchParams({
-        caption: body,
-        access_token: accessToken,
-      });
-      if (media.type === "VIDEO") {
-        isVideo = true;
-        containerParams.set("media_type", "REELS");
-        containerParams.set("video_url", media.url);
-      } else {
-        containerParams.set("image_url", media.url);
-      }
-      const containerRes = await fetch(
-        `${GRAPH}/${externalId}/media?${containerParams.toString()}`,
-        { method: "POST" },
-      );
-      if (!containerRes.ok) {
-        throw new Error(
-          `IG container failed (${containerRes.status}): ${await containerRes.text()}`,
-        );
-      }
-      creationId = ((await containerRes.json()) as { id: string }).id;
-    }
-
-    // Wait for the container to be FINISHED before publishing. Required for
-    //    video, but images can also race ahead (IG fetches the remote image
-    //    asynchronously) and return code 9007 "media is not ready" - so poll
-    //    for both. waitForContainer returns as soon as status is FINISHED.
-    await waitForContainer(
-      creationId,
-      accessToken,
-      isVideo ? VIDEO_WAIT : IMAGE_WAIT,
-    );
-
-    const publishParams = new URLSearchParams({
-      creation_id: creationId,
-      access_token: accessToken,
+      if (!res.ok) throw new Error(`IG media container failed (${res.status}): ${await res.text()}`);
+      const result = await res.json() as { id?: string };
+      if (!result.id) throw new Error("Instagram returned no media container id.");
+      return result.id;
+    };
+    const itemParams = (item: PublishInput["media"][number], carousel: boolean): Record<string, string> => ({
+      ...(item.type === "VIDEO" ? { media_type: story ? "STORIES" : carousel ? "VIDEO" : "REELS", video_url: item.url } : { image_url: item.url, ...(story ? { media_type: "STORIES" } : {}) }),
+      ...(carousel ? { is_carousel_item: "true" } : {}),
+      ...(item.type === "IMAGE" && !story && item.altText ? { alt_text: item.altText } : {}),
+      ...(item.userTags?.length ? { user_tags: JSON.stringify(item.type === "VIDEO" && !story ? item.userTags.map(({ username }) => ({ username })) : item.userTags) } : {}),
     });
-    const publishRes = await fetch(
-      `${GRAPH}/${externalId}/media_publish?${publishParams.toString()}`,
-      { method: "POST" },
-    );
-    if (!publishRes.ok) {
-      throw new Error(
-        `IG publish failed (${publishRes.status}): ${await publishRes.text()}`,
-      );
+    let creationId: string;
+    if (media.length > 1) {
+      // Preserve the user's order and include videos, instead of silently dropping them.
+      const children: { id: string; video: boolean }[] = [];
+      for (const item of media) children.push({ id: await create(itemParams(item, true)), video: item.type === "VIDEO" });
+      // Transcoding happens concurrently on Instagram. One shared deadline bounds the batch.
+      await Promise.all(children.map(({ id, video }) => waitForContainer(id, accessToken, video ? VIDEO_WAIT : IMAGE_WAIT, PUBLISH_GRAPH, deadline)));
+      creationId = await create({ ...common, media_type: "CAROUSEL", children: children.map((c) => c.id).join(",") });
+    } else {
+      const params = { ...common, ...itemParams(media[0], false) };
+      if (media[0].type === "VIDEO" && !story) {
+        if (options?.shareToFeed !== undefined) params.share_to_feed = String(options.shareToFeed);
+        if (input.cover) params.cover_url = input.cover.url;
+        else if (options?.thumbOffset !== undefined) params.thumb_offset = String(options.thumbOffset);
+        if (options?.trialReel) params.trial_params = JSON.stringify({ graduation_strategy: options.trialReel });
+        if (options?.audioName) params.audio_name = options.audioName;
+      }
+      creationId = await create(params);
     }
-    const { id: mediaId } = (await publishRes.json()) as { id: string };
+    await waitForContainer(creationId, accessToken, media.length === 1 && media[0].type === "VIDEO" ? VIDEO_WAIT : IMAGE_WAIT, PUBLISH_GRAPH, deadline);
+    const publishRes = await fetch(`${PUBLISH_GRAPH}/${externalId}/media_publish`, {
+      method: "POST", headers: { Authorization: `Bearer ${accessToken}` },
+      body: new URLSearchParams({ creation_id: creationId }), signal: AbortSignal.timeout(remaining(30_000)),
+    });
+    if (!publishRes.ok) throw new Error(`IG publish failed (${publishRes.status}): ${await publishRes.text()}`);
+    const { id: mediaId } = await publishRes.json() as { id: string };
+    if (!mediaId) throw new Error("Instagram returned no published media id.");
 
     // Fetch permalink (best-effort)
     let permalink: string | undefined;
     try {
       const permRes = await fetch(
-        `${GRAPH}/${mediaId}?fields=permalink&access_token=${accessToken}`,
+        `${GRAPH}/${mediaId}?fields=permalink`,
+        { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(5_000) },
       );
       if (permRes.ok) {
         permalink = ((await permRes.json()) as { permalink?: string })
@@ -171,11 +142,16 @@ async function waitForContainer(
   creationId: string,
   accessToken: string,
   { attempts, intervalMs } = IMAGE_WAIT,
+  graph = GRAPH,
+  deadline = Date.now() + 240_000,
 ): Promise<void> {
   let last = "no status yet";
   for (let i = 0; i < attempts; i++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     const res = await fetch(
-      `${GRAPH}/${creationId}?fields=status_code,status&access_token=${accessToken}`,
+      `${graph}/${creationId}?fields=status_code,status`,
+      { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(Math.min(15_000, remaining)) },
     );
     if (res.ok) {
       const { status_code, status } = (await res.json()) as {
@@ -189,7 +165,7 @@ async function waitForContainer(
       }
       last = status_code;
     }
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise((r) => setTimeout(r, Math.max(0, Math.min(intervalMs, deadline - Date.now()))));
   }
   throw new Error(
     `IG media processing timed out after ${Math.round((attempts * intervalMs) / 1000)} s (${last})`,

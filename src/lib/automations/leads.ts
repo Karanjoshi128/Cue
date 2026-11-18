@@ -14,6 +14,7 @@ export async function recordLead(p: {
   ruleName: string;
   email?: string | null;
   phone?: string | null;
+  tags?: string[];
 }) {
   // A commenter Instagram gave no id for can't be messaged again, so skip them.
   if (!p.igsid || p.igsid.startsWith("@") || p.igsid.startsWith("comment:")) return;
@@ -22,7 +23,7 @@ export async function recordLead(p: {
     ...(p.email ? { email: p.email } : {}),
     ...(p.phone ? { phone: p.phone } : {}),
   };
-  await prisma.lead.upsert({
+  const lead = await prisma.lead.upsert({
     where: { accountId_igsid: { accountId: p.accountId, igsid: p.igsid } },
     create: {
       clientId: p.clientId,
@@ -39,4 +40,8 @@ export async function recordLead(p: {
       ...filled,
     },
   });
+  if (p.tags?.length) {
+    // Atomic union preserves tags added by another rule or a teammate at the same time.
+    await prisma.$executeRaw`UPDATE "Lead" SET "tags" = ARRAY(SELECT DISTINCT unnest("tags" || ${p.tags}::text[])) WHERE "id" = ${lead.id}`;
+  }
 }

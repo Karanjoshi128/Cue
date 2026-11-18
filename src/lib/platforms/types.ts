@@ -1,9 +1,12 @@
 import type { Platform } from "@prisma/client";
+import type { PublishingOptions, InstagramUserTag } from "@/lib/publishing-options";
 
 export interface PublishMedia {
   type: "IMAGE" | "VIDEO" | "DOCUMENT";
   url: string;
   title?: string; // display filename, required for DOCUMENT posts
+  altText?: string;
+  userTags?: InstagramUserTag[];
 }
 
 // LinkedIn-only content types. Present when the post is a link or a poll.
@@ -22,6 +25,7 @@ export interface PublishPoll {
 export type YouTubePrivacy = "public" | "unlisted" | "private";
 
 export interface PublishInput {
+  deadline?: number;
   body: string;
   // YouTube-only: the uploaded video's title + visibility. Ignored elsewhere.
   title?: string;
@@ -30,6 +34,8 @@ export interface PublishInput {
   // Absent means no tags / the adapter's default category.
   tags?: string[];
   categoryId?: string;
+  options?: PublishingOptions;
+  cover?: PublishMedia;
   media: PublishMedia[];
   article?: PublishArticle;
   poll?: PublishPoll;

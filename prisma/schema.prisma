@@ -243,6 +243,7 @@ model Post {
   youtubePrivacy    String? // YouTube visibility: public | unlisted | private (null for non-YT)
   youtubeTags       String[]       @default([]) // YouTube tags, cleaned + within the 500-char budget
   youtubeCategoryId String? // YouTube category id; null means the adapter default (22)
+  publishOptions    Json? // validated platform-specific publishing controls; null preserves legacy behavior
   // Set by API callers via the Idempotency-Key header so a retried request
   // returns the original post instead of publishing a second copy.
   idempotencyKey    String?
@@ -303,6 +304,11 @@ model PostTarget {
   commentError    String?
   commentAttempts Int       @default(0)
   commentedAt     DateTime?
+  // Post-upload enhancements retry independently, never uploading the video twice.
+  enhancementError    String?
+  enhancementAttempts Int       @default(0)
+  enhancementClaimedAt DateTime?
+  enhancedAt          DateTime?
 }
 
 enum TargetStatus {
@@ -320,8 +326,12 @@ model MediaAsset {
   url        String // public URL in the workspace's storage (Cue's R2 or its own bucket)
   storageKey String // R2 object key (deleted on cleanup)
   title      String? // display filename, used for DOCUMENT posts
+  role       String   @default("CONTENT") // CONTENT or COVER (video thumbnail, never a carousel item)
+  altText    String?
+  userTags   Json? // Instagram image tags: [{username,x,y}]
   sizeBytes  Int? // as declared at upload; null for media uploaded before this was recorded
   createdAt  DateTime  @default(now())
+  sortOrder  Int @default(0)
 }
 
 enum MediaType {
@@ -425,6 +435,10 @@ model AutomationRule {
   // Comments to hold for review instead of answering.
   holdWords    String[] @default([])
   aiModeration Boolean  @default(false) // AI also holds abuse (needs ANTHROPIC_API_KEY)
+  settings     Json? // validated optional conversation, matching and campaign controls
+  nextPost     Boolean  @default(false) // atomically binds the first eligible newly published post
+  startsAt     DateTime?
+  endsAt       DateTime?
 
   // Lifetime totals. The per-comment log below is deleted after 30 days.
   matchedCount    Int       @default(0)
@@ -502,6 +516,9 @@ model AutomationRun {
   followUpSentAt DateTime?
   deliveredAt    DateTime? // the link went out
   heldReason     String? // why it's HELD (a hold word, or the AI's reason)
+  clickedAt      DateTime? // first tracked link visit; not a read receipt or a sale
+  clickCount     Int       @default(0)
+  collectedAt    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -551,6 +568,9 @@ model Lead {
   source     AutomationTrigger
   lastRule   String? // the automation that last reached them, by name
   touches    Int               @default(1)
+  tags       String[]          @default([])
+  notes      String?
+  automationPaused Boolean     @default(false) // human handoff or an explicit STOP; not cleared by subsequent touches
   createdAt  DateTime          @default(now())
   lastSeenAt DateTime          @default(now())
 

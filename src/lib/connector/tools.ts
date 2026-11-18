@@ -1,4 +1,5 @@
 import type { User } from "@prisma/client";
+import { publishingOptionsSchema } from "@/lib/publishing-options";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ApiError } from "@/lib/api";
@@ -159,6 +160,7 @@ export const TOOLS: Tool[] = [
           .optional()
           .describe("For schedule: ISO 8601 with a UTC offset, e.g. 2026-11-03T18:30:00+05:30. Must be in the future."),
         title: z.string().max(100).optional().describe("YouTube video title."),
+        publishOptions: publishingOptionsSchema.optional().describe("Platform controls: Instagram placement/collaborators/trial/AI; YouTube audience/disclosure/distribution/translations; LinkedIn visibility/reshares. Video and image controls take effect after media is attached in Cue."),
         firstComment: z.string().optional().describe("Posted as the first comment on YouTube and Instagram."),
         link: z
           .object({
@@ -193,6 +195,7 @@ export const TOOLS: Tool[] = [
         scheduledAt: a.action === "schedule" ? a.scheduledAt : null,
         title: a.title,
         firstComment: a.firstComment,
+        publishOptions: a.publishOptions,
         link: a.link ?? null,
         overrides: a.perAccountText?.map((o) => ({ accountId: o.accountId, body: o.text })),
       });

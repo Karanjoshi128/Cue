@@ -1,5 +1,6 @@
 "use server";
 
+import { publishingOptions, instagramUserTagSchema } from "@/lib/publishing-options";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -894,7 +895,7 @@ export async function duplicatePost(
     const user = await requireUser();
     const src = await prisma.post.findFirst({
       where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } },
-      include: { media: true, targets: true },
+      include: { media: { orderBy: { sortOrder: "asc" } }, targets: true },
     });
     if (!src) throw new ApiError(404, "Post not found.");
     if (src.targets.length === 0) {
@@ -908,12 +909,16 @@ export async function duplicatePost(
       youtubePrivacy: (src.youtubePrivacy as PostInput["youtubePrivacy"]) ?? undefined,
       youtubeTags: src.youtubeTags,
       youtubeCategoryId: src.youtubeCategoryId ?? undefined,
+      publishOptions: publishingOptions(src.publishOptions),
       accountIds: src.targets.map((t) => t.accountId),
       media: src.media.map((m) => ({
         type: m.type,
         url: m.url,
         storageKey: m.storageKey,
         title: m.title ?? undefined,
+        role: m.role === "COVER" ? "COVER" : "CONTENT",
+        altText: m.altText ?? undefined,
+        userTags: m.userTags ? instagramUserTagSchema.array().parse(m.userTags) : undefined,
         sizeBytes: m.sizeBytes ?? undefined,
       })),
       link: (src.link as PostInput["link"]) ?? null,
@@ -1001,6 +1006,19 @@ export async function retryPost(id: string): Promise<ActionResult> {
       data: { status: "SCHEDULED", attempts: 0, error: null },
     });
     await publishPostNow(owned.id);
+    revalidatePath("/queue");
+  });
+}
+
+/** A thumbnail retry never resets or re-uploads the published video. */
+export async function retryYoutubeThumbnail(id: string) {
+  return toResult(async () => {
+    const user = await requireUser();
+    const result = await prisma.postTarget.updateMany({
+      where: { id: idSchema.parse(id), platform: "YOUTUBE", status: "PUBLISHED", enhancedAt: null, enhancementError: { not: null }, OR: [{ enhancementClaimedAt: null }, { enhancementClaimedAt: { lt: new Date(Date.now() - 6 * 60_000) } }], post: { client: { workspaceId: user.workspaceId }, media: { some: { role: "COVER" } } } },
+      data: { enhancementAttempts: 0, enhancementClaimedAt: null, enhancementError: null },
+    });
+    if (!result.count) throw new ApiError(409, "Thumbnail is already applied, still being processed, or unavailable.");
     revalidatePath("/queue");
   });
 }

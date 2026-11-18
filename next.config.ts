@@ -16,6 +16,8 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Isolated verification builds must not replace the running dev server output.
+  distDir: process.env.CUE_NEXT_DIST_DIR || ".next",
   images: {
     // Only the hosts we actually serve media from (see src/lib/media-hosts.ts),
     // and only their upload folder. The only remote images are uploads:

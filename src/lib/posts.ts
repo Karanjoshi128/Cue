@@ -7,7 +7,7 @@ import { cleanYoutubeTags, youtubeTagsProblem } from "@/lib/youtube-tags";
 import { limitProblem } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { assertWorkspaceMedia, measureMedia, MEDIA_KEY, removeUnusedMedia } from "@/lib/media";
-import { linkedInVideoProblem } from "@/lib/linkedin-media";
+import { publishingOptionsSchema, publishingProblem, instagramUserTagSchema } from "@/lib/publishing-options";
 
 // Post creation shared by the composer's server actions and POST /api/v1/posts.
 //
@@ -51,7 +51,7 @@ const youtubeTagsSchema = z
 export const postSchema = z
   .object({
     clientId: z.string().min(1).max(100),
-    // 5000 is YouTube's cap. Every other platform is held to 3000 in
+    // 5000 is YouTube's cap. Other platforms use their own limits in
     // assertPostIsPublishable(), once we know which accounts are targeted.
     body: z.string().min(1).max(YOUTUBE_BODY_MAX),
     // Commented under the post once it's live, on YouTube and Instagram
@@ -65,6 +65,7 @@ export const postSchema = z
     // YouTube-only fields (ignored for other platforms).
     title: z.string().max(100).optional(),
     youtubePrivacy: z.enum(["public", "unlisted", "private"]).optional(),
+    publishOptions: publishingOptionsSchema.optional(),
     youtubeTags: youtubeTagsSchema,
     youtubeCategoryId: z
       .string()
@@ -74,8 +75,8 @@ export const postSchema = z
     // Offsets are accepted (e.g. +05:30), so callers needn't convert to UTC.
     scheduledAt: z.string().datetime({ offset: true }).nullable().optional(),
     // Items from presign, exactly as returned; assertWorkspaceMedia() checks
-    // the url belongs to this workspace's storage. 20 is LinkedIn's
-    // multi-image cap, the most any platform takes.
+    // the url belongs to this workspace's storage. Up to 20 content
+    // items plus one cover; per-platform preflight enforces the content limits.
     media: z
       .array(
         z.object({
@@ -85,11 +86,14 @@ export const postSchema = z
             .string()
             .regex(MEDIA_KEY, "storageKey must be the one returned by media/presign."),
           title: z.string().max(255).optional(),
+          role: z.enum(["CONTENT", "COVER"]).optional(),
+          altText: z.string().trim().max(1000).optional(),
+          userTags: z.array(instagramUserTagSchema).max(20).optional(),
           // From the presign response; feeds storage usage on the plan.
           sizeBytes: z.number().int().nonnegative().optional(),
         }),
       )
-      .max(20)
+      .max(21)
       .optional(),
     link: linkSchema.nullable().optional(),
     poll: pollSchema.nullable().optional(),
@@ -115,7 +119,7 @@ export type PostInput = z.input<typeof postSchema>;
 /** What the schema produces once parsed. */
 export type PostData = z.output<typeof postSchema>;
 
-type TargetAccount = { id: string; platform: Platform; displayName: string };
+type TargetAccount = { id: string; platform: Platform; displayName: string; externalId?: string };
 
 /**
  * Loads the requested accounts, scoped to the caller's workspace and the post's
@@ -141,7 +145,7 @@ export async function resolveAccounts(
       clientId: data.clientId,
       client: { workspaceId: user.workspaceId },
     },
-    select: { id: true, platform: true, displayName: true },
+    select: { id: true, platform: true, displayName: true, externalId: true },
   });
   if (accounts.length === 0) {
     throw new ApiError(
@@ -172,7 +176,7 @@ export function assertPostIsPublishable(
     (data.overrides ?? []).map((o) => [o.accountId, o.body]),
   );
   for (const a of accounts) {
-    const cap = a.platform === "YOUTUBE" ? YOUTUBE_BODY_MAX : DEFAULT_BODY_MAX;
+    const cap = a.platform === "YOUTUBE" ? YOUTUBE_BODY_MAX : a.platform === "INSTAGRAM" ? 2200 : DEFAULT_BODY_MAX;
     const text = overrides.get(a.id) ?? data.body;
     if (text.length > cap) {
       throw new ApiError(
@@ -185,9 +189,14 @@ export function assertPostIsPublishable(
   // Drafts may be incomplete. They pass through here again when scheduled or
   // published, which is when these become hard requirements.
   if (data.action === "draft") return;
-  if (accounts.some((a) => a.platform === "LINKEDIN")) {
-    const problem = linkedInVideoProblem(data.media ?? []);
-    if (problem) throw new ApiError(400, problem);
+  for (const a of accounts) {
+    const problem = publishingProblem(a.platform, data.media ?? [], data.publishOptions ?? {}, {
+      link: data.link, poll: data.poll, firstComment: data.firstComment, externalId: a.externalId,
+    });
+    if (problem) throw new ApiError(400, `${a.displayName}: ${problem}`);
+    if (a.platform === "YOUTUBE" && (/[<>]/.test(data.title ?? "") || /[<>]/.test(overrides.get(a.id) ?? data.body))) {
+      throw new ApiError(400, `${a.displayName}: YouTube titles and descriptions cannot contain < or >.`);
+    }
   }
   if (accounts.some((a) => a.platform === "YOUTUBE")) {
     if (!data.title?.trim()) {
@@ -225,6 +234,7 @@ export function youtubeColumns(data: PostData) {
     youtubePrivacy: data.youtubePrivacy ?? null,
     youtubeTags: data.youtubeTags ?? [],
     youtubeCategoryId: data.youtubeCategoryId ?? null,
+    publishOptions: data.publishOptions ? (data.publishOptions as Prisma.InputJsonValue) : Prisma.DbNull,
   };
 }
 
@@ -258,11 +268,15 @@ export async function withMeasuredMedia(
 export function mediaCreate(data: PostData) {
   return data.media?.length
     ? {
-        create: data.media.map((m) => ({
+        create: data.media.map((m, sortOrder) => ({
+          sortOrder,
           type: m.type,
           url: m.url,
           storageKey: m.storageKey,
           title: m.title,
+          role: m.role ?? "CONTENT",
+          altText: m.altText,
+          userTags: m.userTags ? (m.userTags as Prisma.InputJsonValue) : Prisma.DbNull,
           sizeBytes: m.sizeBytes,
         })),
       }
@@ -283,6 +297,7 @@ export const apiPostSummarySelect = {
 export const apiPostDetailSelect = {
   ...apiPostSummarySelect,
   firstComment: true,
+  publishOptions: true,
   targets: {
     select: {
       id: true,
@@ -295,6 +310,8 @@ export const apiPostDetailSelect = {
       commentId: true,
       commentError: true,
       commentedAt: true,
+      enhancementError: true,
+      enhancedAt: true,
     },
   },
 } satisfies Prisma.PostSelect;

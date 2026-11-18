@@ -8,7 +8,8 @@ import { ExternalLink, ImageIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { PlatformIcon } from "@/components/post-bits";
 import { COPY } from "@/lib/automations/config";
-import { matchesKeywords, normalize } from "@/lib/automations/match";
+import { ruleMatch, type AutomationSettings } from "@/lib/automations/settings";
+import { normalize } from "@/lib/automations/match";
 import { fillPreview } from "@/components/automations/bits";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,8 @@ export interface PreviewProps {
   askText: string | null;
   /** Words that hold a comment for review instead of answering it. */
   holdWords?: string[];
+  settings?: AutomationSettings;
+  followGate?: boolean;
 }
 
 function hostOf(url: string): string {
@@ -101,7 +104,8 @@ export function AutomationPreview(p: PreviewProps) {
   const [tryText, setTryText] = useState<string | null>(null);
   const [brokenThumb, setBrokenThumb] = useState<string | null>(null);
   const text = tryText ?? sample;
-  const matched = text.trim() !== "" && matchesKeywords(text, p.keywords, p.matchMode, p.fuzzy);
+  const match = ruleMatch(text, { keywords: p.keywords, matchMode: p.matchMode, fuzzy: p.fuzzy, settings: p.settings });
+  const matched = text.trim() !== "" && match.matched;
   // Same check as the engine's hold words (automations/moderation.ts).
   const heldBy = matched
     ? ((p.holdWords ?? []).map(normalize).find((w) => w && normalize(text).includes(w)) ?? null)
@@ -202,14 +206,14 @@ export function AutomationPreview(p: PreviewProps) {
             {p.gateText !== null && (
               <>
                 <Bubble from="you">{fillPreview(p.gateText || COPY.gate, SAMPLE_USER)}</Bubble>
-                <ButtonCard label={COPY.tapLabel} />
+                <ButtonCard label={p.settings?.gateButtonLabel || COPY.tapLabel} />
                 <Step>they tap</Step>
-                <div className="space-y-2 rounded-lg border border-dashed p-2.5">
+                {p.followGate !== false && <div className="space-y-2 rounded-lg border border-dashed p-2.5">
                   <div className="text-muted-foreground text-[0.6875rem]">If they don&apos;t follow you yet:</div>
-                  <Bubble from="you">{COPY.notFollowing.replaceAll("{handle}", `@${handle}`)}</Bubble>
-                  <ButtonCard label={COPY.tapLabel} />
-                </div>
-                <Step>once they follow you</Step>
+                  <Bubble from="you">{(p.settings?.followPrompt || COPY.notFollowing).replaceAll("{handle}", `@${handle}`)}</Bubble>
+                  <ButtonCard label={p.settings?.gateButtonLabel || COPY.tapLabel} />
+                </div>}
+                {p.followGate !== false && <Step>once they follow you</Step>}
               </>
             )}
             {p.collect && (
@@ -226,6 +230,7 @@ export function AutomationPreview(p: PreviewProps) {
         )}
       </AnimatePresence>
 
+      {!matched && text.trim() && <p role="status" className="text-muted-foreground text-xs">{match.reason}</p>}
       <div className="space-y-1.5">
         <div className="label-caps flex items-center justify-between">
           <label htmlFor="auto-try">Try {isComment ? "a comment" : "a message"}</label>

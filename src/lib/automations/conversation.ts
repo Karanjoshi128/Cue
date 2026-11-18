@@ -1,8 +1,11 @@
+import { closeContactAutomations } from "./handoff";
 import type { AutomationRule, AutomationRun, RunStage } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ensureFreshAccessToken } from "@/lib/tokens";
 import { featureAvailableAnywhere } from "@/lib/plans";
-import { findEmail, findPhone, matchesKeywords } from "./match";
+import { automationSettings, campaignActive, compareRules, ruleMatch } from "./settings";
+import { isPublishingPaused } from "@/lib/platform-settings";
+import { findEmail, findPhone, normalize } from "./match";
 import { getUserProfile, sendMessage, type OutgoingMessage } from "./instagram-api";
 import {
   accountSelect,
@@ -70,7 +73,7 @@ async function say(
 
 /** Sends the link and closes the conversation. */
 async function deliver(account: AutomationAccount, run: RunWithRule, token: string) {
-  if (!(await say(account, run, token, deliveryMessage(run.rule, run.commenterUsername)))) return;
+  if (!(await say(account, run, token, deliveryMessage(run.rule, run.commenterUsername, run.id)))) return;
   await prisma.automationRun.update({
     where: { id: run.id },
     data: { stage: "DONE", deliveredAt: new Date(), followUpAt: null, lastError: null },
@@ -105,7 +108,7 @@ async function onTap(account: AutomationAccount, run: RunWithRule, senderId: str
 
   if (run.stage === "DONE") {
     // Tapped again after getting it: send it again, it's harmless.
-    if (run.deliveredAt) await say(account, run, token, deliveryMessage(run.rule, run.commenterUsername));
+    if (run.deliveredAt) await say(account, run, token, deliveryMessage(run.rule, run.commenterUsername, run.id));
     return;
   }
   if (run.stage === "WAIT_ANSWER") {
@@ -130,8 +133,8 @@ async function onTap(account: AutomationAccount, run: RunWithRule, senderId: str
       console.error("[automations] follow check failed:", asApiError(err).message);
     }
     if (follows === false) {
-      const text = fill(COPY.notFollowing, run.commenterUsername).replace("{handle}", account.displayName);
-      const tap = { label: COPY.tapLabel, payload: tapPayload(run.id) };
+      const text = fill(automationSettings(run.rule.settings).followPrompt || COPY.notFollowing, run.commenterUsername).replace("{handle}", account.displayName);
+      const tap = { label: automationSettings(run.rule.settings).gateButtonLabel || COPY.tapLabel, payload: tapPayload(run.id) };
       if (await say(account, run, token, { text, tap })) await waitFor(run, "WAIT_FOLLOW");
       return;
     }
@@ -157,7 +160,7 @@ async function onAnswer(account: AutomationAccount, run: RunWithRule, text: stri
   run = { ...run, lastUserAt: new Date() };
   const token = await ensureFreshAccessToken(account);
   if (!value) {
-    if (await say(account, run, token, { text: COPY.invalid[field] })) await waitFor(run, "WAIT_ANSWER");
+    if (await say(account, run, token, { text: automationSettings(run.rule.settings).invalidAnswerText || COPY.invalid[field] })) await waitFor(run, "WAIT_ANSWER");
     return;
   }
   await recordLead({
@@ -167,12 +170,14 @@ async function onAnswer(account: AutomationAccount, run: RunWithRule, text: stri
     username: run.commenterUsername,
     source: run.trigger,
     ruleName: run.rule.name,
+    tags: automationSettings(run.rule.settings).leadTags,
     ...(field === "EMAIL" ? { email: value } : { phone: value }),
   });
   await prisma.automationRule.update({
     where: { id: run.rule.id },
     data: { leadCount: { increment: 1 } },
   });
+  await prisma.automationRun.update({ where: { id: run.id }, data: { collectedAt: new Date() } });
   await deliver(account, run, token);
 }
 
@@ -184,10 +189,10 @@ async function triggerFromMessage(account: AutomationAccount, ev: IncomingMessag
     orderBy: { createdAt: "asc" },
   });
   const text = ev.text ?? "";
-  const rule = rules.find(
+  const rule = rules.sort(compareRules).find(
     (r) =>
-      r.activeSince <= ev.at &&
-      (r.matchMode === "ANY_COMMENT" || matchesKeywords(text, r.keywords, r.matchMode, r.fuzzy)),
+      r.activeSince <= ev.at && campaignActive(r, ev.at) && campaignActive(r) &&
+      ruleMatch(text, r).matched,
   );
   if (!rule) return;
 
@@ -213,10 +218,18 @@ async function triggerFromMessage(account: AutomationAccount, ev: IncomingMessag
 }
 
 async function handleOne(account: AutomationAccount, ev: IncomingMessage) {
+  // STOP is an exact command, not an accidental keyword inside a longer message.
+  if (["stop", "unsubscribe", "cancel automation"].includes(normalize(ev.text ?? ""))) {
+    await prisma.lead.upsert({ where: { accountId_igsid: { accountId: account.id, igsid: ev.senderId } }, create: { clientId: account.clientId, accountId: account.id, igsid: ev.senderId, source: "DM_KEYWORD", automationPaused: true }, update: { automationPaused: true } });
+    await closeContactAutomations(account.id, ev.senderId);
+    return;
+  }
+  const person = await prisma.lead.findUnique({ where: { accountId_igsid: { accountId: account.id, igsid: ev.senderId } }, select: { automationPaused: true } });
+  if (person?.automationPaused || await isPublishingPaused()) return;
   const tapped = runFromPayload(ev.payload);
   if (tapped) {
     const run = await prisma.automationRun.findUnique({ where: { id: tapped }, include: { rule: true } });
-    if (run && run.rule.accountId === account.id) await onTap(account, run, ev.senderId);
+    if (run && run.rule.accountId === account.id && campaignActive(run.rule)) await onTap(account, run, ev.senderId);
     return;
   }
   // A conversation already waiting on this person takes the message first.
@@ -224,13 +237,13 @@ async function handleOne(account: AutomationAccount, ev: IncomingMessage) {
     where: {
       recipientId: ev.senderId,
       stage: { in: WAITING },
-      rule: { accountId: account.id },
+      rule: { accountId: account.id, enabled: true },
       createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
     },
     orderBy: { updatedAt: "desc" },
     include: { rule: true },
   });
-  if (waiting && ev.text) {
+  if (waiting && campaignActive(waiting.rule) && ev.text) {
     if (waiting.stage === "WAIT_ANSWER") await onAnswer(account, waiting, ev.text, ev.senderId);
     else await onTap(account, waiting, ev.senderId); // a reply counts as the tap
     return;
@@ -244,7 +257,7 @@ export async function handleIncomingMessages(events: IncomingMessage[]): Promise
   if (!(await featureAvailableAnywhere("ig_automations"))) return;
   for (const ev of events) {
     // Echoes are the account's own messages, Cue's included.
-    if (ev.isEcho || ev.senderId === ev.igUserId) continue;
+    if (ev.isEcho || ev.senderId === ev.igUserId || !Number.isFinite(ev.at.getTime()) || Date.now() - ev.at.getTime() > MESSAGE_WINDOW_MS || ev.at.getTime() > Date.now() + 60_000) continue;
     const accounts = await prisma.socialAccount.findMany({
       where: { platform: "INSTAGRAM", externalId: ev.igUserId, automationRules: { some: { enabled: true } } },
       select: accountSelect,
@@ -265,6 +278,7 @@ export async function handleIncomingMessages(events: IncomingMessage[]): Promise
  * Returns how many were sent.
  */
 export async function sendFollowUps(limit = 50): Promise<number> {
+  if (await isPublishingPaused()) return 0;
   const now = new Date();
   const due = await prisma.automationRun.findMany({
     where: {
@@ -281,7 +295,9 @@ export async function sendFollowUps(limit = 50): Promise<number> {
   let sent = 0;
   for (const run of due) {
     const account = run.rule.account;
-    if (automationBlocker(account) || !run.recipientId) continue;
+    if (automationBlocker(account) || !run.recipientId || !campaignActive(run.rule)) continue;
+    const person = await prisma.lead.findUnique({ where: { accountId_igsid: { accountId: account.id, igsid: run.recipientId } }, select: { automationPaused: true } });
+    if (person?.automationPaused) continue;
     // Mark first, so a slow send can't be picked up twice.
     const claim = await prisma.automationRun.updateMany({
       where: { id: run.id, followUpSentAt: null },
@@ -297,7 +313,7 @@ export async function sendFollowUps(limit = 50): Promise<number> {
     const msg: OutgoingMessage =
       run.stage === "WAIT_ANSWER"
         ? { text }
-        : { text, tap: { label: COPY.tapLabel, payload: tapPayload(run.id) } };
+        : { text, tap: { label: automationSettings(run.rule.settings).gateButtonLabel || COPY.tapLabel, payload: tapPayload(run.id) } };
     try {
       await sendMessage(await ensureFreshAccessToken(account), account.externalId, { id: run.recipientId }, msg);
       sent++;

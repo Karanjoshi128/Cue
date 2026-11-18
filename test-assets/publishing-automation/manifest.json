@@ -1,0 +1,41 @@
+{
+  "created": "2026-11-18",
+  "imageSource": "Built-in image_gen; JPEG format conversion only",
+  "voice": "Offline Microsoft Zira Desktop; no paid API calls",
+  "video": {
+    "durationSeconds": 12,
+    "width": 1080,
+    "height": 1350,
+    "fps": 30,
+    "videoCodec": "H.264",
+    "audioCodec": "AAC",
+    "audioHz": 48000
+  },
+  "files": [
+    {
+      "name": "01-coffee.jpg",
+      "bytes": 392870,
+      "sha256": "18b421ad1f8c2f39ed0a4cf07d7e41c9f3df27d7677e49ccd30c9440f3e81787"
+    },
+    {
+      "name": "02-fresh-start.jpg",
+      "bytes": 317618,
+      "sha256": "a04e714d7cf73a6ea838ae8f6b081aca39c81d0f11ce9c2eba69d929dd2b5626"
+    },
+    {
+      "name": "03-small-moments.mp4",
+      "bytes": 3154351,
+      "sha256": "d1db7669437035940baab63f56ed5cd3ab83939bec9703cddb180d2ccb4c8d58"
+    },
+    {
+      "name": "04-cover.jpg",
+      "bytes": 233907,
+      "sha256": "0bfdce961ab89380b80e8c3715b3bad591c253d141e132048657aa5ef23d84a7"
+    },
+    {
+      "name": "05-english.srt",
+      "bytes": 202,
+      "sha256": "af3ff441a1d34fded102f44afd8a1e4761673c2985c61697ccb41428a9c3b304"
+    }
+  ]
+}

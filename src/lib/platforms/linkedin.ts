@@ -1,6 +1,7 @@
 import type { PlatformAdapter, PublishInput, PublishResult } from "./types";
 import { fetchMedia } from "./fetch-media";
 import { LINKEDIN_VIDEO_MIN_BYTES } from "@/lib/linkedin-media";
+import { validateByteRanges, uploadSidecars, type VideoSidecars } from "./linkedin-video";
 
 // YYYYMM LinkedIn-Version header. 202506 is sunset - keep this current.
 export const LINKEDIN_VERSION = "202606";
@@ -18,6 +19,12 @@ const VIDEO_CALL_TIMEOUT_MS = 30_000;
 const VIDEO_PART_TIMEOUT_MS = 60_000;
 const VIDEO_PARTS_AT_ONCE = 4;
 const VIDEO_WAIT = { attempts: 24, intervalMs: 5_000 };
+
+function remaining(deadline: number, maximum: number) {
+  const ms = deadline - Date.now();
+  if (ms <= 0) throw new Error("LinkedIn video upload timed out.");
+  return Math.min(maximum, ms);
+}
 
 function jsonHeaders(accessToken: string) {
   return {
@@ -46,6 +53,7 @@ export const linkedinAdapter: PlatformAdapter = {
     const images = input.media.filter((m) => m.type === "IMAGE");
     const doc = input.media.find((m) => m.type === "DOCUMENT");
     const video = input.media.find((m) => m.type === "VIDEO");
+    const options = input.options?.linkedin;
 
     let content: Record<string, unknown> | undefined;
 
@@ -58,10 +66,12 @@ export const linkedinAdapter: PlatformAdapter = {
         },
       };
     } else if (article) {
+      const thumbnail = input.cover ? await uploadAsset("images", externalId, accessToken, input.cover.url) : undefined;
       // LinkedIn does NOT scrape the URL - we pass title/description ourselves.
       content = {
         article: {
           source: article.source,
+          ...(thumbnail ? { thumbnail } : {}),
           ...(article.title ? { title: article.title } : {}),
           ...(article.description ? { description: article.description } : {}),
         },
@@ -75,7 +85,7 @@ export const linkedinAdapter: PlatformAdapter = {
           .slice(0, 20)
           .map((m) => uploadAsset("images", externalId, accessToken, m.url)),
       );
-      content = { multiImage: { images: urns.map((id) => ({ id })) } };
+      content = { multiImage: { images: urns.map((id, i) => ({ id, ...(images[i].altText ? { altText: images[i].altText } : {}) })) } };
     } else if (images.length === 1) {
       const id = await uploadAsset(
         "images",
@@ -83,32 +93,38 @@ export const linkedinAdapter: PlatformAdapter = {
         accessToken,
         images[0].url,
       );
-      content = { media: { id } };
+      content = { media: { id, ...(images[0].altText ? { altText: images[0].altText } : {}) } };
     } else if (video) {
-      const file = await fetchMedia(video.url, FETCH_VIDEO_TIMEOUT_MS);
-      const id = await uploadLinkedInVideo(externalId, accessToken, {
-        bytes: file.bytes,
-        contentType: file.contentType,
-        url: video.url,
-      });
-      content = { media: { id } };
+      const deadline = Math.min(input.deadline ?? Infinity, Date.now() + 210_000);
+      const file = await fetchMedia(video.url, remaining(deadline, FETCH_VIDEO_TIMEOUT_MS));
+      const id = await uploadLinkedInVideo(
+        externalId,
+        accessToken,
+        { ...file, url: video.url },
+        VIDEO_WAIT,
+        { captions: options?.captionsSrt, coverUrl: input.cover?.url },
+        deadline,
+      );
+      content = { media: { id, ...(options?.videoTitle ? { title: options.videoTitle } : {}) } };
     }
 
     const postBody = {
       author: externalId,
       commentary: body,
-      visibility: "PUBLIC",
+      visibility: options?.visibility ?? "PUBLIC",
       distribution: {
         feedDistribution: "MAIN_FEED",
         targetEntities: [],
         thirdPartyDistributionChannels: [],
       },
       lifecycleState: "PUBLISHED",
-      isReshareDisabledByAuthor: false,
+      isReshareDisabledByAuthor: options?.disableReshares ?? false,
       ...(content ? { content } : {}),
     };
 
+    if (input.deadline && Date.now() >= input.deadline) throw new Error("LinkedIn upload timed out before creating the post.");
     const res = await fetch(`${REST}/posts`, {
+      signal: AbortSignal.timeout(Math.max(1, Math.min(30_000, (input.deadline ?? Date.now() + 30_000) - Date.now()))),
       method: "POST",
       headers: jsonHeaders(accessToken),
       body: JSON.stringify(postBody),
@@ -235,12 +251,16 @@ export async function uploadLinkedInVideo(
   accessToken: string,
   file: { bytes: Uint8Array<ArrayBuffer>; contentType: string | null; url: string },
   wait = VIDEO_WAIT,
+  sidecars: VideoSidecars = {},
+  deadline = Date.now() + 210_000,
 ): Promise<string> {
   assertMp4(file);
   const size = file.bytes.byteLength;
   if (size < LINKEDIN_VIDEO_MIN_BYTES) {
     throw new Error("LinkedIn needs a video of at least 75 KB.");
   }
+
+  if (size > 500 * 1024 * 1024) throw new Error("LinkedIn videos must be at most 500 MB.");
 
   const initRes = await fetch(`${REST}/videos?action=initializeUpload`, {
     method: "POST",
@@ -249,11 +269,11 @@ export async function uploadLinkedInVideo(
       initializeUploadRequest: {
         owner: ownerUrn,
         fileSizeBytes: size,
-        uploadCaptions: false,
-        uploadThumbnail: false,
+        uploadCaptions: !!sidecars.captions,
+        uploadThumbnail: !!sidecars.coverUrl,
       },
     }),
-    signal: AbortSignal.timeout(VIDEO_CALL_TIMEOUT_MS),
+    signal: AbortSignal.timeout(remaining(deadline, VIDEO_CALL_TIMEOUT_MS)),
   });
   if (!initRes.ok) {
     throw new Error(`LinkedIn video init failed (${initRes.status}): ${await initRes.text()}`);
@@ -262,6 +282,8 @@ export async function uploadLinkedInVideo(
     value: {
       video: string;
       uploadToken?: string;
+      captionsUploadUrl?: string;
+      thumbnailUploadUrl?: string;
       uploadInstructions: { uploadUrl: string; firstByte: number; lastByte: number }[];
     };
   };
@@ -269,10 +291,16 @@ export async function uploadLinkedInVideo(
   const parts = init.value.uploadInstructions ?? [];
   if (!urn || !parts.length) throw new Error("LinkedIn video init returned no upload instructions.");
 
+  validateByteRanges(parts, size);
+
   // Each part goes to its own signed URL. LinkedIn's samples send no
   // Authorization header; if a URL turns that down, try once with the token.
   const etags = await inOrder(parts, VIDEO_PARTS_AT_ONCE, async (part, i) => {
     const chunk = file.bytes.subarray(part.firstByte, part.lastByte + 1);
+    const partUrl = new URL(part.uploadUrl);
+    const canSendToken =
+      partUrl.protocol === "https:" &&
+      (partUrl.hostname === "linkedin.com" || partUrl.hostname.endsWith(".linkedin.com"));
     const put = (auth: boolean) =>
       fetch(part.uploadUrl, {
         method: "PUT",
@@ -281,17 +309,20 @@ export async function uploadLinkedInVideo(
           ...(auth ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: chunk,
-        signal: AbortSignal.timeout(VIDEO_PART_TIMEOUT_MS),
+        redirect: "error",
+        signal: AbortSignal.timeout(remaining(deadline, VIDEO_PART_TIMEOUT_MS)),
       });
     let res = await put(false);
-    if (res.status === 401 || res.status === 403) res = await put(true);
+    if (canSendToken && (res.status === 401 || res.status === 403)) res = await put(true);
     if (!res.ok) {
       throw new Error(`LinkedIn video upload failed on part ${i + 1} of ${parts.length} (${res.status})`);
     }
     const etag = res.headers.get("etag");
     if (!etag) throw new Error(`LinkedIn gave no ETag for video part ${i + 1}.`);
-    return etag;
+    return etag.replace(/^"|"$/g, "");
   });
+
+  await uploadSidecars(init.value, sidecars, (limit) => remaining(deadline, limit));
 
   const finRes = await fetch(`${REST}/videos?action=finalizeUpload`, {
     method: "POST",
@@ -299,7 +330,7 @@ export async function uploadLinkedInVideo(
     body: JSON.stringify({
       finalizeUploadRequest: { video: urn, uploadToken: init.value.uploadToken ?? "", uploadedPartIds: etags },
     }),
-    signal: AbortSignal.timeout(VIDEO_CALL_TIMEOUT_MS),
+    signal: AbortSignal.timeout(remaining(deadline, VIDEO_CALL_TIMEOUT_MS)),
   });
   if (!finRes.ok) {
     throw new Error(`LinkedIn video finalize failed (${finRes.status}): ${await finRes.text()}`);
@@ -307,10 +338,14 @@ export async function uploadLinkedInVideo(
 
   let last: VideoStatus | "no status yet" = "no status yet";
   for (let i = 0; i < wait.attempts; i++) {
+    // Leave time to create the post if processing is still asynchronous.
+    const statusBudget = Math.min(VIDEO_CALL_TIMEOUT_MS, deadline - Date.now() - 10_000);
+    if (statusBudget <= 0) break;
     const res = await fetch(`${REST}/videos/${encodeURIComponent(urn)}`, {
       headers: jsonHeaders(accessToken),
-      signal: AbortSignal.timeout(VIDEO_CALL_TIMEOUT_MS),
-    });
+      signal: AbortSignal.timeout(statusBudget),
+    }).catch(() => null);
+    if (!res || res.status === 401 || res.status === 403) break;
     if (res.ok) {
       const v = (await res.json()) as { status?: VideoStatus; processingFailureReason?: string };
       if (v.status === "AVAILABLE") return urn;
@@ -321,8 +356,10 @@ export async function uploadLinkedInVideo(
       }
       if (v.status) last = v.status;
     }
-    await new Promise((r) => setTimeout(r, wait.intervalMs));
+    if (i + 1 < wait.attempts) {
+      await new Promise((r) => setTimeout(r, Math.min(wait.intervalMs, Math.max(0, deadline - Date.now() - 10_000))));
+    }
   }
-  console.warn(`[linkedin] video ${urn} still ${last} after ${(wait.attempts * wait.intervalMs) / 1000} s; posting anyway`);
+  console.warn(`[linkedin] video ${urn} still ${last} after processing check; posting anyway`);
   return urn;
 }

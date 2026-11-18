@@ -1,5 +1,6 @@
 "use client";
 
+import { retryYoutubeThumbnail } from "@/lib/actions";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,8 @@ interface TargetLite {
   platform: Platform;
   status: TargetStatus;
   error: string | null;
+  enhancementError?: string | null;
+  thumbnailPending?: boolean;
   permalink: string | null;
 }
 interface CommentLite {
@@ -538,6 +541,7 @@ export function QueueList({
                     </div>
                   </div>
 
+                  {post.targets.filter((t) => t.thumbnailPending).map((t) => <div key={t.id} className="border-t px-4 py-3 text-xs"><p className="text-muted-foreground">YouTube thumbnail: {t.enhancementError || "waiting for processing and the next publishing check"}</p>{t.enhancementError && <Button size="xs" variant="outline" disabled={pending} className="mt-2" onClick={() => startTransition(async () => { try { unwrap(await retryYoutubeThumbnail(t.id)); toast.success("Thumbnail queued for the next check"); router.refresh(); } catch (e) { toast.error(e instanceof Error ? e.message : "Could not retry."); } })}>Retry thumbnail only</Button>}</div>)}
                   {/* Action strip */}
                   <div className="bg-muted/35 flex flex-wrap items-center gap-1 border-t px-3 py-2">
                     {editable &&

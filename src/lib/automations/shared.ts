@@ -1,3 +1,5 @@
+import { automationSettings } from "./settings";
+import { trackedLink } from "./clicks";
 import { Prisma, type AutomationRule, type RunStage } from "@prisma/client";
 import { featureAvailable, hasFeature } from "@/lib/plans";
 import { COPY, hasAutomationScopes } from "./config";
@@ -100,13 +102,13 @@ type MessageRule = Pick<
   | "gateText"
   | "collect"
   | "askText"
->;
+> & { settings?: unknown };
 
 /** The DM with the link (and its button, when the rule has one). */
-export function deliveryMessage(rule: MessageRule, username: string | null): OutgoingMessage {
+export function deliveryMessage(rule: MessageRule, username: string | null, runId?: string): OutgoingMessage {
   const text = fill(deliveryText(rule), username);
   return rule.dmButtonLabel && rule.dmButtonUrl
-    ? { text, link: { label: rule.dmButtonLabel, url: rule.dmButtonUrl } }
+    ? { text, link: { label: rule.dmButtonLabel, url: runId && automationSettings(rule.settings).trackClicks ? trackedLink(runId, rule.dmButtonUrl) : rule.dmButtonUrl } }
     : { text };
 }
 
@@ -114,7 +116,7 @@ export function deliveryMessage(rule: MessageRule, username: string | null): Out
 export function gateMessage(rule: MessageRule, runId: string, username: string | null): OutgoingMessage {
   return {
     text: fill(rule.gateText || COPY.gate, username),
-    tap: { label: COPY.tapLabel, payload: tapPayload(runId) },
+    tap: { label: automationSettings(rule.settings).gateButtonLabel || COPY.tapLabel, payload: tapPayload(runId) },
   };
 }
 
@@ -127,11 +129,11 @@ export function firstMessage(
   runId: string,
   username: string | null,
 ): { msg: OutgoingMessage; stage: RunStage } {
-  if (rule.followGate) return { msg: gateMessage(rule, runId, username), stage: "WAIT_TAP" };
+  if (rule.followGate || automationSettings(rule.settings).openingDm) return { msg: gateMessage(rule, runId, username), stage: "WAIT_TAP" };
   if (rule.collect) {
     return { msg: { text: fill(rule.askText || COPY.ask[rule.collect], username) }, stage: "WAIT_ANSWER" };
   }
-  return { msg: deliveryMessage(rule, username), stage: "DONE" };
+  return { msg: deliveryMessage(rule, username, runId), stage: "DONE" };
 }
 
 /**

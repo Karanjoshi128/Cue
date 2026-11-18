@@ -28,6 +28,8 @@ import {
   type PickableMedia,
 } from "@/lib/automation-actions";
 import { unwrap } from "@/lib/action-result";
+import { CampaignControls } from "./campaign-controls";
+import { automationSettings, type AutomationSettings } from "@/lib/automations/settings";
 import { COPY, LIMITS, type AutomationPreset } from "@/lib/automations/config";
 import { cleanKeywords } from "@/lib/automations/match";
 import { withScheme } from "@/lib/bio/config";
@@ -36,6 +38,7 @@ import type {
   AutomationPostView,
   AutomationRuleView,
 } from "@/lib/automations/data";
+import { slotDate } from "@/components/calendar/time";
 import { zoned } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +103,10 @@ interface Draft {
   oncePerPerson: boolean;
   holdWords: string[];
   aiModeration: boolean;
+  settings: AutomationSettings;
+  nextPost: boolean;
+  startsAt: string;
+  endsAt: string;
 }
 
 /** A described automation (AutomationPreset) laid over a new draft. */
@@ -138,7 +145,7 @@ const FOLLOW_UP_DELAYS: Record<string, string> = {
   "720": "12 hours",
 };
 
-function draftFrom(rule: AutomationRuleView | null, accountId: string): Draft {
+function draftFrom(rule: AutomationRuleView | null, accountId: string, timeZone: string): Draft {
   if (!rule) {
     return {
       accountId,
@@ -171,6 +178,7 @@ function draftFrom(rule: AutomationRuleView | null, accountId: string): Draft {
       oncePerPerson: true,
       holdWords: [],
       aiModeration: false,
+      settings: {}, nextPost: false, startsAt: "", endsAt: "",
     };
   }
   return {
@@ -212,6 +220,9 @@ function draftFrom(rule: AutomationRuleView | null, accountId: string): Draft {
     oncePerPerson: rule.oncePerPerson,
     holdWords: rule.holdWords,
     aiModeration: rule.aiModeration,
+    settings: automationSettings(rule.settings), nextPost: rule.nextPost,
+    startsAt: rule.startsAt ? format(new Date(rule.startsAt), "yyyy-MM-dd'T'HH:mm", { in: zoned(timeZone) }) : "",
+    endsAt: rule.endsAt ? format(new Date(rule.endsAt), "yyyy-MM-dd'T'HH:mm", { in: zoned(timeZone) }) : "",
   };
 }
 
@@ -484,7 +495,7 @@ export function AutomationEditor({
     const fallback = defaultAccountId ?? (oneClient ? (accounts[0]?.id ?? "") : "");
     if (copyOf) {
       const same = accounts.some((a) => a.id === copyOf.accountId);
-      const copy = draftFrom(copyOf, copyOf.accountId);
+      const copy = draftFrom(copyOf, copyOf.accountId, timeZone);
       return {
         ...copy,
         name: `Copy of ${copyOf.name}`.slice(0, LIMITS.name),
@@ -493,7 +504,7 @@ export function AutomationEditor({
         ...(same ? {} : { accountId: fallback, media: null, postId: null }),
       };
     }
-    return withPreset(draftFrom(rule, fallback), rule ? null : preset);
+    return withPreset(draftFrom(rule, fallback, timeZone), rule ? null : preset);
   });
   const [keywordInput, setKeywordInput] = useState("");
   const [holdInput, setHoldInput] = useState("");
@@ -609,7 +620,7 @@ export function AutomationEditor({
     if (!draft.accountId) {
       return { field: "account", message: "Pick an Instagram account.", el: document.getElementById("auto-account") };
     }
-    if (isComment && draft.scope === "ONE_POST" && !(draft.source === "instagram" ? draft.media : draft.postId)) {
+    if (isComment && draft.scope === "ONE_POST" && !draft.nextPost && !(draft.source === "instagram" ? draft.media : draft.postId)) {
       return { field: "post", message: "Pick the post this automation watches." };
     }
     if (draft.matchMode !== "ANY_COMMENT" && keywords.length === 0) {
@@ -657,10 +668,13 @@ export function AutomationEditor({
       accountId: draft.accountId,
       name,
       enabled: draft.enabled,
+      settings: draft.settings, nextPost: isComment && draft.nextPost,
+      startsAt: draft.startsAt ? campaignDate(draft.startsAt, timeZone) : null,
+      endsAt: draft.endsAt ? campaignDate(draft.endsAt, timeZone) : null,
       trigger: draft.trigger,
       scope: draft.scope,
-      media: isComment && draft.scope === "ONE_POST" && draft.source === "instagram" ? draft.media : null,
-      postId: isComment && draft.scope === "ONE_POST" && draft.source === "cue" ? draft.postId : null,
+      media: isComment && draft.scope === "ONE_POST" && !draft.nextPost && draft.source === "instagram" ? draft.media : null,
+      postId: isComment && draft.scope === "ONE_POST" && !draft.nextPost && draft.source === "cue" ? draft.postId : null,
       matchMode: draft.matchMode,
       keywords,
       fuzzy: draft.fuzzy,
@@ -672,10 +686,10 @@ export function AutomationEditor({
       dmButtonUrl: dmOn && draft.buttonOn ? buttonUrl : null,
       oncePerPerson: draft.oncePerPerson,
       followGate: steps && draft.followGate,
-      gateText: steps && draft.followGate ? draft.gateText : null,
+      gateText: steps && (draft.followGate || draft.settings.openingDm) ? draft.gateText : null,
       collect: steps ? draft.collect : null,
       askText: steps && draft.collect ? draft.askText : null,
-      followUpText: steps && draft.followUpOn && (draft.followGate || draft.collect) ? draft.followUpText : null,
+      followUpText: steps && draft.followUpOn && (draft.followGate || draft.collect || draft.settings.openingDm) ? draft.followUpText : null,
       followUpMinutes: draft.followUpMinutes,
       holdWords,
       aiModeration: aiOn && draft.aiModeration,
@@ -807,14 +821,15 @@ export function AutomationEditor({
                   <Segmented
                     id="auto-scope"
                     label="Which posts"
-                    value={draft.scope}
-                    onChange={(scope) => update({ scope })}
+                    value={draft.nextPost ? "NEXT_POST" : draft.scope}
+                    onChange={(scope) => update({ scope: scope === "NEXT_POST" ? "ONE_POST" : scope, nextPost: scope === "NEXT_POST" })}
                     options={[
                       { key: "ANY_POST", label: "Any post" },
                       { key: "ONE_POST", label: "One post" },
+                      { key: "NEXT_POST", label: "Next post" },
                     ]}
                   />
-                  {draft.scope === "ANY_POST" ? (
+                  {draft.nextPost ? <p className="text-muted-foreground text-xs leading-relaxed">Binds to the first feed post or Reel you publish after enabling this automation (or after its scheduled start). It then stays on that post. Publish from Cue or Instagram.</p> : draft.scope === "ANY_POST" ? (
                     <p className="text-muted-foreground text-xs leading-relaxed">
                       Watches every post on the account. Instagram tells Cue about new
                       comments as they arrive, and Cue also checks the 10 newest posts every
@@ -1247,13 +1262,14 @@ export function AutomationEditor({
               <Step n={isComment ? "05" : "04"} title="Before the link">
                 <div className="space-y-4">
                   <div className="space-y-2">
+                    <Toggle label="Start with an opening DM" hint="Ask them to tap before delivering the link. Their tap opens the 24-hour conversation window." checked={draft.settings.openingDm ?? false} onChange={(openingDm) => update({ settings: { ...draft.settings, openingDm } })} />
                     <Toggle
                       label="Only followers get it"
                       hint="The first DM has a “Send me the link” button. When they tap it, Cue checks they follow you, and asks them to follow first if they don't."
                       checked={draft.followGate}
                       onChange={(followGate) => update({ followGate })}
                     />
-                    {draft.followGate && (
+                    {(draft.followGate || draft.settings.openingDm) && (
                       <Input
                         aria-label="First DM"
                         value={draft.gateText}
@@ -1264,6 +1280,9 @@ export function AutomationEditor({
                     )}
                   </div>
 
+                  {(draft.followGate || draft.settings.openingDm) && <div className="space-y-2"><Label htmlFor="auto-gate-label">Opening button label</Label><Input id="auto-gate-label" maxLength={20} value={draft.settings.gateButtonLabel ?? ""} placeholder={COPY.tapLabel} onChange={(e) => update({ settings: { ...draft.settings, gateButtonLabel: e.target.value } })} /></div>}
+                  {draft.followGate && <div className="space-y-2"><Label htmlFor="auto-follow-prompt">Ask them to follow</Label><Textarea id="auto-follow-prompt" maxLength={LIMITS.dmLength} value={draft.settings.followPrompt ?? ""} placeholder={COPY.notFollowing} onChange={(e) => update({ settings: { ...draft.settings, followPrompt: e.target.value } })} /></div>}
+                  {draft.collect && <div className="space-y-2"><Label htmlFor="auto-invalid-answer">If their answer is invalid</Label><Input id="auto-invalid-answer" maxLength={LIMITS.dmLength} value={draft.settings.invalidAnswerText ?? ""} placeholder={COPY.invalid[draft.collect]} onChange={(e) => update({ settings: { ...draft.settings, invalidAnswerText: e.target.value } })} /></div>}
                   <div className="space-y-2">
                     <div className="text-sm font-medium">Ask for</div>
                     <Segmented
@@ -1293,7 +1312,7 @@ export function AutomationEditor({
                     )}
                   </div>
 
-                  {(draft.followGate || draft.collect) && (
+                  {(draft.followGate || draft.collect || draft.settings.openingDm) && (
                     <div className="space-y-2">
                       <Toggle
                         label="Nudge if they go quiet"
@@ -1369,6 +1388,8 @@ export function AutomationEditor({
               </div>
             </Step>
 
+            <CampaignControls timeZone={timeZone} settings={draft.settings} onChange={(settings) => update({ settings })} startsAt={draft.startsAt} endsAt={draft.endsAt} onDates={(dates) => update(dates)} oncePerPerson={draft.oncePerPerson} />
+
             <div className="bg-popover sticky bottom-0 -mx-5 flex flex-wrap items-center justify-between gap-3 border-t px-5 pt-4 pb-5 sm:-mx-7 sm:px-7">
               <label className="flex items-center gap-2.5 text-sm font-medium">
                 <Switch
@@ -1421,14 +1442,16 @@ export function AutomationEditor({
                 accountName={account?.displayName ?? ""}
                 trigger={draft.trigger}
                 postLabel={previewPost}
-                thumbUrl={isComment && draft.scope === "ONE_POST" && draft.source === "instagram" ? (draft.media?.thumbUrl ?? null) : null}
+                thumbUrl={isComment && draft.scope === "ONE_POST" && !draft.nextPost && draft.source === "instagram" ? (draft.media?.thumbUrl ?? null) : null}
                 keywords={keywordInput.trim() ? cleanKeywords([...draft.keywords, keywordInput]) : draft.keywords}
                 matchMode={draft.matchMode}
                 fuzzy={draft.fuzzy}
                 reply={isComment && draft.replyOn ? (draft.replies.find((r) => r.trim()) ?? null) : null}
                 dmText={(draft.dmOn || !isComment) && draft.dmText.trim() ? draft.dmText : null}
                 button={(draft.dmOn || !isComment) && draft.buttonOn ? { label: draft.buttonLabel, url: draft.buttonUrl } : null}
-                gateText={draft.followGate ? draft.gateText : null}
+                gateText={draft.followGate || draft.settings.openingDm ? draft.gateText : null}
+                followGate={draft.followGate}
+                settings={draft.settings}
                 collect={draft.collect}
                 askText={draft.collect ? draft.askText : null}
                 holdWords={holdInput.trim() ? cleanKeywords([...draft.holdWords, holdInput]) : draft.holdWords}
@@ -1466,4 +1489,10 @@ export function MediaThumb({ url, className }: { url: string | null; className?:
       )}
     </span>
   );
+}
+
+function campaignDate(value: string, timeZone: string): string {
+  const [day, time] = value.split("T");
+  const [h, m] = time.split(":").map(Number);
+  return slotDate(day, h * 60 + m, timeZone).toISOString();
 }

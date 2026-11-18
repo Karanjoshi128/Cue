@@ -16,6 +16,9 @@ import {
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Platform } from "@prisma/client";
+import { PublishingControls, MediaDetails } from "@/components/publishing-controls";
+import { publishingProblem, type PublishingOptions, type InstagramUserTag } from "@/lib/publishing-options";
+import { linkedInVideoProblem } from "@/lib/linkedin-media";
 import { savePost, updatePost } from "@/lib/actions";
 import { unwrap } from "@/lib/action-result";
 import { Button } from "@/components/ui/button";
@@ -39,7 +42,6 @@ import { ExpandablePreview } from "@/components/post-preview";
 import { Countdown } from "@/components/fx/countdown";
 import { cn } from "@/lib/utils";
 import { canOptimizeMedia } from "@/lib/media-hosts";
-import { linkedInVideoProblem } from "@/lib/linkedin-media";
 import {
   DEFAULT_YOUTUBE_CATEGORY,
   YOUTUBE_CATEGORIES,
@@ -68,6 +70,7 @@ import {
 
 interface Account {
   id: string;
+  externalId?: string;
   platform: Platform;
   displayName: string;
 }
@@ -82,6 +85,9 @@ type MediaItem = {
   url: string;
   storageKey: string;
   title?: string;
+  role?: "CONTENT" | "COVER";
+  altText?: string;
+  userTags?: InstagramUserTag[];
   /** From the presign response; counts toward the plan's storage. */
   sizeBytes?: number;
 };
@@ -100,6 +106,7 @@ export interface ComposerInitial {
   youtubePrivacy: YtPrivacy | null;
   youtubeTags: string[];
   youtubeCategoryId: string | null;
+  publishOptions?: PublishingOptions;
   accountIds: string[];
   scheduledAt: string; // datetime-local string, or ""
   media: MediaItem[];
@@ -275,7 +282,7 @@ export function Composer({
 
   const initialDoc = initial?.media.find((m) => m.type === "DOCUMENT") ?? null;
   const initialMedia =
-    initial?.media.filter((m) => m.type !== "DOCUMENT") ?? [];
+    initial?.media.filter((m) => m.type !== "DOCUMENT" && m.role !== "COVER") ?? [];
   const initialType: ContentType = initial?.poll
     ? "poll"
     : initial?.link
@@ -306,6 +313,8 @@ export function Composer({
     initial?.scheduledAt ?? prefillDate ?? "",
   );
   const [media, setMedia] = useState<MediaItem[]>(initialMedia);
+  const [cover, setCover] = useState<MediaItem | null>(initial?.media.find((m) => m.role === "COVER") ?? null);
+  const [publishOptions, setPublishOptions] = useState<PublishingOptions>(initial?.publishOptions ?? {});
   const [doc, setDoc] = useState<MediaItem | null>(initialDoc);
   const [link, setLink] = useState<LinkData>({
     url: initial?.link?.url ?? "",
@@ -364,7 +373,6 @@ export function Composer({
   // Only YouTube and Instagram take a first comment.
   const commentable = contentType === "media" && (igSelected || ytSelected);
   const hasVideo = media.some((m) => m.type === "VIDEO");
-  // LinkedIn takes one MP4 video on its own (same check as the server).
   const liVideoProblem =
     contentType === "media" && selectedPlatforms.has("LINKEDIN") ? linkedInVideoProblem(media) : null;
   // Same cleaning + budget rules the server enforces (src/lib/youtube-tags.ts),
@@ -402,7 +410,7 @@ export function Composer({
     );
   }
 
-  async function uploadFiles(files: File[], as: "media" | "doc") {
+  async function uploadFiles(files: File[], as: "media" | "doc" | "cover") {
     if (files.length === 0) return;
     setUploading(true);
     const t = toast.loading(
@@ -442,6 +450,7 @@ export function Composer({
           );
         }
 
+        if (as === "cover") { setCover({ ...item, role: "COVER" }); break; }
         if (as === "doc") {
           setDoc(item);
           break; // one document per post
@@ -496,7 +505,6 @@ export function Composer({
       if (igSelected && media.length === 0 && action !== "draft") {
         return toast.error("Instagram posts need at least one image or video");
       }
-      if (liVideoProblem && action !== "draft") return toast.error(liVideoProblem);
       // Checked for drafts too: the server rejects bad tags whatever the action.
       if (ytSelected && tagsProblem) return toast.error(tagsProblem);
       if (ytSelected && action !== "draft") {
@@ -534,16 +542,21 @@ export function Composer({
       // Undefined when YouTube isn't targeted, which clears them on edit.
       youtubeTags: ytSelected ? tags : undefined,
       youtubeCategoryId: ytSelected ? youtubeCategoryId : undefined,
+      publishOptions: {
+        instagram: igSelected ? publishOptions.instagram : undefined,
+        youtube: ytSelected ? publishOptions.youtube : undefined,
+        linkedin: selectedPlatforms.has("LINKEDIN") ? publishOptions.linkedin : undefined,
+      },
       accountIds: selected,
       action,
       scheduledAt:
         action === "schedule" ? new Date(scheduledAt).toISOString() : null,
       media:
         contentType === "media"
-          ? media
+          ? [...media, ...(cover ? [cover] : [])]
           : contentType === "document" && doc
             ? [doc]
-            : [],
+            : contentType === "link" && cover ? [cover] : [],
       link:
         contentType === "link"
           ? {
@@ -568,6 +581,12 @@ export function Composer({
           : undefined,
     };
 
+    if (action !== "draft") {
+      for (const account of selectedAccounts) {
+        const problem = publishingProblem(account.platform, payload.media, payload.publishOptions, { link: payload.link, poll: payload.poll, firstComment: payload.firstComment, externalId: account.externalId });
+        if (problem) return toast.error(`${account.displayName}: ${problem}`);
+      }
+    }
     const t = toast.loading(
       action === "now"
         ? "Publishing…"
@@ -992,6 +1011,20 @@ export function Composer({
               </div>
             )}
 
+            {contentType === "media" && media.length > 0 && <div className="mt-3 space-y-2">
+              {media.map((item, index) => <div key={item.storageKey} className="space-y-2">
+                {media.length > 1 && <div className="flex items-center gap-2 text-xs"><span className="mr-auto">Item {index + 1}: {item.title ?? item.type.toLowerCase()}</span>{[-1, 1].map((direction) => <Button key={direction} type="button" variant="ghost" size="sm" disabled={index + direction < 0 || index + direction >= media.length} aria-label={`Move item ${index + 1} ${direction < 0 ? "earlier" : "later"}`} onClick={() => setMedia((items) => { const next = [...items]; [next[index], next[index + direction]] = [next[index + direction], next[index]]; return next; })}>{direction < 0 ? "Move earlier" : "Move later"}</Button>)}</div>}
+                {(item.type === "IMAGE" || igSelected) && <MediaDetails allowAlt={item.type === "IMAGE" && (publishOptions.instagram?.placement !== "STORY" || selectedPlatforms.has("LINKEDIN"))} coordinates={item.type === "IMAGE" || publishOptions.instagram?.placement === "STORY"} index={index} altText={item.altText} userTags={item.userTags} instagram={igSelected} onChange={(changes) => setMedia((items) => items.map((v, i) => i === index ? { ...v, ...changes } : v))} />}
+              </div>)}
+            </div>}
+            {selectedPlatforms.size > 0 && <div className="mt-4"><PublishingControls hasLinkedInPage={client?.accounts.some((a) => selected.includes(a.id) && a.externalId?.startsWith("urn:li:organization:")) ?? false} platforms={selectedPlatforms} options={publishOptions} onChange={setPublishOptions} hasVideo={hasVideo && contentType === "media"} hasLink={contentType === "link"} /></div>}
+            {((contentType === "media" && hasVideo) || contentType === "link") && <div className="mt-4 space-y-2 rounded-xl border p-4">
+              <p className="text-sm font-medium">{contentType === "link" ? "Link preview image" : "Video cover / thumbnail"}</p>
+              <p className="text-muted-foreground text-xs">{igSelected ? "JPEG" : "JPEG or PNG"}, up to 2 MB. Sent separately from the post&apos;s media. YouTube applies it after upload; channel eligibility and video processing still apply.</p>
+              {cover && <div className="flex items-center gap-3"><Image src={cover.url} alt="Selected cover" width={112} height={64} unoptimized className="h-16 w-28 rounded-lg object-cover" /><Button type="button" variant="ghost" size="sm" onClick={() => setCover(null)}>Remove cover</Button></div>}
+              <Input type="file" accept={igSelected ? "image/jpeg" : "image/jpeg,image/png"} aria-label="Upload cover image" disabled={uploading} onChange={(e) => { const file = e.target.files?.[0]; if (file) { if (file.size > 2 * 1024 * 1024) toast.error("Keep the cover at or below 2 MB."); else void uploadFiles([file], "cover"); } e.target.value = ""; }} />
+            </div>}
+
             {/* --- First comment (YouTube + Instagram) --- */}
             {commentable && (
               <div className="mt-4">
@@ -1010,6 +1043,7 @@ export function Composer({
                   className="min-h-20 resize-none"
                 />
                 <p className="text-muted-foreground mt-1.5 text-xs">
+                  {(publishOptions.instagram?.placement === "STORY" || publishOptions.youtube?.madeForKids) && "Remove the first comment before publishing Stories or videos made for kids. "}
                   YouTube and Instagram only. YouTube doesn&apos;t let apps pin
                   it.
                 </p>

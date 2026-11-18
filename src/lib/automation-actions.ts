@@ -1,5 +1,10 @@
 "use server";
 
+import { closeContactAutomations } from "@/lib/automations/handoff";
+import { recoverableComments, queueRecoveredComments } from "@/lib/automations/recovery";
+import { Prisma } from "@prisma/client";
+import { automationSettingsSchema } from "@/lib/automations/settings";
+import { trackedLink } from "@/lib/automations/clicks";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -67,6 +72,10 @@ const ruleSchema = z
     accountId: z.string().min(1, "Pick an Instagram account.").max(100),
     name: z.string().trim().min(1, "Give the automation a name.").max(LIMITS.name),
     enabled: z.boolean(),
+    settings: automationSettingsSchema.optional(),
+    nextPost: z.boolean().optional(),
+    startsAt: z.string().datetime({ offset: true }).nullish(),
+    endsAt: z.string().datetime({ offset: true }).nullish(),
     trigger: z.enum(["COMMENT", "STORY_REPLY", "DM_KEYWORD"]),
     scope: z.enum(["ANY_POST", "ONE_POST"]),
     media: z
@@ -124,10 +133,10 @@ const ruleSchema = z
     if (v.trigger !== "COMMENT" && !v.dmText) {
       issue("Story-reply and DM automations answer with a DM, so add one.");
     }
-    if (!v.dmText && (v.followGate || v.collect)) {
+    if (!v.dmText && (v.followGate || v.collect || v.settings?.openingDm)) {
       issue("The follow gate and questions lead to a DM, so add one.");
     }
-    if (v.followUpText && !v.followGate && !v.collect) {
+    if (v.followUpText && !v.followGate && !v.collect && !v.settings?.openingDm) {
       issue("A follow-up only goes to someone part-way through: turn on the follow gate or a question.");
     }
     if (!v.dmText && (v.dmButtonLabel || v.dmButtonUrl)) {
@@ -139,12 +148,20 @@ const ruleSchema = z
     if (v.dmButtonUrl) {
       let ok = false;
       try {
-        ok = new URL(v.dmButtonUrl).protocol === "https:";
+        const url = new URL(v.dmButtonUrl);
+        ok = url.protocol === "https:" && !url.username && !url.password;
       } catch {}
       if (!ok) issue("The button link must be a full https:// address.");
     }
-    if (v.trigger === "COMMENT" && v.scope === "ONE_POST" && !v.media && !v.postId) {
+    if (v.trigger === "COMMENT" && v.scope === "ONE_POST" && !v.media && !v.postId && !v.nextPost) {
       issue("Pick the post this automation watches.");
+    }
+    if (v.startsAt && v.endsAt && new Date(v.startsAt) >= new Date(v.endsAt)) issue("End the campaign after its start time.");
+    if (v.nextPost && v.trigger !== "COMMENT") issue("Next post is only available for comment triggers.");
+    if (v.settings?.trackClicks && !v.dmButtonUrl) issue("Link tracking needs a DM link button.");
+    if (v.settings?.trackClicks && v.dmButtonUrl) {
+      if (!(process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL) || !process.env.TOKEN_ENC_KEY) issue("Link tracking is not configured on this server.");
+      else if (trackedLink("c".repeat(30), v.dmButtonUrl).length > 2000) issue("Shorten the destination URL to track this link (up to 1,200 characters recommended).");
     }
   });
 
@@ -166,7 +183,7 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
       mediaThumbUrl: null as string | null,
       postId: null as string | null,
     };
-    const onePost = data.trigger === "COMMENT" && data.scope === "ONE_POST";
+    const onePost = data.trigger === "COMMENT" && data.scope === "ONE_POST" && !data.nextPost;
     if (onePost && data.postId) {
       const post = await prisma.post.findFirst({
         where: { id: data.postId, clientId: account.clientId },
@@ -207,7 +224,11 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
       enabled: data.enabled,
       trigger: data.trigger,
       // Story replies and DMs aren't on a post.
-      scope: data.trigger === "COMMENT" ? data.scope : ("ANY_POST" as const),
+      scope: data.trigger === "COMMENT" ? (data.nextPost ? "ONE_POST" as const : data.scope) : ("ANY_POST" as const),
+      nextPost: data.trigger === "COMMENT" && !!data.nextPost,
+      startsAt: data.startsAt ? new Date(data.startsAt) : null,
+      endsAt: data.endsAt ? new Date(data.endsAt) : null,
+      settings: (data.settings ?? {}) as Prisma.InputJsonValue,
       ...target,
       matchMode: data.matchMode,
       fuzzy: data.fuzzy,
@@ -221,7 +242,7 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
       dmButtonUrl: data.dmText ? data.dmButtonUrl : null,
       oncePerPerson: data.oncePerPerson,
       followGate: data.followGate,
-      gateText: data.followGate ? data.gateText : null,
+      gateText: data.followGate || data.settings?.openingDm ? data.gateText : null,
       collect: data.collect,
       askText: data.collect ? data.askText : null,
       followUpText: data.followUpText,
@@ -234,7 +255,7 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
     if (ruleId) {
       const existing = await prisma.automationRule.findFirst({
         where: { id: ruleId, client: { workspaceId: user.workspaceId } },
-        select: { id: true, enabled: true, accountId: true },
+        select: { id: true, enabled: true, accountId: true, nextPost: true, mediaId: true, mediaPermalink: true, mediaCaption: true, mediaThumbUrl: true },
       });
       if (!existing) throw new ApiError(404, "Automation not found.");
       // Moving a rule would take its counts and history to another client.
@@ -245,6 +266,7 @@ export async function saveAutomation(id: string | null, input: AutomationInput) 
         where: { id: existing.id },
         data: {
           ...fields,
+          ...(existing.nextPost && data.nextPost && existing.mediaId ? { mediaId: existing.mediaId, mediaPermalink: existing.mediaPermalink, mediaCaption: existing.mediaCaption, mediaThumbUrl: existing.mediaThumbUrl } : {}),
           // Switched back on: start from now, not from before it was off.
           ...(!existing.enabled && data.enabled ? { activeSince: new Date() } : {}),
         },
@@ -404,5 +426,46 @@ export async function draftAutomationFromText(text: string, accountId: string) {
     const account = await ownedAccount(user.workspaceId, accountId);
     const client = await prisma.client.findUnique({ where: { id: account.clientId }, select: { name: true } });
     return presetFromIdea(await draftAutomation(description, client?.name ?? account.displayName));
+  });
+}
+
+/** Lead notes and human handoff use the same workspace boundary as every other action. */
+export async function updateAutomationLead(id: string, input: { tags: string[]; notes: string; automationPaused: boolean }) {
+  return toResult(async () => {
+    const user = await automationUser();
+    const data = z.object({ tags: z.array(z.string().trim().min(1).max(40)).max(20), notes: z.string().trim().max(2000), automationPaused: z.boolean() }).parse(input);
+    const lead = await prisma.lead.findFirst({ where: { id: idSchema.parse(id), client: { workspaceId: user.workspaceId } }, select: { id: true, accountId: true, igsid: true } });
+    if (!lead) throw new ApiError(404, "Lead not found.");
+    await prisma.lead.update({ where: { id: lead.id }, data: { ...data, tags: [...new Set(data.tags)], notes: data.notes || null } });
+    if (data.automationPaused) await closeContactAutomations(lead.accountId, lead.igsid);
+    revalidatePath("/automations");
+  });
+}
+
+/** Retry only the unsent pieces of a failed run; processRun enforces window and pause checks. */
+export async function retryAutomationRun(id: string) {
+  return toResult(async () => {
+    const user = await automationUser();
+    const run = await prisma.automationRun.findFirst({ where: { id: idSchema.parse(id), status: { in: ["FAILED", "PARTIAL"] }, rule: { client: { workspaceId: user.workspaceId } } }, select: { id: true } });
+    if (!run) throw new ApiError(404, "Failed activity not found.");
+    const claim = await prisma.automationRun.updateMany({ where: { id: run.id, status: { in: ["FAILED", "PARTIAL"] } }, data: { status: "QUEUED", attempts: 0, nextAttemptAt: null, dmError: null, replyError: null, lastError: null } });
+    if (claim.count) await processRun(run.id);
+    revalidatePath("/automations");
+  });
+}
+
+export async function previewCommentRecovery(ruleId: string, mediaId: string) {
+  return toResult(async () => {
+    const user = await automationUser();
+    const result = await recoverableComments(user.workspaceId, idSchema.parse(ruleId), idSchema.parse(mediaId));
+    return result.comments.map((c) => ({ id: c.id, text: c.text, username: c.fromUsername, at: c.timestamp.toISOString() }));
+  });
+}
+export async function confirmCommentRecovery(ruleId: string, mediaId: string, commentIds: string[]) {
+  return toResult(async () => {
+    const user = await automationUser();
+    const result = await queueRecoveredComments(user.workspaceId, idSchema.parse(ruleId), idSchema.parse(mediaId), z.array(idSchema).min(1).max(50).parse(commentIds));
+    revalidatePath("/automations");
+    return result;
   });
 }

@@ -157,7 +157,7 @@ export async function getPosts(filter?: {
     orderBy: { createdAt: "desc" },
     include: {
       client: true,
-      media: true,
+      media: { orderBy: { sortOrder: "asc" } },
       targets: { include: { account: true } },
       comments: {
         include: { author: true },
@@ -173,7 +173,7 @@ export async function getPost(id: string) {
     where: { id, client: { workspaceId } },
     include: {
       client: true,
-      media: true,
+      media: { orderBy: { sortOrder: "asc" } },
       targets: { include: { account: true } },
     },
   });
@@ -345,7 +345,8 @@ const calendarPostSelect = {
   },
   media: {
     select: { type: true, url: true, title: true },
-    orderBy: { createdAt: "asc" },
+    where: { role: "CONTENT" },
+    orderBy: { sortOrder: "asc" },
   },
 } satisfies Prisma.PostSelect;
 

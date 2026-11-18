@@ -1,3 +1,4 @@
+import { publishingOptions, instagramUserTagSchema } from "@/lib/publishing-options";
 import { format } from "date-fns";
 import { getClients, getPost } from "@/lib/data";
 import { getScopeClientId } from "@/lib/client-scope";
@@ -26,6 +27,7 @@ export default async function ComposerPage({
     accounts: c.accounts.map((a) => ({
       id: a.id,
       platform: a.platform,
+      externalId: a.externalId,
       displayName: a.displayName,
     })),
   }));
@@ -45,6 +47,7 @@ export default async function ComposerPage({
           (post.youtubePrivacy as ComposerInitial["youtubePrivacy"]) ?? null,
         youtubeTags: post.youtubeTags,
         youtubeCategoryId: post.youtubeCategoryId,
+        publishOptions: publishingOptions(post.publishOptions),
         accountIds: post.targets.map((t) => t.accountId),
         // The picker shows wall-clock time, so format in the viewer's zone:
         // in the server's (UTC) zone, saving an untouched edit would shift
@@ -59,6 +62,9 @@ export default async function ComposerPage({
           url: m.url,
           storageKey: m.storageKey,
           title: m.title ?? undefined,
+          role: m.role === "COVER" ? "COVER" : "CONTENT",
+          altText: m.altText ?? undefined,
+          userTags: m.userTags ? instagramUserTagSchema.array().parse(m.userTags) : undefined,
           sizeBytes: m.sizeBytes ?? undefined,
         })),
         overrides: Object.fromEntries(

@@ -48,6 +48,11 @@ export const youtubeAdapter: PlatformAdapter = {
       .slice(0, 100);
     const description = body.slice(0, 5000);
     const privacyStatus = privacy ?? "public";
+    const options = input.options?.youtube;
+    const uploadUrlParams = new URL(UPLOAD_URL);
+    if (options?.notifySubscribers !== undefined) uploadUrlParams.searchParams.set("notifySubscribers", String(options.notifySubscribers));
+    if (options?.recordingDate) uploadUrlParams.searchParams.set("part", `${uploadUrlParams.searchParams.get("part")},recordingDetails`);
+    if (options?.localizations) uploadUrlParams.searchParams.set("part", `${uploadUrlParams.searchParams.get("part")},localizations`);
 
     // Pull the video bytes from its public URL (Cue's R2 bucket or the
     // workspace's own). Buffered in full - fine for the
@@ -57,7 +62,7 @@ export const youtubeAdapter: PlatformAdapter = {
     const contentType = file.contentType || "video/*";
 
     // 1. Open a resumable session - the upload URL comes back in `Location`.
-    const initRes = await fetch(UPLOAD_URL, {
+    const initRes = await fetch(uploadUrlParams.toString(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -74,8 +79,17 @@ export const youtubeAdapter: PlatformAdapter = {
           categoryId: categoryId ?? DEFAULT_YOUTUBE_CATEGORY,
           // Omitted entirely when empty rather than sent as [].
           ...(tags?.length ? { tags } : {}),
+          ...(options?.defaultLanguage ? { defaultLanguage: options.defaultLanguage } : {}),
         },
-        status: { privacyStatus, selfDeclaredMadeForKids: false },
+        status: {
+          privacyStatus, selfDeclaredMadeForKids: options?.madeForKids ?? false,
+          ...(options?.containsSyntheticMedia !== undefined ? { containsSyntheticMedia: options.containsSyntheticMedia } : {}),
+          ...(options?.publicStatsViewable !== undefined ? { publicStatsViewable: options.publicStatsViewable } : {}),
+          ...(options?.embeddable !== undefined ? { embeddable: options.embeddable } : {}),
+          ...(options?.license ? { license: options.license } : {}),
+        },
+        ...(options?.recordingDate ? { recordingDetails: { recordingDate: options.recordingDate } } : {}),
+        ...(options?.localizations ? { localizations: options.localizations } : {}),
       }),
       signal: AbortSignal.timeout(INIT_TIMEOUT_MS),
     });

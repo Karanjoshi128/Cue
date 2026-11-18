@@ -8,7 +8,7 @@ import { ensureFreshAccessToken } from "@/lib/tokens";
 import { isPublishingPaused } from "@/lib/platform-settings";
 import { featureAvailableAnywhere } from "@/lib/plans";
 import { PRIVATE_REPLY_WINDOW_MS } from "./config";
-import { matchesKeywords } from "./match";
+import { automationSettings, campaignActive, compareRules, ruleMatch } from "./settings";
 import {
   listComments,
   listRecentMedia,
@@ -106,6 +106,19 @@ async function resolveScheduledPostRules(accountId: string) {
   }
 }
 
+/** Bind by publication time, not by which post happens to receive a comment first. */
+async function resolveNextPostRules(account: AutomationAccount) {
+  const pending = await prisma.automationRule.findMany({ where: { accountId: account.id, enabled: true, nextPost: true, mediaId: null }, select: { id: true, activeSince: true, startsAt: true, endsAt: true } });
+  if (!pending.length) return;
+  const media = await listRecentMedia(await ensureFreshAccessToken(account), 60);
+  for (const rule of pending) {
+    const since = Math.max(rule.activeSince.getTime(), rule.startsAt?.getTime() ?? 0);
+    const next = media.filter((m) => m.timestamp && m.media_product_type !== "STORY" && new Date(m.timestamp).getTime() >= since && (!rule.endsAt || new Date(m.timestamp) < rule.endsAt)).sort((a, b) => new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime())[0];
+    if (!next) continue;
+    await prisma.automationRule.updateMany({ where: { id: rule.id, nextPost: true, mediaId: null }, data: { mediaId: next.id, mediaPermalink: next.permalink, mediaCaption: next.caption?.slice(0, 300), mediaThumbUrl: next.thumbnail_url ?? (next.media_type === "VIDEO" ? null : next.media_url) } });
+  }
+}
+
 /**
  * Creates the run for a matched comment or message, deciding first whether
  * it's a repeat (once per person) or should be held. Returns the run id when
@@ -120,6 +133,7 @@ export async function createRun(p: {
     oncePerPerson: boolean;
     holdWords: string[];
     aiModeration: boolean;
+    settings?: unknown;
   };
   eventId: string;
   mediaId: string | null;
@@ -131,39 +145,55 @@ export async function createRun(p: {
   recipientId?: string | null;
 }): Promise<string | null> {
   const { rule } = p;
-  const repeat =
-    rule.oncePerPerson &&
+  const settings = automationSettings(rule.settings);
+  const lead = await prisma.lead.findUnique({ where: { accountId_igsid: { accountId: p.account.id, igsid: p.commenterId } }, select: { automationPaused: true } });
+  let paused = !!lead?.automationPaused;
+  let repeat =
+    (rule.oncePerPerson || !!settings.cooldownHours) &&
     (await prisma.automationRun.count({
       where: {
         ruleId: rule.id,
         commenterId: p.commenterId,
         status: { in: ["QUEUED", "SENT", "PARTIAL"] },
+        ...(!rule.oncePerPerson && settings.cooldownHours ? { createdAt: { gte: new Date(Date.now() - settings.cooldownHours * 3_600_000) } } : {}),
       },
     })) > 0;
   const aiAllowed = aiEnabled() && !p.account.client.workspace.disabledFeatures.includes("ai");
-  const held = repeat ? null : await holdReason(rule, p.text, aiAllowed);
-  const status: AutomationRunStatus = repeat ? "SKIPPED" : held ? "HELD" : "QUEUED";
+  let held = repeat || paused ? null : await holdReason(rule, p.text, aiAllowed);
+  let status: AutomationRunStatus = repeat || paused ? "SKIPPED" : held ? "HELD" : "QUEUED";
 
   let runId: string;
   try {
-    const run = await prisma.automationRun.create({
-      data: {
-        ruleId: rule.id,
-        commentId: p.eventId,
-        trigger: rule.trigger,
-        mediaId: p.mediaId,
-        commenterId: p.commenterId,
-        commenterUsername: p.username,
-        commentText: p.text.slice(0, 2200),
-        commentedAt: p.at,
-        source: p.source,
-        status,
-        heldReason: held,
-        // A story reply or DM opens Instagram's 24-hour window right away.
-        recipientId: p.recipientId ?? null,
-        lastUserAt: p.recipientId ? p.at : null,
-      },
-      select: { id: true },
+    const run = await prisma.$transaction(async (tx) => {
+      // Different comments by the same person can arrive concurrently from polling/webhooks.
+      // Serialize the repeat decision and insert, not the external moderation or sending.
+      await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${`${rule.id}:${p.commenterId}`}, 0))`;
+      paused = !!(await tx.lead.findUnique({ where: { accountId_igsid: { accountId: p.account.id, igsid: p.commenterId } }, select: { automationPaused: true } }))?.automationPaused;
+      repeat = (rule.oncePerPerson || !!settings.cooldownHours) && (await tx.automationRun.count({ where: {
+        ruleId: rule.id, commenterId: p.commenterId, status: { in: ["QUEUED", "SENT", "PARTIAL"] },
+        ...(!rule.oncePerPerson && settings.cooldownHours ? { createdAt: { gte: new Date(Date.now() - settings.cooldownHours * 3_600_000) } } : {}),
+      } })) > 0;
+      if (paused || repeat) { held = null; status = "SKIPPED"; }
+      return tx.automationRun.create({
+        data: {
+          ruleId: rule.id,
+          commentId: p.eventId,
+          trigger: rule.trigger,
+          mediaId: p.mediaId,
+          commenterId: p.commenterId,
+          commenterUsername: p.username,
+          commentText: p.text.slice(0, 2200),
+          commentedAt: p.at,
+          source: p.source,
+          status,
+          heldReason: held,
+          lastError: paused ? "Automation paused for this person." : repeat ? "Already contacted within this automation's repeat limit." : null,
+          // A story reply or DM opens Instagram's 24-hour window right away.
+          recipientId: p.recipientId ?? null,
+          lastUserAt: p.recipientId ? p.at : null,
+        },
+        select: { id: true },
+      });
     });
     runId = run.id;
   } catch (err) {
@@ -187,6 +217,7 @@ export async function createRun(p: {
     username: p.username,
     source: rule.trigger,
     ruleName: rule.name,
+    tags: settings.leadTags,
   });
   return status === "QUEUED" ? runId : null;
 }
@@ -210,7 +241,7 @@ export async function ingestComments(
       !c.parentId &&
       c.fromId !== account.externalId &&
       c.fromUsername?.toLowerCase() !== handle &&
-      c.timestamp.getTime() > oldest,
+      c.timestamp.getTime() > oldest && c.timestamp.getTime() <= Date.now() + 60_000,
   );
   if (!fresh.length) return { matched: 0, sent: 0 };
 
@@ -225,14 +256,13 @@ export async function ingestComments(
   if (!unseen.length) return { matched: 0, sent: 0 };
 
   await resolveScheduledPostRules(account.id);
+  await resolveNextPostRules(account);
   const rules = await prisma.automationRule.findMany({
     where: { accountId: account.id, enabled: true, trigger: "COMMENT" },
     orderBy: { createdAt: "asc" },
   });
   // A rule for one post outranks a rule for every post.
-  rules.sort(
-    (a, b) => Number(a.scope !== "ONE_POST") - Number(b.scope !== "ONE_POST"),
-  );
+  rules.sort(compareRules);
 
   let matched = 0;
   const queued: string[] = [];
@@ -240,8 +270,8 @@ export async function ingestComments(
     const rule = rules.find(
       (r) =>
         (r.scope === "ANY_POST" || r.mediaId === c.mediaId) &&
-        r.activeSince <= c.timestamp &&
-        matchesKeywords(c.text, r.keywords, r.matchMode, r.fuzzy),
+        r.activeSince <= c.timestamp && campaignActive(r, c.timestamp) && campaignActive(r) &&
+        ruleMatch(c.text, r).matched,
     );
     if (!rule) continue;
 
@@ -352,7 +382,9 @@ export async function processRun(runId: string): Promise<AutomationRunStatus | n
     return "QUEUED" as const;
   };
 
-  if (!rule.enabled) return giveUp("The automation was switched off before this went out.");
+  if (!campaignActive(rule)) return giveUp("The automation is paused or outside its campaign dates.");
+  const person = await prisma.lead.findUnique({ where: { accountId_igsid: { accountId: rule.accountId, igsid: run.commenterId } }, select: { automationPaused: true } });
+  if (person?.automationPaused) return finish("SKIPPED", { stage: "DONE", followUpAt: null, lastError: "Automation paused for this person." });
   const blocker = automationBlocker(rule.account);
   if (blocker) return giveUp(blocker);
   if (isComment && now.getTime() - run.commentedAt.getTime() > PRIVATE_REPLY_WINDOW_MS) {
@@ -485,6 +517,7 @@ export async function pollAccount(accountId: string): Promise<PollResult> {
   if (blocker) return { comments: 0, matched: 0, sent: 0, error: blocker };
 
   await resolveScheduledPostRules(account.id);
+  await resolveNextPostRules(account);
   const rules = await prisma.automationRule.findMany({
     where: { accountId, enabled: true, trigger: "COMMENT" },
     select: { scope: true, mediaId: true },

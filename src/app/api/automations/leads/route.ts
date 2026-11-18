@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
     "Times",
     "First seen (UTC)",
     "Last seen (UTC)",
+    "Tags", "Notes", "Automation paused",
   ];
   const rows = leads.map((l) =>
     [
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
       l.touches,
       l.createdAt.toISOString(),
       l.lastSeenAt.toISOString(),
+      l.tags.join("; "), l.notes, l.automationPaused ? "Yes" : "No",
     ]
       .map(cell)
       .join(","),

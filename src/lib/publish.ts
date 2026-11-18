@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { publishingOptions, instagramUserTagSchema } from "@/lib/publishing-options";
+import { applyPublishingEnhancements } from "@/lib/publishing-enhancements";
 import { COMMENT_PLATFORMS, getAdapter } from "@/lib/platforms";
 import { ensureFreshAccessToken } from "@/lib/tokens";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
@@ -115,7 +117,7 @@ export async function publishDueTargets(
       },
     },
     include: {
-      post: { include: { media: true, client: true } },
+      post: { include: { media: { orderBy: { sortOrder: "asc" } }, client: true } },
       account: true,
     },
     take: 50,
@@ -138,6 +140,7 @@ export async function publishDueTargets(
     try {
       const adapter = getAdapter(target.platform);
       const result = await adapter.publish({
+        deadline: startedAt + RUN_BUDGET_MS,
         body: target.bodyOverride ?? target.post.body,
         title: target.post.title ?? undefined,
         privacy:
@@ -146,10 +149,14 @@ export async function publishDueTargets(
           ? target.post.youtubeTags
           : undefined,
         categoryId: target.post.youtubeCategoryId ?? undefined,
-        media: target.post.media.map((m) => ({
+        options: publishingOptions(target.post.publishOptions),
+        cover: target.post.media.some((m) => m.role === "COVER") ? { type: "IMAGE", url: target.post.media.find((m) => m.role === "COVER")!.url } : undefined,
+        media: target.post.media.filter((m) => m.role !== "COVER").map((m) => ({
           type: m.type,
           url: m.url,
           title: m.title ?? undefined,
+          altText: m.altText ?? undefined,
+          userTags: m.userTags ? instagramUserTagSchema.array().parse(m.userTags) : undefined,
         })),
         article: linkToArticle(target.post.link),
         poll: jsonToPoll(target.post.poll),
@@ -230,6 +237,9 @@ export async function publishDueTargets(
     }
   }
 
+  if (firstComments && Date.now() + 5_000 < startedAt + RUN_BUDGET_MS) {
+    await applyPublishingEnhancements(startedAt + RUN_BUDGET_MS).catch((err) => console.error("[publish] enhancements:", err));
+  }
   return { processed: due.length, published, failed, ...comments };
 }
 

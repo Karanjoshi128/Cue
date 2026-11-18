@@ -42,6 +42,8 @@ export default async function QueuePage({
       status: t.status,
       error: t.error,
       permalink: t.permalink,
+      enhancementError: t.enhancementError,
+      thumbnailPending: t.platform === "YOUTUBE" && t.status === "PUBLISHED" && !t.enhancedAt && p.media.some((m) => m.role === "COVER"),
     })),
     comments: p.comments.map((c) => ({
       id: c.id,

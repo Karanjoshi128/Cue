@@ -21,6 +21,11 @@ const STAGE_TITLE = (
     Every client. Every channel. <em className="text-glow-text">On cue.</em>
   </>
 );
+// For buttons whose label includes a workspace name or an email address:
+// wrap to a second line instead of overflowing the button.
+const WRAP_BUTTON = "h-auto min-h-12 w-full py-3 whitespace-normal";
+const WRAP_LABEL = "min-w-0 text-center text-balance wrap-anywhere";
+
 const STAGE_BODY =
   "Cue is where the team plans and schedules posts for every client on LinkedIn, Instagram and YouTube.";
 
@@ -52,6 +57,10 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const ws = invite.workspace.name;
   const inviter = invite.invitedBy?.name || invite.invitedBy?.email || "Someone";
   const roleLabel = invite.role === "ADMIN" ? "an admin" : "a manager";
+  // Default names are one long word ("name006's workspace"). At headline
+  // size that word can be wider than the column and break mid-word, so a
+  // name with a long word is set a little smaller.
+  const longWord = Math.max(...ws.split(/\s+/).map((w) => w.length)) > 16;
 
   if (state === "accepted") {
     return (
@@ -90,7 +99,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
       }
       title={
         <>
-          Join <em>{ws}.</em>
+          Join <em className={longWord ? "text-[0.82em]" : undefined}>{ws}.</em>
         </>
       }
       description={`${inviter} invited you to ${ws} on Cue as ${roleLabel}.`}
@@ -121,9 +130,9 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             // A plain link: sign-out is a GET handler, so it must not be prefetched.
             render={<a href={`/logout?${new URLSearchParams({ next: signIn })}`} />}
             size="xl"
-            className="w-full"
+            className={WRAP_BUTTON}
           >
-            Sign out and use {invite.email}
+            <span className={WRAP_LABEL}>Sign out and use {invite.email}</span>
           </Button>
           <Button render={<Link href="/dashboard" />} variant="ghost" className="w-full">
             Not now
@@ -153,8 +162,8 @@ function Notice({
       title={title}
       description={children}
     >
-      <Button render={<Link href={cta.href} />} size="xl" className="w-full">
-        {cta.label}
+      <Button render={<Link href={cta.href} />} size="xl" className={WRAP_BUTTON}>
+        <span className={WRAP_LABEL}>{cta.label}</span>
       </Button>
     </AuthShell>
   );

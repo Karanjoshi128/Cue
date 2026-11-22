@@ -64,7 +64,8 @@ export function AuthShell({
         </div>
       </aside>
 
-      <section className="relative flex flex-col px-6 py-8 sm:px-10">
+      {/* min-w-0: a long workspace name or email must wrap, not widen the page. */}
+      <section className="relative flex min-w-0 flex-col px-6 py-8 sm:px-10">
         <div className="flex items-center justify-between">
           <Link href="/" aria-label="Cue home" className="lg:invisible">
             <Logo className="h-8 w-auto" />
@@ -77,9 +78,11 @@ export function AuthShell({
           </Link>
         </div>
 
-        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-14">
+        {/* Workspace names and email addresses can be one long unbroken word;
+            let them break rather than spill out of the column. */}
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-14 wrap-break-word">
           <div className="label-caps flex items-center gap-2">{eyebrow}</div>
-          <h1 className="headline mt-3 text-[2.75rem]">{title}</h1>
+          <h1 className="headline mt-3 text-[2.25rem] sm:text-[2.75rem]">{title}</h1>
           <p className="text-muted-foreground mt-3 text-[0.9375rem] leading-relaxed">
             {description}
           </p>
@@ -87,7 +90,7 @@ export function AuthShell({
         </div>
 
         {footer && (
-          <div className="text-muted-foreground text-center text-xs">{footer}</div>
+          <div className="text-muted-foreground text-center text-xs wrap-anywhere">{footer}</div>
         )}
       </section>
     </main>

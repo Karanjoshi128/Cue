@@ -76,7 +76,7 @@ export function AppBanners({
           role="status"
         >
           <MailOpen className="text-primary size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">
+          <span className="min-w-0 flex-1 wrap-anywhere">
             {inv.from ? <>{inv.from} invited you to </> : <>You&apos;re invited to </>}
             <strong className="font-semibold">{inv.workspaceName}</strong>.
           </span>

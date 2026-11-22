@@ -11,6 +11,7 @@ import {
   presignPut,
 } from "@/lib/storage";
 import { limitProblem } from "@/lib/plans";
+import { VIDEO_RETENTION_DAYS } from "@/lib/media-retention";
 
 // Ceiling so a presigned URL can't be used to dump arbitrarily large objects.
 // Also the most the publisher will download when a post goes live.
@@ -164,6 +165,18 @@ export async function assertWorkspaceMedia(
   items: { url: string; storageKey: string }[] | undefined,
 ): Promise<void> {
   if (!items?.length) return;
+  // A video deleted by retention: its URL still looks valid but the file is
+  // gone, so the post would fail when it goes out.
+  const removed = await prisma.mediaAsset.findFirst({
+    where: { storageKey: { in: items.map((m) => m.storageKey) }, removedAt: { not: null } },
+    select: { id: true },
+  });
+  if (removed) {
+    throw new ApiError(
+      400,
+      `A video in this post was deleted from storage ${VIDEO_RETENTION_DAYS} days after it went live. Upload it again.`,
+    );
+  }
   const storage = await getWorkspaceStorage(workspaceId);
   const bases = new Set([storage.publicUrl, ...cueMediaBases()]);
   for (const m of items) {

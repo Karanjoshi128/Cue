@@ -69,6 +69,7 @@ export const planAndUsage: HelpGuide = {
       points: [
         "**Posts a month** counts every post created since the 1st of the month, including drafts and copies.",
         "Files kept in your own storage (see [Use your own media storage](/help/use-your-own-storage)) don't count towards **Storage on Cue**.",
+        "Videos are deleted 7 days after their post goes live, and stop counting then (see [Media files](/help/media-files)).",
         "To change plan, contact Cue support at `karan@trycue.space`.",
       ],
     },
@@ -160,6 +161,7 @@ export const useYourOwnStorage: HelpGuide = {
         "**Test again** reruns the checks at any time.",
         "**Edit** changes the details. They're tested again before saving.",
         "**Disconnect** sends new uploads back to Cue's storage. Files already in your bucket stay there.",
+        "Cue deletes videos from your bucket 7 days after their post goes live, as it does in its own storage, so the keys must keep their delete permission. If your bucket keeps old versions (S3 versioning), a copy stays until your bucket's own rules remove it.",
       ],
     },
   ],

@@ -297,9 +297,9 @@ export const mediaFiles: HelpGuide = {
   group: "posting",
   icon: Images,
   title: "Media files",
-  summary: "Which pictures, videos and documents you can upload, and how big they can be.",
-  keywords: ["upload", "image", "photo", "video", "file size", "file type", "pdf", "heic", "mp4"],
-  screens: ["src/components/composer.tsx", "src/lib/media.ts"],
+  summary: "Which pictures, videos and documents you can upload, how big they can be, and how long they're kept.",
+  keywords: ["upload", "image", "photo", "video", "file size", "file type", "pdf", "heic", "mp4", "deleted", "retention", "how long", "7 days"],
+  screens: ["src/components/composer.tsx", "src/lib/media.ts", "src/lib/media-retention.ts"],
   related: ["write-a-post", "use-your-own-storage"],
   sections: [
     {
@@ -316,6 +316,17 @@ export const mediaFiles: HelpGuide = {
       points: ["Up to 512 MB per file.", "Up to 20 files per post."],
       tips: [
         "Each network has its own rules on top of these. See [Posting to LinkedIn](/help/posting-to-linkedin), [Posting to Instagram](/help/posting-to-instagram) and [Posting to YouTube](/help/posting-to-youtube).",
+      ],
+    },
+    {
+      id: "kept",
+      title: "How long files are kept",
+      points: [
+        "**Videos are deleted from storage 7 days after the post goes live.** YouTube, Instagram and LinkedIn keep their own copy, so the post stays up. Only Cue's copy of the file goes, and it can't be recovered.",
+        "This applies to Cue's storage and to your own bucket, if your workspace connected one.",
+        "Images and documents are kept until you delete the post.",
+        "A video is kept while any post using it is still a draft, scheduled, or failed. If a post only partly went out, you have 7 days to retry the accounts that failed.",
+        "Once the video is deleted, the post shows **The video file was deleted from storage**. To post it again, duplicate the post and add the video again.",
       ],
     },
     {
@@ -487,6 +498,7 @@ export const changeAPost: HelpGuide = {
       points: [
         "On the **Calendar**, hold `Alt` while you drop a post: a copy is made at the new time, as a draft. Click **Open** in the toast to edit it.",
         "Or click a post on the calendar and choose **Duplicate**. The copy is saved as a draft.",
+        "If the original's video has already been deleted (7 days after it went live), the copy is made without it. Add the video again before you schedule the copy.",
       ],
     },
     {

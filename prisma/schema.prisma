@@ -332,6 +332,15 @@ model MediaAsset {
   sizeBytes  Int? // as declared at upload; null for media uploaded before this was recorded
   createdAt  DateTime  @default(now())
   sortOrder  Int @default(0)
+  // Videos are deleted from storage (Cue's R2 or the workspace's own bucket)
+  // 7 days after the post goes live; see src/lib/media-retention.ts. The row
+  // stays so the post keeps its history, but the URL no longer works.
+  removedAt      DateTime? // when the file was deleted
+  removalTriedAt DateTime? // last failed attempt; a failing bucket is retried a day later
+  removalError   String?
+
+  // Duplicated posts share a file; retention and cleanup look rows up by key.
+  @@index([storageKey])
 }
 
 enum MediaType {

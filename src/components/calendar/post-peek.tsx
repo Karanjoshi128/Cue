@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileText,
   Link2,
+  VideoOff,
   Pencil,
   RotateCcw,
   Trash2,
@@ -19,6 +20,7 @@ import {
   isEditable,
   needsApproval,
   type CalendarPost,
+  VIDEO_GONE_FROM_COPY,
 } from "@/lib/calendar-shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,6 +85,7 @@ function PeekBody({ post, onClose }: { post: CalendarPost; onClose: () => void }
       const res = await duplicatePost(post.id);
       if (!res.ok) return void toast.error(res.error);
       toast.success("Duplicated as a draft", {
+        description: res.data.videoRemoved ? VIDEO_GONE_FROM_COPY : undefined,
         action: { label: "Open", onClick: () => router.push(`/composer?edit=${res.data.id}`) },
       });
       router.refresh();
@@ -180,13 +183,23 @@ function PeekBody({ post, onClose }: { post: CalendarPost; onClose: () => void }
                 ))}
               </div>
             )}
-            {video && (
+            {video && !video.removedAt && (
               <video
                 src={video.url}
                 controls
                 preload="metadata"
                 className="max-h-72 w-full rounded-lg border bg-black"
               />
+            )}
+            {video?.removedAt && (
+              <div className="bg-muted/50 text-muted-foreground flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-sm">
+                <VideoOff className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <p>
+                  The video file was deleted from storage on{" "}
+                  {format(new Date(video.removedAt), "d MMM yyyy", cal.ctx)}, 7 days after the post
+                  went live. The post itself is still up.
+                </p>
+              </div>
             )}
             {doc && (
               <a
@@ -245,7 +258,8 @@ function PeekBody({ post, onClose }: { post: CalendarPost; onClose: () => void }
             <Pencil /> Edit
           </Button>
         )}
-        {failed && (
+        {/* A post whose video was deleted can't be sent again. */}
+        {failed && !video?.removedAt && (
           <Button size="sm" onClick={retry} disabled={pending}>
             <RotateCcw /> Retry
           </Button>

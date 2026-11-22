@@ -411,8 +411,12 @@ On a network error at step 3, just re-send it with the **same**
 
 <a id="retention"></a>
 
-- **Retention:** posts and their uploaded media are kept indefinitely.
-  `GET /posts/:id` keeps working until someone deletes the post.
+- **Retention:** posts, images and documents are kept indefinitely, and
+  `GET /posts/:id` keeps working until someone deletes the post. **Videos are
+  deleted from storage 7 days after the post goes live** (Cue's bucket or the
+  workspace's own). A video is kept while any post using it is a draft,
+  scheduled or failed. After that, sending the same `url` and `storageKey` in
+  a new post is a 400: upload the file again with `media/presign`.
 - **YouTube quota:** Google's default API quota is 10,000 units/day for the
   whole project, and one upload costs 1,600. That's **about 6 uploads per day
   across every client**. Beyond that, uploads fail until the quota resets. An

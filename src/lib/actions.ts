@@ -17,6 +17,7 @@ import { limitProblem, workspaceHasFeature } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
 import { removeUnusedMedia } from "@/lib/media";
+import { removedVideoProblem } from "@/lib/media-retention";
 import { revokeGoogleGrant } from "@/lib/tokens";
 import { SCOPE_COOKIE } from "@/lib/scope";
 import {
@@ -890,7 +891,7 @@ export async function reschedulePost(
 export async function duplicatePost(
   id: string,
   iso?: string | null,
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; videoRemoved: boolean }>> {
   return toResult(async () => {
     const user = await requireUser();
     const src = await prisma.post.findFirst({
@@ -901,6 +902,10 @@ export async function duplicatePost(
     if (src.targets.length === 0) {
       throw new ApiError(400, "This post has no connected accounts left to copy to.");
     }
+    // A video deleted by retention can't be copied: the copy is a draft
+    // without it, and the caller says so.
+    const media = src.media.filter((m) => !m.removedAt);
+    const videoRemoved = media.length < src.media.length;
     const data = postSchema.parse({
       clientId: src.clientId,
       body: src.body,
@@ -911,7 +916,7 @@ export async function duplicatePost(
       youtubeCategoryId: src.youtubeCategoryId ?? undefined,
       publishOptions: publishingOptions(src.publishOptions),
       accountIds: src.targets.map((t) => t.accountId),
-      media: src.media.map((m) => ({
+      media: media.map((m) => ({
         type: m.type,
         url: m.url,
         storageKey: m.storageKey,
@@ -936,7 +941,7 @@ export async function duplicatePost(
     revalidatePath("/calendar");
     revalidatePath("/queue");
     revalidatePath("/dashboard");
-    return { id: post.id };
+    return { id: post.id, videoRemoved };
   });
 }
 
@@ -997,6 +1002,8 @@ export async function retryPost(id: string): Promise<ActionResult> {
     if (!owned) throw new ApiError(404, "Post not found.");
     // Before resetting anything, so a paused retry leaves the post as it was.
     if (await isPublishingPaused()) throw new ApiError(503, PAUSED_MESSAGE);
+    const gone = await removedVideoProblem(owned.id);
+    if (gone) throw new ApiError(409, gone);
     await prisma.postTarget.updateMany({
       where: {
         postId: owned.id,

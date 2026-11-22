@@ -21,6 +21,7 @@ import { MAX_ATTEMPTS, rollUpPostStatus, staleProcessingWhere } from "@/lib/publ
 import { STUCK_AFTER_MS } from "@/lib/admin-data";
 import { cueMediaKey, settingsFromConfig } from "@/lib/storage";
 import { removeUnusedMedia } from "@/lib/media";
+import { removedVideoProblem } from "@/lib/media-retention";
 import { testStorage, type StorageTestResult } from "@/lib/storage-config";
 
 // Write side of the platform admin panel. Every action re-checks that the
@@ -414,6 +415,8 @@ export async function retryTarget(targetId: string, reason?: string): Promise<Ad
     const t = await targetForAction(targetId);
     if (t.status !== "FAILED") return { ok: false, error: "Only failed posts can be retried." };
     if (t.post.approval !== "APPROVED") return { ok: false, error: "This post is waiting for approval in its workspace." };
+    const gone = await removedVideoProblem(t.postId);
+    if (gone) return { ok: false, error: gone };
     await prisma.$transaction([
       prisma.postTarget.update({ where: { id: t.id }, data: { status: "SCHEDULED", attempts: 0, error: null } }),
       prisma.post.update({ where: { id: t.postId }, data: { status: "PUBLISHING" } }),

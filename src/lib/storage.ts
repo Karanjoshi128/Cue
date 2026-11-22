@@ -239,6 +239,36 @@ export async function deleteObjects(target: StorageTarget, keys: string[]) {
   }
 }
 
+/**
+ * Deletes each key with its own DeleteObject call, a few at a time. Slower
+ * than one batch call, but every S3-compatible store supports it (not all
+ * implement batch delete), and it's the call the storage test already proves
+ * against a connected bucket. A key that's already gone counts as deleted.
+ * Returns the keys that couldn't be deleted, with the reason.
+ */
+export async function deleteEach(
+  target: StorageTarget,
+  keys: string[],
+  concurrency = 8,
+): Promise<{ key: string; error: string }[]> {
+  if (keys.length === 0) return [];
+  if (target.custom) await assertPublicHost(target.endpoint);
+  const failed: { key: string; error: string }[] = [];
+  for (let i = 0; i < keys.length; i += concurrency) {
+    await Promise.all(
+      keys.slice(i, i + concurrency).map(async (key) => {
+        try {
+          await target.client.send(new DeleteObjectCommand({ Bucket: target.bucket, Key: key }));
+        } catch (e) {
+          const err = e as { name?: string; message?: string };
+          failed.push({ key, error: `${err.name ?? "Error"}: ${err.message ?? "not deleted"}` });
+        }
+      }),
+    );
+  }
+  return failed;
+}
+
 // ---------------------------------------------------------------------------
 // Network safety for user-supplied endpoints
 // ---------------------------------------------------------------------------

@@ -6,7 +6,10 @@ import { featureAvailableAnywhere } from "@/lib/plans";
 export const metadata = { title: "Platform" };
 
 export default async function AdminPlatformPage() {
-  const [{ settings, heartbeat, automationsHeartbeat, admins }, automations] = await Promise.all([
+  const [
+    { settings, heartbeat, automationsHeartbeat, retentionHeartbeat, retentionFailing, admins },
+    automations,
+  ] = await Promise.all([
     getPlatformPage(),
     featureAvailableAnywhere("ig_automations"),
   ]);
@@ -45,6 +48,25 @@ export default async function AdminPlatformPage() {
           </dl>
         </Panel>
       )}
+      <Panel
+        title="Video clean-up"
+        description="Hourly: deletes each video from storage (Cue's R2 or the workspace's own bucket) 7 days after its post went live (POST /api/cron/media-retention)."
+      >
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
+          <dt className="text-muted-foreground">Last run</dt>
+          <dd>{retentionHeartbeat ? <Ago date={retentionHeartbeat.lastRunAt} /> : "None recorded yet"}</dd>
+          <dt className="text-muted-foreground">Result</dt>
+          <dd>{retentionHeartbeat ? (retentionHeartbeat.ok ? "OK" : <span className="text-destructive">{retentionHeartbeat.error}</span>) : "-"}</dd>
+          <dt className="text-muted-foreground">Details</dt>
+          <dd className="min-w-0 break-all"><Mono>{retentionHeartbeat?.summary ? JSON.stringify(retentionHeartbeat.summary) : "-"}</Mono></dd>
+          <dt className="text-muted-foreground">Couldn&apos;t delete</dt>
+          <dd>
+            {retentionFailing === 0
+              ? "None"
+              : `${retentionFailing} file${retentionFailing === 1 ? "" : "s"}, retried daily (usually a workspace bucket that was disconnected or whose keys changed)`}
+          </dd>
+        </dl>
+      </Panel>
       <Panel title="Platform admins" description="Set with the PLATFORM_ADMIN_EMAILS environment variable (comma-separated). Without it, the default below applies.">
         <ul className="space-y-1 text-sm">
           {admins.map((a) => (

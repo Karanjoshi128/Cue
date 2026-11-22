@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 // Operating entity: Karan Joshi (individual). Governing law: India.
 // Describes Cue's actual data practices for Meta / LinkedIn / Google review.
 // The YouTube API Services section is required for Google OAuth verification.
-const UPDATED = "October 28, 2026";
+const UPDATED = "November 22, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 
 export default async function PrivacyPage() {
@@ -289,10 +289,15 @@ export default async function PrivacyPage() {
                 delete the client, then removed.
               </li>
               <li>
-                Posts, their captions, and the media you upload are kept until
-                you delete them, so your publishing history stays available. A
-                lightweight record of each published post (platform, link,
-                date) is also kept for your history.
+                Posts, their captions, and the images and documents you upload
+                are kept until you delete them, so your publishing history
+                stays available. A lightweight record of each published post
+                (platform, link, date) is also kept for your history.
+              </li>
+              <li>
+                Uploaded videos are deleted from storage 7 days after the post
+                is published, including from storage your workspace connected
+                itself. The post and its link stay; only the file is removed.
               </li>
               <li>
                 Deleting a post removes its media from Cue&apos;s storage.

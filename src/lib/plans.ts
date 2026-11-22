@@ -231,7 +231,8 @@ const USAGE: Record<LimitKey, (workspaceId: string) => Promise<number>> = {
       FROM "MediaAsset" m
       JOIN "Post" p ON p.id = m."postId"
       JOIN "Client" c ON c.id = p."clientId"
-      WHERE c."workspaceId" = ${workspaceId} AND m.url LIKE ANY(${patterns})`;
+      WHERE c."workspaceId" = ${workspaceId} AND m.url LIKE ANY(${patterns})
+        AND m."removedAt" IS NULL`; // deleted videos no longer take up space
     return Number(row?.total ?? 0);
   },
 };

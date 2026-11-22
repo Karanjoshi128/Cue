@@ -58,9 +58,18 @@ export function InviteActions({
     </div>
   ) : (
     <div className="space-y-3">
-      <Button size="xl" className="group w-full" onClick={accept} disabled={pending}>
+      {/* Default workspace names ("name's workspace") are long: wrap onto a
+          second line instead of running out of the button. */}
+      <Button
+        size="xl"
+        className="group h-auto min-h-12 w-full py-3 whitespace-normal"
+        onClick={accept}
+        disabled={pending}
+      >
         {pending ? <Loader2 className="animate-spin" /> : null}
-        Accept and join {workspaceName}
+        <span className="min-w-0 text-center text-balance wrap-anywhere">
+          Accept and join {workspaceName}
+        </span>
         {!pending && <ArrowRight className="transition-transform group-hover:translate-x-0.5" />}
       </Button>
       <Button variant="ghost" className="w-full" onClick={decline} disabled={pending}>

@@ -344,7 +344,7 @@ const calendarPostSelect = {
     },
   },
   media: {
-    select: { type: true, url: true, title: true },
+    select: { type: true, url: true, title: true, removedAt: true },
     where: { role: "CONTENT" },
     orderBy: { sortOrder: "asc" },
   },
@@ -381,7 +381,7 @@ function toCalendarPost(p: CalendarRow): CalendarPost {
       error: t.error,
       permalink: t.permalink,
     })),
-    media: p.media,
+    media: p.media.map((m) => ({ ...m, removedAt: m.removedAt?.toISOString() ?? null })),
   };
 }
 

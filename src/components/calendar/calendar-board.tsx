@@ -25,6 +25,7 @@ import {
   type CalendarView,
   type ClientOption,
   type Density,
+  VIDEO_GONE_FROM_COPY,
 } from "@/lib/calendar-shared";
 import { SCOPE_COOKIE } from "@/lib/scope";
 import { PageHeader, Kbd } from "@/components/page-header";
@@ -154,6 +155,7 @@ export function CalendarBoard(props: CalendarBoardProps) {
         const res = await duplicatePost(post.id, when.toISOString());
         if (!res.ok) return void toast.error(res.error);
         toast.success(`Copied to ${label} as a draft`, {
+          description: res.data.videoRemoved ? VIDEO_GONE_FROM_COPY : undefined,
           action: { label: "Open", onClick: () => router.push(`/composer?edit=${res.data.id}`) },
         });
         router.refresh();

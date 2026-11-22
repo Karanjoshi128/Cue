@@ -204,8 +204,8 @@ export default async function SettingsPage() {
             title="Media storage"
             description={
               isAdmin
-                ? "Where uploaded images, videos and documents are kept. Cue's storage, or your own bucket."
-                : "Where uploaded images, videos and documents are kept."
+                ? "Where uploaded images, videos and documents are kept: Cue's storage, or your own bucket. Videos are deleted 7 days after their post goes live."
+                : "Where uploaded images, videos and documents are kept. Videos are deleted 7 days after their post goes live."
             }
           >
             <StorageManager

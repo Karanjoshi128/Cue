@@ -44,8 +44,18 @@ export interface CalendarPost {
     error: string | null;
     permalink: string | null;
   }[];
-  media: { type: "IMAGE" | "VIDEO" | "DOCUMENT"; url: string; title: string | null }[];
+  media: {
+    type: "IMAGE" | "VIDEO" | "DOCUMENT";
+    url: string;
+    title: string | null;
+    /** Set once retention deleted the file (videos, 7 days after going live). */
+    removedAt: string | null;
+  }[];
 }
+
+/** Toast note when a duplicate couldn't take its video with it. */
+export const VIDEO_GONE_FROM_COPY =
+  "The video wasn't copied: it was deleted from storage 7 days after the post went live. Add it again before scheduling.";
 
 export interface ClientOption {
   id: string;

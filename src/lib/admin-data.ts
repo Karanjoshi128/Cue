@@ -672,13 +672,23 @@ export async function listAudit(opts: { q?: string; page?: number }) {
 
 export async function getPlatformPage() {
   await requirePlatformAdmin();
-  const [settings, heartbeat, automationsHeartbeat] = await Promise.all([
+  const [settings, heartbeat, automationsHeartbeat, retentionHeartbeat, retentionFailing] = await Promise.all([
     getPlatformSettings(),
     prisma.cronHeartbeat.findUnique({ where: { name: "publish" } }),
     // Instagram comment automations' job, every 5 minutes (runs once launched or unlocked early).
     prisma.cronHeartbeat.findUnique({ where: { name: "automations" } }),
+    // Video retention, hourly (src/lib/media-retention.ts).
+    prisma.cronHeartbeat.findUnique({ where: { name: "media-retention" } }),
+    prisma.mediaAsset.count({ where: { removedAt: null, removalError: { not: null } } }),
   ]);
-  return { settings, heartbeat, automationsHeartbeat, admins: platformAdminEmails() };
+  return {
+    settings,
+    heartbeat,
+    automationsHeartbeat,
+    retentionHeartbeat,
+    retentionFailing,
+    admins: platformAdminEmails(),
+  };
 }
 
 export async function getThemesPage() {

@@ -61,7 +61,11 @@ export default async function LoginPage({
       }
     >
       {configured ? (
-        <LoginForm initialEmail={initialEmail} next={safeNext(next)} />
+        <LoginForm
+          initialEmail={initialEmail}
+          next={safeNext(next)}
+          turnstileSiteKey={process.env.TURNSTILE_SITE_KEY}
+        />
       ) : (
         <div className="space-y-4">
           <p className="text-muted-foreground text-sm">

@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Loader2, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Turnstile } from "@/components/turnstile";
 
 // Supabase allows one code per email every 60 seconds by default.
 const RESEND_COOLDOWN_S = 60;
@@ -23,17 +24,23 @@ const RESEND_COOLDOWN_S = 60;
 export function LoginForm({
   initialEmail,
   next,
+  turnstileSiteKey,
 }: {
   /** Prefilled from an invite link. */
   initialEmail?: string;
   /** Where to go after signing in (a same-site path), e.g. back to the invite. */
   next?: string;
+  /** Cloudflare Turnstile site key; unset (local dev) means no bot check. */
+  turnstileSiteKey?: string;
 } = {}) {
   const [email, setEmail] = useState(initialEmail ?? "");
   const [code, setCode] = useState("");
   const [step, setStep] = useState<"email" | "code">("email");
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  // The Turnstile token for the next code request; each one works once.
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -44,6 +51,9 @@ export function LoginForm({
   async function sendCode(resend = false) {
     const address = email.trim().toLowerCase();
     if (!address) return toast.error("Enter your email");
+    if (turnstileSiteKey && !captcha) {
+      return toast.error("Checking your browser - try again in a second.");
+    }
     setLoading(true);
     const t = toast.loading(resend ? "Resending code…" : "Sending your code…");
     try {
@@ -51,9 +61,18 @@ export function LoginForm({
       const { error } = await supabase.auth.signInWithOtp({
         email: address,
         // Only used if a deployment still emails a link; the code is primary.
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          captchaToken: captcha ?? undefined,
+        },
       });
-      if (error) throw error;
+      if (error) {
+        throw /captcha/i.test(error.message)
+          ? new Error(
+              "The browser check didn't pass. Wait a moment and try again.",
+            )
+          : error;
+      }
       setEmail(address);
       setCode("");
       setCooldown(RESEND_COOLDOWN_S);
@@ -65,6 +84,11 @@ export function LoginForm({
       });
     } finally {
       setLoading(false);
+      // The token is spent either way; fetch a fresh one for a resend.
+      if (turnstileSiteKey) {
+        setCaptcha(null);
+        setCaptchaReset((n) => n + 1);
+      }
     }
   }
 
@@ -95,122 +119,144 @@ export function LoginForm({
   }
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      {step === "code" ? (
-        <motion.form
-          key="code"
-          initial={{ opacity: 0, x: 16 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -16 }}
-          transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-          className="space-y-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            verify();
-          }}
-        >
-          <div className="bg-muted/50 flex items-start gap-3 rounded-xl border px-4 py-3">
-            <Mail className="text-primary mt-0.5 size-4 shrink-0" />
-            <p className="text-sm leading-relaxed">
-              <span className="font-medium">Check your inbox.</span>{" "}
-              <span className="text-muted-foreground">
-                We sent a sign-in code to{" "}
-                <span className="text-foreground font-medium break-all">{email}</span>
-                .
-              </span>
-            </p>
-          </div>
-          {/* Supabase's email OTP length is configurable (6-10 digits), so accept
+    <div>
+      <AnimatePresence mode="wait" initial={false}>
+        {step === "code" ? (
+          <motion.form
+            key="code"
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -16 }}
+            transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+            className="space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              verify();
+            }}
+          >
+            <div className="bg-muted/50 flex items-start gap-3 rounded-xl border px-4 py-3">
+              <Mail className="text-primary mt-0.5 size-4 shrink-0" />
+              <p className="text-sm leading-relaxed">
+                <span className="font-medium">Check your inbox.</span>{" "}
+                <span className="text-muted-foreground">
+                  We sent a sign-in code to{" "}
+                  <span className="text-foreground font-medium break-all">
+                    {email}
+                  </span>
+                  .
+                </span>
+              </p>
+            </div>
+            {/* Supabase's email OTP length is configurable (6-10 digits), so accept
               the whole range - hard-coding 6 silently truncates a longer code and
               fails with a misleading "Token has expired or is invalid". */}
-          <div className="space-y-2">
-            <label htmlFor="code" className="label-caps block">
-              Sign-in code
-            </label>
-            <Input
-              id="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              autoFocus
-              placeholder="••••••••"
-              maxLength={10}
-              value={code}
-              onChange={(e) =>
-                setCode(e.target.value.replace(/\D/g, "").slice(0, 10))
-              }
-              className="h-14 text-center font-mono text-2xl tracking-[0.45em] md:text-2xl"
-            />
-          </div>
-          <Button
-            type="submit"
-            size="xl"
-            disabled={loading || code.length < 6}
-            className="w-full"
+            <div className="space-y-2">
+              <label htmlFor="code" className="label-caps block">
+                Sign-in code
+              </label>
+              <Input
+                id="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                placeholder="••••••••"
+                maxLength={10}
+                value={code}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 10))
+                }
+                className="h-14 text-center font-mono text-2xl tracking-[0.45em] md:text-2xl"
+              />
+            </div>
+            <Button
+              type="submit"
+              size="xl"
+              disabled={loading || code.length < 6}
+              className="w-full"
+            >
+              {loading ? <Loader2 className="animate-spin" /> : null}
+              {loading ? "Signing in…" : "Verify and sign in"}
+            </Button>
+            <div className="text-muted-foreground flex items-center justify-between text-sm">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  setStep("email");
+                  setCode("");
+                }}
+                className="hover:text-foreground inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                <ArrowLeft className="size-3.5" /> Different email
+              </button>
+              <button
+                type="button"
+                disabled={loading || cooldown > 0}
+                onClick={() => sendCode(true)}
+                className="hover:text-foreground font-mono text-xs tabular-nums transition-colors disabled:opacity-60 disabled:hover:text-muted-foreground"
+              >
+                {cooldown > 0
+                  ? `Resend in 0:${String(cooldown).padStart(2, "0")}`
+                  : "Resend code"}
+              </button>
+            </div>
+          </motion.form>
+        ) : (
+          <motion.form
+            key="email"
+            initial={{ opacity: 0, x: -16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 16 }}
+            transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+            className="space-y-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              sendCode();
+            }}
           >
-            {loading ? <Loader2 className="animate-spin" /> : null}
-            {loading ? "Signing in…" : "Verify and sign in"}
-          </Button>
-          <div className="text-muted-foreground flex items-center justify-between text-sm">
-            <button
-              type="button"
+            <div className="space-y-2">
+              <label htmlFor="email" className="label-caps block">
+                Work email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                autoFocus
+                placeholder="you@agency.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-12 text-base md:text-base"
+              />
+            </div>
+            <Button
+              type="submit"
+              size="xl"
               disabled={loading}
-              onClick={() => {
-                setStep("email");
-                setCode("");
-              }}
-              className="hover:text-foreground inline-flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="group w-full"
             >
-              <ArrowLeft className="size-3.5" /> Different email
-            </button>
-            <button
-              type="button"
-              disabled={loading || cooldown > 0}
-              onClick={() => sendCode(true)}
-              className="hover:text-foreground font-mono text-xs tabular-nums transition-colors disabled:opacity-60 disabled:hover:text-muted-foreground"
-            >
-              {cooldown > 0
-                ? `Resend in 0:${String(cooldown).padStart(2, "0")}`
-                : "Resend code"}
-            </button>
-          </div>
-        </motion.form>
-      ) : (
-        <motion.form
-          key="email"
-          initial={{ opacity: 0, x: -16 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 16 }}
-          transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
-          className="space-y-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            sendCode();
-          }}
-        >
-          <div className="space-y-2">
-            <label htmlFor="email" className="label-caps block">
-              Work email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              autoComplete="email"
-              autoFocus
-              placeholder="you@agency.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-12 text-base md:text-base"
-            />
-          </div>
-          <Button type="submit" size="xl" disabled={loading} className="group w-full">
-            {loading ? <Loader2 className="animate-spin" /> : null}
-            {loading ? "Sending…" : "Email me a sign-in code"}
-            {!loading && (
-              <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
-            )}
-          </Button>
-        </motion.form>
+              {loading ? <Loader2 className="animate-spin" /> : null}
+              {loading ? "Sending…" : "Email me a sign-in code"}
+              {!loading && (
+                <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+              )}
+            </Button>
+          </motion.form>
+        )}
+      </AnimatePresence>
+      {turnstileSiteKey && (
+        <Turnstile
+          siteKey={turnstileSiteKey}
+          resetKey={captchaReset}
+          onToken={setCaptcha}
+          onError={() =>
+            toast.error(
+              "Couldn't run the browser check. Refresh the page, or allow challenges.cloudflare.com if a blocker is on.",
+              { id: "turnstile" },
+            )
+          }
+        />
       )}
-    </AnimatePresence>
+    </div>
   );
 }

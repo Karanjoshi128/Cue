@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 // Operating entity: Karan Joshi (individual). Governing law: India.
 // Describes Cue's actual data practices for Meta / LinkedIn / Google review.
 // The YouTube API Services section is required for Google OAuth verification.
-const UPDATED = "November 22, 2026";
+const UPDATED = "November 26, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 
 export default async function PrivacyPage() {
@@ -184,17 +184,15 @@ export default async function PrivacyPage() {
             </p>
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong className="text-foreground">Supabase</strong> -
-                authentication and database.
+                <strong className="text-foreground">Oracle Cloud</strong> -
+                hosting for the application, its database and sign-in, on
+                servers in Mumbai, India.
               </li>
               <li>
-                <strong className="text-foreground">Cloudflare R2</strong> -
-                storage for the media you upload, unless your workspace
-                connects its own storage.
-              </li>
-              <li>
-                <strong className="text-foreground">Vercel</strong> - application
-                hosting.
+                <strong className="text-foreground">Cloudflare</strong> - DNS
+                for trycue.space, R2 storage for the media you upload (unless
+                your workspace connects its own storage), and encrypted
+                database backups.
               </li>
               <li>
                 <strong className="text-foreground">Resend</strong> - delivers

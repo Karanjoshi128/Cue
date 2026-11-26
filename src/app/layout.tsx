@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TimezoneSync } from "@/components/timezone-sync";
 import { SiteThemeDecor } from "@/components/fx/site-theme-decor";
+import { WebAnalytics } from "@/components/web-analytics";
 import { getSiteTheme } from "@/lib/site-theme-server";
 import { siteTheme } from "@/lib/site-themes";
 
@@ -73,6 +74,7 @@ export default async function RootLayout({
           <TimezoneSync />
           <Toaster position="bottom-right" />
         </ThemeProvider>
+        <WebAnalytics />
       </body>
     </html>
   );

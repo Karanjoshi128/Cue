@@ -191,8 +191,8 @@ export default async function PrivacyPage() {
               <li>
                 <strong className="text-foreground">Cloudflare</strong> - DNS
                 for trycue.space, R2 storage for the media you upload (unless
-                your workspace connects its own storage), and encrypted
-                database backups.
+                your workspace connects its own storage), encrypted database
+                backups, and Web Analytics for anonymous visit statistics.
               </li>
               <li>
                 <strong className="text-foreground">Resend</strong> - delivers
@@ -341,6 +341,22 @@ export default async function PrivacyPage() {
                 {CONTACT}
               </a>
               .
+            </p>
+          </Section>
+
+          <Section title="Cookies and analytics">
+            <p>
+              Cue uses only cookies it needs to work: the ones that keep you signed
+              in, and a few that remember your choices, such as the client you
+              picked, your calendar view and your time zone. We do not use
+              advertising or tracking cookies.
+            </p>
+            <p>
+              To understand how the site is used, we count visits with
+              Cloudflare Web Analytics. It sets no cookies, does not
+              fingerprint your device and does not build a profile of you; it
+              records the page, the referring site, your browser and country,
+              and how fast the page loaded.
             </p>
           </Section>
 

@@ -13,7 +13,6 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 command -v age >/dev/null || apt-get -y -q install age
-command -v rclone >/dev/null || apt-get -y -q install rclone
 install -d -m 700 /etc/cue-backup /srv/backups/nightly
 [ -s /etc/cue-backup/recipient.txt ] || { echo "missing /etc/cue-backup/recipient.txt (age public key)"; exit 1; }
 
@@ -36,10 +35,14 @@ find "$OUT" -name 'cue-*.tar.zst.age' -mtime +14 -delete
 if [ -s /etc/cue-backup/r2.env ]; then
   # r2.env: R2_ACCOUNT_ID, R2_BACKUP_KEY_ID, R2_BACKUP_SECRET (bucket cue-backups)
   set -a; . /etc/cue-backup/r2.env; set +a
-  RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
-  RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_BACKUP_KEY_ID" RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_BACKUP_SECRET" \
-  RCLONE_CONFIG_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
-    rclone copyto "$OUT/cue-$TS.tar.zst.age" "r2:cue-backups/nightly/cue-$TS.tar.zst.age" --s3-no-check-bucket
+  # A single signed PUT with curl (R2 speaks the S3 API). The key goes in on
+  # stdin, so it never shows in the process list.
+  F="$OUT/cue-$TS.tar.zst.age"
+  code=$(printf 'user = "%s:%s"\n' "$R2_BACKUP_KEY_ID" "$R2_BACKUP_SECRET" | curl -sS -K - \
+    --aws-sigv4 "aws:amz:auto:s3" --retry 3 --max-time 600 -o /dev/null -w '%{http_code}' \
+    -H "x-amz-content-sha256: $(sha256sum "$F" | cut -d' ' -f1)" -T "$F" \
+    "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com/cue-backups/nightly/cue-$TS.tar.zst.age")
+  [ "$code" = 200 ] || { echo "off-site upload FAILED (HTTP $code)"; exit 1; }
   echo "off-site: r2:cue-backups/nightly/cue-$TS.tar.zst.age"
 else
   echo "off-site: SKIPPED (no /etc/cue-backup/r2.env yet)"

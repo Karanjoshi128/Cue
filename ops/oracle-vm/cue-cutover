@@ -75,7 +75,7 @@ EOF
 
 supabase_cron() { # on | off: the cue-* pg_cron jobs on Supabase
   local v; [ "$1" = on ] && v=true || v=false
-  psql "$(SRC)" -q -v ON_ERROR_STOP=1 -c "update cron.job set active = $v where jobname like 'cue-%'"
+  psql "$(SRC)" -q -v ON_ERROR_STOP=1 -c "select cron.alter_job(jobid, active := $v) from cron.job where jobname like 'cue-%'" >/dev/null
   psql "$(SRC)" -tA -c "select jobname||'='||active from cron.job where jobname like 'cue-%' order by jobid" | tr '\n' ' '; echo
 }
 

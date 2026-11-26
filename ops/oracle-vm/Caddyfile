@@ -1,0 +1,62 @@
+# Cue on cue-prod-01. Source: ops/oracle-vm/Caddyfile in the repo (docs/oracle-vm-runbook.md).
+{
+	# Cloudflare's proxy may sit in front later; trust its ranges then.
+	servers {
+		timeouts {
+			read_header 15s
+			idle 2m
+		}
+	}
+}
+
+(cue_tls) {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+		resolvers 1.1.1.1
+	}
+}
+
+www.trycue.space {
+	import cue_tls
+	redir https://trycue.space{uri} 308
+}
+
+trycue.space {
+	import cue_tls
+	encode zstd gzip
+
+	# Same as Vercel today (the app sends the other security headers itself).
+	header Strict-Transport-Security "max-age=63072000"
+	header -Server
+
+	# Normal uploads go straight to R2; this only caps the old fallback route.
+	request_body {
+		max_size 100MB
+	}
+
+	log {
+		output file /var/log/caddy/trycue.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+
+	# Sign-in (self-hosted Supabase Auth). Same origin as the app, so no CORS
+	# and no extra DNS name. Its admin API is never reachable from outside.
+	handle_path /auth/v1/* {
+		@admin path /admin /admin/*
+		respond @admin 404
+		reverse_proxy 127.0.0.1:9999
+	}
+
+	handle {
+		import /etc/caddy/cue-upstream.caddy
+	}
+}
+
+# Email templates for the Auth server. Loopback only.
+http://127.0.0.1:8089 {
+	bind 127.0.0.1
+	root * /etc/caddy/cue-auth-templates
+	file_server
+}

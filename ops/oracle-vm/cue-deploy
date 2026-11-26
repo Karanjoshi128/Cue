@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# cue-deploy: build and switch Cue releases on cue-prod-01, with no downtime.
+#
+#   cue-deploy deploy <commit-sha>   build that commit of main and switch to it
+#   cue-deploy rollback              switch back to the previous release
+#   cue-deploy status                show what's live
+#   cue-deploy ssh                   entry point for the deploy user's SSH key:
+#                                    runs one of the above from SSH_ORIGINAL_COMMAND
+#
+# Releases live in /srv/cue/releases/<utc-time>-<sha7>. The live one runs under
+# pm2 (user cue) on 127.0.0.1:3000 or :3001; a new release starts on the other
+# port, must pass a health check, then Caddy is pointed at it (graceful
+# reload) and the old one is stopped with a 30 s grace period for after() work.
+# A failed build or health check leaves the live site untouched.
+set -euo pipefail
+
+REPO_URL=https://github.com/Karanjoshi128/Cue.git
+BASE=/srv/cue
+GIT_DIR=$BASE/repo.git
+RELEASES=$BASE/releases
+SHARED=$BASE/shared
+UPSTREAM=/etc/caddy/cue-upstream.caddy
+KEEP=3
+export PM2_HOME=$BASE/.pm2
+export PATH=/usr/bin:/usr/local/bin:$PATH
+
+log() { echo "[cue-deploy $(date -u +%H:%M:%S)] $*"; }
+as_cue() { runuser -u cue -- env HOME=$BASE PM2_HOME="$PM2_HOME" PATH="$PATH" "$@"; }
+pm2c() { as_cue pm2 "$@"; }
+live_port() { grep -o '127.0.0.1:[0-9]*' "$UPSTREAM" | cut -d: -f2; }
+other_port() { [ "$1" = 3000 ] && echo 3001 || echo 3000; }
+live_release() { readlink -f "$BASE/current" 2>/dev/null || true; }
+# NEXT_PUBLIC_* values are baked into a build, so a release only works with
+# the environment it was built for. Each release records this fingerprint.
+public_env() { grep -E '^NEXT_PUBLIC_' "$SHARED/.env" | sort | sha256sum | cut -c1-16; }
+
+health() { # $1 = port. 200 from /api/health (or / on releases without it) within 90 s.
+  local i code
+  for i in $(seq 1 45); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$1/api/health" || true)
+    [ "$code" = 404 ] && code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$1/" || true)
+    [ "$code" = 200 ] && return 0
+    sleep 2
+  done
+  log "health check failed on :$1 (last HTTP $code)"
+  return 1
+}
+
+start_on() { # $1 = release dir, $2 = port
+  local name="cue-$2"
+  pm2c delete "$name" >/dev/null 2>&1 || true
+  pm2c start "$1/node_modules/next/dist/bin/next" --name "$name" --cwd "$1" \
+    --kill-timeout 30000 --max-memory-restart 3G --time \
+    -- start -p "$2" -H 127.0.0.1 >/dev/null
+}
+
+switch_to() { # $1 = release dir, $2 = port it runs on
+  local old_port; old_port=$(live_port)
+  echo "reverse_proxy 127.0.0.1:$2" > "$UPSTREAM"
+  systemctl reload caddy
+  ln -sfn "$1" "$BASE/current"
+  log "traffic now on :$2 ($(basename "$1"))"
+  if [ "$old_port" != "$2" ]; then
+    sleep 5 # let requests in flight on the old one finish
+    pm2c stop "cue-$old_port" >/dev/null 2>&1 || true
+    pm2c delete "cue-$old_port" >/dev/null 2>&1 || true
+  fi
+  pm2c save --force >/dev/null
+}
+
+prune() {
+  local live; live=$(live_release)
+  ls -1d "$RELEASES"/*/ 2>/dev/null | sed 's#/$##' | sort | head -n -"$KEEP" | while read -r d; do
+    [ "$d" = "$live" ] && continue
+    rm -rf "$d"; log "removed old release $(basename "$d")"
+  done
+}
+
+deploy() { # $1 = full commit sha
+  local sha=$1 rel port
+  [[ $sha =~ ^[0-9a-f]{40}$ ]] || { echo "deploy needs a full 40-character commit sha" >&2; exit 2; }
+  if [ ! -d "$GIT_DIR" ]; then as_cue git clone --bare --quiet "$REPO_URL" "$GIT_DIR"; fi
+  as_cue git --git-dir="$GIT_DIR" fetch --quiet --prune origin '+refs/heads/main:refs/heads/main'
+  as_cue git --git-dir="$GIT_DIR" merge-base --is-ancestor "$sha" main \
+    || { echo "commit $sha is not on main" >&2; exit 2; }
+
+  rel="$RELEASES/$(date -u +%Y%m%d-%H%M%S)-${sha:0:7}"
+  log "building $sha in $(basename "$rel")"
+  as_cue mkdir -p "$rel"
+  as_cue bash -c "git --git-dir='$GIT_DIR' archive '$sha' | tar -x -C '$rel'"
+  as_cue ln -s "$SHARED/.env" "$rel/.env"
+  as_cue mkdir -p "$rel/.next" && as_cue ln -s "$SHARED/next-cache" "$rel/.next/cache"
+  echo "$sha" | as_cue tee "$rel/REVISION" >/dev/null
+  public_env | as_cue tee "$rel/PUBLIC_ENV" >/dev/null
+
+  if ! as_cue bash -c "cd '$rel' && pnpm install --frozen-lockfile --prefer-offline --reporter=append-only >'$rel/install.log' 2>&1"; then
+    tail -30 "$rel/install.log"; log "install FAILED; live site untouched"; exit 1
+  fi
+  if ! as_cue bash -c "cd '$rel' && NODE_OPTIONS=--max-old-space-size=4096 NEXT_TELEMETRY_DISABLED=1 pnpm build >'$rel/build.log' 2>&1"; then
+    tail -40 "$rel/build.log"; log "build FAILED; live site untouched"; exit 1
+  fi
+
+  port=$(other_port "$(live_port)")
+  log "starting on :$port"
+  start_on "$rel" "$port"
+  if ! health "$port"; then
+    pm2c logs "cue-$port" --nostream --lines 40 2>&1 | tail -40
+    pm2c delete "cue-$port" >/dev/null 2>&1 || true
+    log "new release FAILED its health check; live site untouched"; exit 1
+  fi
+  switch_to "$rel" "$port"
+  prune
+  log "deployed $sha"
+}
+
+rollback() {
+  local live prev port want d
+  live=$(live_release)
+  want=$(public_env)
+  prev=""
+  # Newest other release built for the current environment.
+  for d in $(ls -1d "$RELEASES"/*/ 2>/dev/null | sed 's#/$##' | sort -r); do
+    [ "$d" = "$live" ] && continue
+    [ "$(cat "$d/PUBLIC_ENV" 2>/dev/null)" = "$want" ] && { prev=$d; break; }
+  done
+  [ -n "$prev" ] || { echo "no previous release built for the current environment; deploy an older commit instead" >&2; exit 1; }
+  port=$(other_port "$(live_port)")
+  log "rolling back to $(basename "$prev") on :$port"
+  start_on "$prev" "$port"
+  health "$port" || { pm2c delete "cue-$port" >/dev/null 2>&1 || true; log "rollback FAILED its health check; nothing changed"; exit 1; }
+  switch_to "$prev" "$port"
+}
+
+status() {
+  echo "live: $(basename "$(live_release)") on :$(live_port), commit $(cat "$(live_release)/REVISION" 2>/dev/null || echo '?')"
+  echo "releases:"; ls -1 "$RELEASES"
+  pm2c ls
+}
+
+[ "$(id -u)" = 0 ] || { echo "run as root (sudo)" >&2; exit 1; }
+cd "$BASE" # the caller's directory may not be readable by cue
+cmd=${1:-}
+if [ "$cmd" = ssh ]; then
+  # Only these exact forms are accepted from the deploy key.
+  read -r -a words <<< "${SSH_ORIGINAL_COMMAND:-}"
+  case "${words[0]:-}" in
+    deploy) [ ${#words[@]} = 2 ] || exit 2; set -- deploy "${words[1]}" ;;
+    rollback | status) [ ${#words[@]} = 1 ] || exit 2; set -- "${words[0]}" ;;
+    *) echo "allowed: deploy <sha> | rollback | status" >&2; exit 2 ;;
+  esac
+  cmd=$1
+fi
+exec 9>/run/cue-deploy.lock
+flock -w 1800 9 || { echo "another deploy is still running" >&2; exit 1; }
+case "$cmd" in
+  deploy) deploy "${2:-}" ;;
+  rollback) rollback ;;
+  status) status ;;
+  *) echo "usage: cue-deploy deploy <sha> | rollback | status" >&2; exit 2 ;;
+esac

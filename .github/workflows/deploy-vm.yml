@@ -1,0 +1,48 @@
+name: deploy-vm
+
+# Deploys main to the Oracle VM (cue-prod-01) on every merge, with no
+# downtime. The VM builds the commit itself; a failed build or health check
+# leaves the live site untouched. "Run workflow" also offers rollback/status.
+# Runbook: docs/oracle-vm-runbook.md
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to do on the VM"
+        type: choice
+        options: [deploy, rollback, status]
+        default: deploy
+
+# The VM fetches the (public) repo itself; this job only needs SSH.
+permissions: {}
+
+# One at a time, in order; never cancel a deploy halfway.
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Run on the VM
+        env:
+          HOST: ${{ secrets.VM_HOST }}
+          KEY: ${{ secrets.VM_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VM_KNOWN_HOSTS }}
+          ACTION: ${{ inputs.action || 'deploy' }}
+          SHA: ${{ github.sha }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # The key may only run cue-deploy on the VM (forced command).
+          case "$ACTION" in
+            deploy) CMD="deploy $SHA" ;;
+            *) CMD="$ACTION" ;;
+          esac
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 \
+            "deploy@$HOST" "$CMD"

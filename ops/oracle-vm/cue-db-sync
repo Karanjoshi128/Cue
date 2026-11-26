@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Copies Cue's data from Supabase into the VM's PostgreSQL (database `cue`).
+# Reads from Supabase only; never writes there.
+#
+#   cue-db-sync rehearsal   copy, then blank every stored credential in the
+#                           copy, so nothing tested against it can reach a
+#                           social network, R2 bucket or mail account
+#   cue-db-sync final       copy as-is (the cutover; Supabase must be quiet)
+#
+# The public schema is replaced each run. Sign-in users (auth.users and
+# auth.identities) are copied with their ids; sessions are not, so everyone
+# signs in once after the move.
+set -euo pipefail
+MODE=${1:-}
+case "$MODE" in rehearsal|final) ;; *) echo "usage: cue-db-sync rehearsal|final" >&2; exit 2 ;; esac
+[ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
+cd /
+
+SRC_FILE=/etc/cue-db/supabase-source.url
+if [ ! -s $SRC_FILE ]; then
+  # First run: take the direct (session) URL from the stage 1 env file.
+  # libpq doesn't know Prisma's query parameters, so drop them.
+  u=$(set -a; . /srv/cue/shared/.env; echo "$DIRECT_URL")
+  (umask 077; echo "${u%%\?*}?sslmode=require" > $SRC_FILE)
+fi
+SRC=$(cat $SRC_FILE)
+APP="postgres://cue_app:$(cat /etc/cue-db/cue_app.pw)@127.0.0.1:5432/cue?sslmode=disable"
+AUTH="postgres://supabase_auth_admin:$(cat /etc/cue-db/supabase_auth_admin.pw)@127.0.0.1:5432/cue?sslmode=disable"
+TS=$(date -u +%Y%m%d-%H%M%S)
+DUMP_DIR=/srv/backups/supabase
+install -d -m 700 $DUMP_DIR
+DUMP=$DUMP_DIR/public-$TS.dump
+
+echo "== 1/5 dump public schema from Supabase ($MODE)"
+pg_dump "$SRC" --schema=public --no-owner --no-privileges --no-publications --no-subscriptions -Fc -f "$DUMP"
+ls -l "$DUMP" | awk '{print $5" bytes"}'
+
+echo "== 2/5 replace the local public schema"
+runuser -u postgres -- psql -q -v ON_ERROR_STOP=1 -d cue <<'SQL'
+drop schema if exists public cascade;
+-- the dump creates it again, owned by cue_app (who restores it)
+SQL
+# Hosted functions we don't use: Supabase's RLS helper (its event trigger is
+# not in the dump, and the app owns its tables so RLS never applies to it).
+pg_restore --no-owner --no-privileges --exit-on-error --single-transaction \
+  -L <(pg_restore -l "$DUMP" | grep -v 'FUNCTION public rls_auto_enable') \
+  -d "$APP" "$DUMP"
+
+echo "== 3/5 copy sign-in users"
+copy_table() {
+  local t=$1
+  # Columns both sides have, minus generated ones (they can't be inserted).
+  local cols
+  cols=$(psql "$AUTH" -tA -c "select string_agg(quote_ident(column_name), ',' order by ordinal_position)
+    from information_schema.columns where table_schema='auth' and table_name='$t' and is_generated='NEVER'
+    and column_name = any (string_to_array('$(psql "$SRC" -tA -c "select string_agg(column_name, ',') from information_schema.columns where table_schema='auth' and table_name='$t'")', ','))")
+  psql "$SRC" -q -c "\copy (select $cols from auth.$t) to stdout" | psql "$AUTH" -q -c "\copy auth.$t ($cols) from stdin"
+}
+psql "$AUTH" -q -v ON_ERROR_STOP=1 -c "truncate auth.identities, auth.sessions, auth.refresh_tokens, auth.one_time_tokens, auth.mfa_factors, auth.flow_state cascade; delete from auth.users;"
+copy_table users
+copy_table identities
+
+echo "== 4/5 compare row counts"
+counts() { # $1 = public tables, $2 = auth tables
+  psql "${2:-$1}" -tA -F' ' -c "select 'auth.users', count(*) from auth.users union all select 'auth.identities', count(*) from auth.identities"
+  for t in $(psql "$APP" -tA -c "select tablename from pg_tables where schemaname='public' order by 1"); do
+    psql "$1" -tA -F' ' -c "select 'public.$t', count(*) from public.\"$t\""
+  done
+}
+diff <(counts "$SRC") <(counts "$APP" "$AUTH") >/tmp/cue-db-sync.diff && echo "all row counts match ($(counts "$APP" "$AUTH" | wc -l) tables)" || {
+  echo "ROW COUNTS DIFFER (source < > local):"; cat /tmp/cue-db-sync.diff
+  [ "$MODE" = final ] && exit 1
+}
+
+if [ "$MODE" = rehearsal ]; then
+  echo "== 5/5 rehearsal: blank stored credentials in the copy"
+  psql "$APP" -q -v ON_ERROR_STOP=1 <<'SQL'
+update "SocialAccount" set "accessToken" = 'rehearsal', "refreshToken" = null;
+update "StorageConfig" set "secretAccessKey" = 'rehearsal';
+update "MailerAccount" set "apiKey" = 'rehearsal', "webhookSecret" = null;
+SQL
+  # Other tables that hold tokens (API keys, OAuth) only let callers in;
+  # they can't make Cue call out.
+  psql "$APP" -tA -c "select 'social accounts blanked: '||count(*) from \"SocialAccount\" where \"accessToken\"='rehearsal'"
+else
+  echo "== 5/5 final: analyze"
+  psql "$APP" -q -c "analyze"
+fi
+echo "== done ($DUMP)"

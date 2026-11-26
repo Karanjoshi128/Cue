@@ -83,10 +83,23 @@ export default async function ComposerPage({
   const slotTime = time && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : "09:00";
   const prefillDate =
     date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T${slotTime}` : undefined;
+  // A client picked in the topbar switcher fixes the post's client, so the
+  // composer hides its own Client picker. An edit keeps its post's client:
+  // when that differs from the switcher, the picker stays.
+  const scopedClientId =
+    scopeClientId && clients.some((c) => c.id === scopeClientId)
+      ? scopeClientId
+      : undefined;
+  const lockedClientId = initial
+    ? initial.clientId === scopedClientId
+      ? scopedClientId
+      : undefined
+    : scopedClientId;
   // The calendar passes a client only when exactly one was filtered, so a new
   // post never silently inherits a filter. Ignore ids outside this workspace.
   const prefillClientId =
-    client && clients.some((c) => c.id === client) ? client : scopeClientId;
+    lockedClientId ??
+    (client && clients.some((c) => c.id === client) ? client : undefined);
 
   return (
     <div className="space-y-8">
@@ -116,7 +129,9 @@ export default async function ComposerPage({
         description={
           initial
             ? "Changes apply to every account this post targets."
-            : "Pick the client and accounts, write the post, then choose when it goes out."
+            : lockedClientId
+              ? "Pick the accounts, write the post, then choose when it goes out."
+              : "Pick the client and accounts, write the post, then choose when it goes out."
         }
       />
       <Composer
@@ -124,6 +139,7 @@ export default async function ComposerPage({
         initial={initial}
         prefillDate={prefillDate}
         defaultClientId={prefillClientId}
+        lockedClientId={lockedClientId}
       />
     </div>
   );

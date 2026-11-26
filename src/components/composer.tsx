@@ -268,11 +268,14 @@ export function Composer({
   initial,
   prefillDate,
   defaultClientId,
+  lockedClientId,
 }: {
   clients: ClientLite[];
   initial?: ComposerInitial;
   prefillDate?: string;
   defaultClientId?: string;
+  /** Set by the topbar client switcher: fixes the client and hides the picker. */
+  lockedClientId?: string;
 }) {
   const router = useRouter();
   const editing = Boolean(initial);
@@ -296,6 +299,16 @@ export function Composer({
     initial?.clientId ?? defaultClientId ?? clients[0]?.id ?? "",
   );
   const [selected, setSelected] = useState<string[]>(initial?.accountIds ?? []);
+  // The switcher refreshes this page in place, so follow a new locked client
+  // here. Back to "All clients" keeps the client you were on, now pickable.
+  const [lockSeen, setLockSeen] = useState(lockedClientId);
+  if (lockSeen !== lockedClientId) {
+    setLockSeen(lockedClientId);
+    if (lockedClientId && lockedClientId !== clientId) {
+      setClientId(lockedClientId);
+      setSelected([]);
+    }
+  }
   const [body, setBody] = useState(initial?.body ?? "");
   const [firstComment, setFirstComment] = useState(initial?.firstComment ?? "");
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -677,30 +690,32 @@ export function Composer({
             }
           >
             <div className="space-y-5">
-              <div>
-                <FieldLabel>Client</FieldLabel>
-                <Select
-                  value={clientId}
-                  items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
-                  onValueChange={(v) => {
-                    setClientId((v as string) ?? "");
-                    setSelected([]);
-                  }}
-                >
-                  <SelectTrigger className="h-10 w-full">
-                    {client && <ClientDot color={client.color} />}
-                    <SelectValue placeholder="Select a client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        <ClientDot color={c.color} />
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {!lockedClientId && (
+                <div>
+                  <FieldLabel>Client</FieldLabel>
+                  <Select
+                    value={clientId}
+                    items={Object.fromEntries(clients.map((c) => [c.id, c.name]))}
+                    onValueChange={(v) => {
+                      setClientId((v as string) ?? "");
+                      setSelected([]);
+                    }}
+                  >
+                    <SelectTrigger className="h-10 w-full">
+                      {client && <ClientDot color={client.color} />}
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          <ClientDot color={c.color} />
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div>
                 <FieldLabel>Publish to</FieldLabel>

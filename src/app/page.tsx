@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { preload } from "react-dom";
 import type { Metadata } from "next";
 import {
   ArrowRight,
@@ -178,6 +179,9 @@ function Bento({
 }
 
 export default function HomePage() {
+  // The hero's grain tile is its largest paint; start fetching it with the
+  // HTML instead of waiting for the stylesheet to reveal it.
+  preload("/grain.webp", { as: "image", fetchPriority: "high" });
   return (
     <div className="bg-background text-foreground min-h-dvh overflow-x-clip">
       <SiteHeader />

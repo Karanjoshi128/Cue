@@ -90,7 +90,9 @@ function Word({
   range: [number, number];
   em?: boolean;
 }) {
-  const opacity = useTransform(progress, range, [0.14, 1]);
+  // Dim words stay readable: these floors keep 3:1 contrast (the large-text
+  // level) in every theme. The accent colour has less contrast to spare.
+  const opacity = useTransform(progress, range, [em ? 0.8 : 0.5, 1]);
   const Tag = em ? motion.em : motion.span;
   return (
     <Tag style={{ opacity }} className={cn(em && "text-primary")}>

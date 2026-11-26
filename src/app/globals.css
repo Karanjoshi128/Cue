@@ -438,7 +438,10 @@
     pointer-events: none;
     opacity: var(--grain-opacity);
     mix-blend-mode: soft-light;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    /* A 160px noise tile pre-rendered from the old inline feTurbulence SVG
+       (same filter, same look). Drawing that SVG filter over a whole hero
+       held up the first paint on phones by seconds. */
+    background-image: url("/grain.webp");
   }
 
   /* A rotating conic highlight that traces an element's border. */

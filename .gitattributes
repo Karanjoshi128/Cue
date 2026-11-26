@@ -1,0 +1,2 @@
+# Server scripts run on Linux; keep LF even in Windows checkouts.
+ops/oracle-vm/** text eol=lf

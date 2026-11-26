@@ -70,6 +70,15 @@ and Supabase pg_cron runs the scheduled jobs.
   - Everything is encrypted with `age` to the backup key on Karan's PC.
   - Copies are kept for 14 days in `/srv/backups/nightly`, and also go to the R2 bucket
     `cue-backups` once `/etc/cue-backup/r2.env` exists.
+- **Idle guard**: the `cue-mem-floor` service holds spare RAM so about 30% of memory is in use.
+  - Oracle may reclaim an Always Free VM when CPU (95th percentile), network and memory are all
+    under 20% for 7 days. Cue alone uses about 8% of the RAM, so all three were under.
+  - It gives memory back within 30 s when the app, Postgres or a deploy build need it, and the
+    kernel kills it first under memory pressure. It never goes to swap.
+  - Check it with `journalctl -u cue-mem-floor -n 5`. Undo it with
+    `sudo systemctl disable --now cue-mem-floor`.
+  - An OCI Monitoring alarm emails Karan if Oracle's `MemoryUtilization` for the VM stays under 22%
+    for an hour.
 - **Firewall**: Oracle's security list and the VM's `iptables` both allow only
   22, 80 and 443. Postgres, sign-in, the app ports and pm2 are never public.
 - **Hardening**: SSH keys only, no root login, fail2ban on SSH, journald capped at 1 GB.
@@ -78,7 +87,8 @@ and Supabase pg_cron runs the scheduled jobs.
 Setup scripts, in order: [01-base.sh](../ops/oracle-vm/01-base.sh),
 [02-runtime.sh](../ops/oracle-vm/02-runtime.sh), [03-caddy.sh](../ops/oracle-vm/03-caddy.sh),
 [04-postgres.sh](../ops/oracle-vm/04-postgres.sh), [05-auth.sh](../ops/oracle-vm/05-auth.sh),
-[06-cron.sh](../ops/oracle-vm/06-cron.sh) and [07-backup.sh](../ops/oracle-vm/07-backup.sh).
+[06-cron.sh](../ops/oracle-vm/06-cron.sh), [07-backup.sh](../ops/oracle-vm/07-backup.sh) and
+[08-mem-floor.sh](../ops/oracle-vm/08-mem-floor.sh).
 Each one is safe to re-run, and keeps existing keys and passwords.
 
 ## Files
@@ -102,6 +112,7 @@ Each one is safe to re-run, and keeps existing keys and passwords.
 | `/usr/local/sbin/cue-cutover` | Switch-over script ([source](../ops/oracle-vm/cue-cutover)) |
 | `/usr/local/sbin/cue-db-sync` | Copy Supabase into the local database ([source](../ops/oracle-vm/cue-db-sync)) |
 | `/usr/local/sbin/cue-backup` | One backup now (written by [07-backup.sh](../ops/oracle-vm/07-backup.sh)) |
+| `/usr/local/sbin/cue-mem-floor` | The idle guard (written by [08-mem-floor.sh](../ops/oracle-vm/08-mem-floor.sh)) |
 | `/var/log/caddy/trycue.log` | Access log (rolled at 50 MB, 5 kept) |
 
 ## Deploying

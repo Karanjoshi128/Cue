@@ -21,6 +21,9 @@
 # production
 /build
 
+# promo video project (Remotion), kept local
+/cue-video/
+
 # misc
 .DS_Store
 *.pem

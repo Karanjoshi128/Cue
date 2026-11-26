@@ -41,5 +41,22 @@ trycue.space {
 		}
 	}
 
-	import /etc/caddy/cue-upstream.caddy
+	# Sign-in (self-hosted Supabase Auth). Same origin as the app, so no CORS
+	# and no extra DNS name. Its admin API is never reachable from outside.
+	handle_path /auth/v1/* {
+		@admin path /admin /admin/*
+		respond @admin 404
+		reverse_proxy 127.0.0.1:9999
+	}
+
+	handle {
+		import /etc/caddy/cue-upstream.caddy
+	}
+}
+
+# Email templates for the Auth server. Loopback only.
+http://127.0.0.1:8089 {
+	bind 127.0.0.1
+	root * /etc/caddy/cue-auth-templates
+	file_server
 }

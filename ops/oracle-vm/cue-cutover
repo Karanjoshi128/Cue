@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# Moves Cue off Vercel + Supabase onto this VM, and back. Runbook:
+# docs/oracle-vm-runbook.md ("Stage 2").
+#
+#   cue-cutover check          read-only preflight; changes nothing
+#   cue-cutover secret NAME    type a value (hidden) once; it is written to both
+#                              env files (and to sign-in email for RESEND_API_KEY)
+#   cue-cutover dns vm|vercel  point trycue.space + www at this VM, or back at Vercel
+#   cue-cutover maintenance on|off
+#   cue-cutover stage2         the whole move (downtime about 10 minutes):
+#                              maintenance page, DNS to the VM, stop Supabase
+#                              pg_cron, final copy, backup, rebuild on the
+#                              VM's own database and sign-in, timers on
+#   cue-cutover rollback       back to Supabase (DNS stays on the VM). Data
+#                              written on the VM after the move is NOT copied
+#                              back; the latest backup holds it.
+set -euo pipefail
+[ "$(id -u)" = 0 ] || { echo "run with sudo" >&2; exit 1; }
+cd /
+VM_IP=130.210.64.74
+SHARED=/srv/cue/shared
+UPSTREAM=/etc/caddy/cue-upstream.caddy
+JOBS="publish mailer automations reply-desk media-retention"
+STATE=/srv/cue/shared/STAGE
+log() { echo "[$(date -u +%H:%M:%S)] $*"; }
+SRC() { cat /etc/cue-db/supabase-source.url; }
+
+cf() { # cf METHOD PATH [JSON]
+  local tok; tok=$(. /etc/caddy/cloudflare.env; printf %s "$CF_API_TOKEN")
+  curl -sS -X "$1" -H @- -H 'Content-Type: application/json' ${3:+--data "$3"} \
+    "https://api.cloudflare.com/client/v4$2" <<<"Authorization: Bearer $tok"
+}
+zone() { cf GET "/zones?name=trycue.space" | python3 -c 'import sys,json; print(json.load(sys.stdin)["result"][0]["id"])'; }
+records() { # prints: id type name content
+  cf GET "/zones/$1/dns_records?per_page=100" | python3 -c '
+import sys, json
+for r in json.load(sys.stdin)["result"]:
+    if r["name"] in ("trycue.space", "www.trycue.space") and r["type"] in ("A", "AAAA", "CNAME"):
+        print(r["id"], r["type"], r["name"], r["content"])'
+}
+
+dns() { # vm | vercel
+  local z id type name content
+  z=$(zone)
+  while read -r id type name content; do
+    case "$1:$name" in
+      vm:trycue.space)      body="{\"type\":\"A\",\"name\":\"trycue.space\",\"content\":\"$VM_IP\",\"ttl\":60,\"proxied\":false}" ;;
+      vm:www.trycue.space)  body="{\"type\":\"A\",\"name\":\"www.trycue.space\",\"content\":\"$VM_IP\",\"ttl\":60,\"proxied\":false}" ;;
+      vercel:trycue.space)  body='{"type":"A","name":"trycue.space","content":"216.198.79.1","ttl":1,"proxied":false}' ;;
+      vercel:www.trycue.space) body='{"type":"CNAME","name":"www.trycue.space","content":"cname.vercel-dns.com","ttl":1,"proxied":false}' ;;
+      *) continue ;;
+    esac
+    cf PUT "/zones/$z/dns_records/$id" "$body" | python3 -c 'import sys,json; r=json.load(sys.stdin); print(" ", "ok" if r["success"] else r["errors"], r.get("result",{}).get("type"), r.get("result",{}).get("name"), r.get("result",{}).get("content"))'
+  done < <(records "$z")
+  log "DNS now points at $1 (check: dig +short trycue.space @1.1.1.1)"
+}
+
+maintenance() {
+  local port
+  port=$(grep -o '127.0.0.1:[0-9]*' "$UPSTREAM" | head -1)
+  if [ "$1" = on ]; then
+    # The "# live" line keeps the port for cue-deploy.
+    cat > "$UPSTREAM" <<EOF
+# live $port (maintenance: cue-cutover maintenance off restores it)
+header Retry-After 600
+header Cache-Control no-store
+respond "Cue is moving to its new server. Back in a few minutes." 503
+EOF
+  else
+    echo "reverse_proxy $port" > "$UPSTREAM"
+  fi
+  systemctl reload caddy
+  log "maintenance $1 (app port ${port#*:})"
+}
+
+supabase_cron() { # on | off: the cue-* pg_cron jobs on Supabase
+  local v; [ "$1" = on ] && v=true || v=false
+  psql "$(SRC)" -q -v ON_ERROR_STOP=1 -c "update cron.job set active = $v where jobname like 'cue-%'"
+  psql "$(SRC)" -tA -c "select jobname||'='||active from cron.job where jobname like 'cue-%' order by jobid" | tr '\n' ' '; echo
+}
+
+timers() { # on | off
+  local j
+  for j in $JOBS; do
+    if [ "$1" = on ]; then systemctl enable --now "cue-cron-$j.timer" >/dev/null 2>&1
+    else systemctl disable --now "cue-cron-$j.timer" >/dev/null 2>&1 || true; fi
+  done
+  log "VM cron timers $1: $(systemctl list-timers 'cue-cron-*' --no-pager | grep -c cue-cron) active"
+}
+
+secret() { # secret NAME: prompt (hidden), then set NAME=value in both env files
+  local name=$1 val f
+  [[ $name =~ ^[A-Z][A-Z0-9_]*$ ]] || { echo "bad name" >&2; exit 2; }
+  read -rsp "$name: " val; echo
+  [ -n "$val" ] || { echo "empty; nothing changed"; exit 1; }
+  for f in $SHARED/.env $SHARED/.env.stage2 $SHARED/.env.stage1; do
+    [ -f "$f" ] || continue
+    grep -v "^$name=" "$f" > "$f.tmp" || true
+    printf '%s="%s"
+' "$name" "$val" >> "$f.tmp"
+    chown cue:cue "$f.tmp"; chmod 600 "$f.tmp"; mv "$f.tmp" "$f"
+    echo "  set in $f"
+  done
+  if [ "$name" = RESEND_API_KEY ]; then
+    printf 'GOTRUE_SMTP_PASS=%s
+' "$val" > /etc/cue-auth/smtp.env
+    chown root:cueauth /etc/cue-auth/smtp.env; chmod 640 /etc/cue-auth/smtp.env
+    systemctl restart cue-auth; echo "  set as the sign-in email password; auth restarted"
+  fi
+  echo "Redeploy for the app to use it (Actions > deploy-vm > Run workflow, or sudo cue-deploy deploy <sha>)."
+}
+
+env_get() { (set -a; . "$1"; eval "printf %s \"\${$2:-}\""); }
+
+check() {
+  local bad=0 v
+  echo "== preflight (read-only)"
+  echo "stage now: $(cat $STATE 2>/dev/null || echo 1)"
+  for v in RESEND_API_KEY LINKEDIN_PAGES_CLIENT_ID LINKEDIN_PAGES_CLIENT_SECRET; do
+    [ -n "$(env_get $SHARED/.env.stage2 $v)" ] && echo "  ok   $v" || { echo "  MISSING $v (in $SHARED/.env.stage2)"; bad=1; }
+  done
+  [ -n "$(. /etc/cue-auth/smtp.env; printf %s "${GOTRUE_SMTP_PASS:-}")" ] && echo "  ok   sign-in email (GOTRUE_SMTP_PASS)" \
+    || { echo "  MISSING GOTRUE_SMTP_PASS in /etc/cue-auth/smtp.env: nobody could get a sign-in code"; bad=1; }
+  systemctl is-active -q postgresql@17-main && echo "  ok   postgres" || { echo "  DOWN postgres"; bad=1; }
+  curl -fsS -o /dev/null http://127.0.0.1:9999/health && echo "  ok   auth server" || { echo "  DOWN auth server"; bad=1; }
+  echo "  last backup: $(cat /srv/backups/nightly/LAST_OK 2>/dev/null || echo never)"
+  [ -s /etc/cue-backup/r2.env ] && echo "  ok   off-site backup" || { echo "  MISSING off-site backup (/etc/cue-backup/r2.env, see the runbook)"; bad=1; }
+  echo "  supabase pg_cron: $(psql "$(SRC)" -tA -c "select string_agg(jobname||'='||active, ' ' order by jobid) from cron.job where jobname like 'cue-%'")"
+  echo "  VM timers active: $(systemctl list-timers 'cue-cron-*' --no-pager | grep -c cue-cron || true)"
+  echo "  DNS records:"; records "$(zone)" | awk '{print "    "$2" "$3" "$4}'
+  echo "  public DNS: $(dig +short trycue.space @1.1.1.1 | tr '\n' ' ')"
+  echo "  live app: $(grep -o '127.0.0.1:[0-9]*\|respond' $UPSTREAM | head -1)"
+  [ $bad = 0 ] && echo "== ready" || echo "== NOT ready"
+  return $bad
+}
+
+stage2() {
+  [ "$(cat $STATE 2>/dev/null)" = 2 ] && { echo "already on stage 2"; exit 1; }
+  check || { echo "fix the items above first"; exit 1; }
+  local t0 sha
+  t0=$(date +%s)
+  log "1/9 maintenance page on"; maintenance on
+  log "2/9 DNS to this VM"; dns vm
+  log "3/9 stop Supabase pg_cron (cue-*)"; supabase_cron off
+  # Wait out DNS caches (TTL 60-300 s) so late writes through Vercel still
+  # land before the final copy, and in-flight cron calls finish.
+  local wait=$(( 300 - ($(date +%s) - t0) )); [ $wait -gt 0 ] && { log "4/9 waiting ${wait}s for DNS caches and in-flight jobs"; sleep $wait; }
+  log "5/9 final copy from Supabase"; cue-db-sync final
+  log "6/9 backup"; cue-backup
+  log "7/9 switch the app to the VM database + sign-in, rebuild"
+  cp -p $SHARED/.env $SHARED/.env.stage1
+  cp -p $SHARED/.env.stage2 $SHARED/.env
+  sha=$(git --git-dir=/srv/cue/repo.git ls-remote https://github.com/Karanjoshi128/Cue.git refs/heads/main | cut -f1)
+  if ! cue-deploy deploy "$sha"; then
+    log "BUILD FAILED: restoring the stage 1 env, Supabase cron back on, maintenance off"
+    cp -p $SHARED/.env.stage1 $SHARED/.env
+    supabase_cron on; maintenance off; exit 1
+  fi
+  # cue-deploy switched traffic to the new release, which ends maintenance.
+  log "8/9 VM cron timers on"; timers on
+  echo 2 > $STATE
+  log "9/9 smoke test"
+  smoke
+  log "stage 2 done in $(( ($(date +%s) - t0) / 60 )) min. Sign in at https://trycue.space/login to confirm the email code arrives."
+}
+
+smoke() {
+  local R="--resolve trycue.space:443:127.0.0.1" u
+  for u in /auth/v1/health / /login /api/health; do
+    printf '  %-18s %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code}' $R https://trycue.space$u)"
+  done
+  runuser -u cue -- /usr/local/bin/cue-cron publish 60 | sed 's/^/  cron /'
+}
+
+rollback() {
+  [ "$(cat $STATE 2>/dev/null)" = 2 ] || { echo "not on stage 2; nothing to roll back"; exit 1; }
+  [ -s $SHARED/.env.stage1 ] || { echo "no $SHARED/.env.stage1"; exit 1; }
+  log "1/5 maintenance on, VM timers off"; maintenance on; timers off
+  log "2/5 backup of the VM database (holds anything written since the move)"; cue-backup
+  log "3/5 back to the stage 1 env (Supabase), rebuild"
+  cp -p $SHARED/.env $SHARED/.env.stage2
+  cp -p $SHARED/.env.stage1 $SHARED/.env
+  local sha; sha=$(git --git-dir=/srv/cue/repo.git ls-remote https://github.com/Karanjoshi128/Cue.git refs/heads/main | cut -f1)
+  cue-deploy deploy "$sha" || { log "BUILD FAILED; still in maintenance. Fix, then: sudo cue-deploy deploy $sha"; exit 1; }
+  log "4/5 Supabase pg_cron back on"; supabase_cron on
+  echo 1 > $STATE
+  log "5/5 done: app on Supabase again (DNS still on this VM; 'cue-cutover dns vercel' to go back to Vercel)"
+}
+
+case "${1:-}" in
+  check) check ;;
+  secret) [ -n "${2:-}" ] || { echo "usage: cue-cutover secret NAME" >&2; exit 2; }; secret "$2" ;;
+  dns) case "${2:-}" in vm|vercel) dns "$2" ;; *) echo "usage: cue-cutover dns vm|vercel" >&2; exit 2 ;; esac ;;
+  maintenance) case "${2:-}" in on|off) maintenance "$2" ;; *) echo "usage: cue-cutover maintenance on|off" >&2; exit 2 ;; esac ;;
+  stage2) stage2 ;;
+  rollback) rollback ;;
+  smoke) smoke ;;
+  *) sed -n '2,17p' "$0"; exit 2 ;;
+esac

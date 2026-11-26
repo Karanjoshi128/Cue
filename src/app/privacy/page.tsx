@@ -184,17 +184,15 @@ export default async function PrivacyPage() {
             </p>
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong className="text-foreground">Supabase</strong> -
-                authentication and database.
+                <strong className="text-foreground">Oracle Cloud</strong> -
+                hosting for the application, its database and sign-in, on
+                servers in Mumbai, India.
               </li>
               <li>
                 <strong className="text-foreground">Cloudflare</strong> - DNS
-                for trycue.space, and R2 storage for the media you upload,
-                unless your workspace connects its own storage.
-              </li>
-              <li>
-                <strong className="text-foreground">Oracle Cloud</strong> -
-                application hosting, on servers in Mumbai, India.
+                for trycue.space, R2 storage for the media you upload (unless
+                your workspace connects its own storage), and encrypted
+                database backups.
               </li>
               <li>
                 <strong className="text-foreground">Resend</strong> - delivers

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGE } from "@/lib/og-image";
 import { notFound } from "next/navigation";
 import { HelpShell } from "@/components/help/help-shell";
 import { GuideBody } from "@/components/help/guide-view";
@@ -29,6 +30,7 @@ export async function generateMetadata({
       description: guide.summary,
       url: `/help/${guide.slug}`,
       type: "article",
+      images: [OG_IMAGE],
     },
   };
 }

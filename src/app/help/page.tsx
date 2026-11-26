@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OG_IMAGE } from "@/lib/og-image";
 import { HelpShell } from "@/components/help/help-shell";
 import { HelpHomeBody } from "@/components/help/help-home";
 
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
       "Step-by-step guides for scheduling LinkedIn, Instagram and YouTube posts for every client with Cue.",
     url: "/help",
     type: "website",
+    images: [OG_IMAGE],
   },
 };
 

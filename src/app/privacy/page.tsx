@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 // Operating entity: Karan Joshi (individual). Governing law: India.
 // Describes Cue's actual data practices for Meta / LinkedIn / Google review.
 // The YouTube API Services section is required for Google OAuth verification.
-const UPDATED = "November 25, 2026";
+const UPDATED = "November 26, 2026";
 const ENTITY = "Karan Joshi (“Cue”, “we”, “us”)";
 
 export default async function PrivacyPage() {

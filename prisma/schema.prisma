@@ -20,9 +20,11 @@ model Workspace {
   name      String
   createdAt DateTime @default(now())
 
-  // Set by the platform admin panel (src/app/admin). Defaults leave every
-  // workspace exactly as it was: no limits, every feature on, not suspended.
-  plan             Plan      @default(UNLIMITED)
+  // Set by the platform admin panel (src/app/admin). The plan is the
+  // workspace's tier: new workspaces start on FREE (SIGNUP_PLAN in
+  // src/lib/plans.ts sets it explicitly); every other default leaves a
+  // workspace with every feature on and not suspended.
+  plan             Plan      @default(FREE)
   disabledFeatures String[]  @default([]) // feature keys from src/lib/plans.ts
   // Features still waiting on Meta/Google approval (EARLY_FEATURES in
   // src/lib/plans.ts), unlocked here by a platform admin before launch.
@@ -40,7 +42,8 @@ model Workspace {
   storage     StorageConfig?
 }
 
-// Limits for each plan live in src/lib/plans.ts.
+// Limits for each plan live in src/lib/plans.ts. Customers are on FREE, PRO
+// or AGENCY; UNLIMITED is internal, assigned only by a platform admin.
 enum Plan {
   FREE
   PRO

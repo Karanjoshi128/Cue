@@ -42,16 +42,24 @@ workspace.
 - **Pause publishing.** The every-5-minutes run skips everything and "Post now"
   is refused. Every member sees a notice. On resume, overdue posts go out on the
   next run.
-- **Plans.** Free, Pro, Agency, Unlimited (limits in `src/lib/plans.ts`).
-  - Every workspace starts on **Unlimited**, so nothing changes until you
-    assign a plan.
+- **Plans (tiers).** Free, Pro and Agency for customers; Unlimited is internal,
+  for Cue's own or comped workspaces (limits in `src/lib/plans.ts`).
+  - The plan belongs to the workspace: everyone in it shares the tier.
+  - A new workspace starts on **Free** (`SIGNUP_PLAN`). Workspaces that existed
+    on 27 Nov 2026 moved from Unlimited to **Pro**
+    (`prisma/manual/2026-11-27-plan-tiers.sql`).
+  - Change a plan on the **Users** page (the person's current workspace) or on
+    the workspace's own page. Every change is in the audit log with from and to.
+    Moving down past current usage removes nothing; the message lists what's
+    over, and adding more is refused until usage comes down.
   - Limits are checked when a member adds a client, invites someone, creates a
     post or an API key, or uploads to Cue's bucket.
   - Storage counts the real file sizes. Each upload link is locked to the size
     that was checked, and sizes are read back from the bucket when a post is
     saved.
   - A workspace's own bucket isn't counted.
-  - Members see their plan and usage in Settings.
+  - Members see their plan and usage in Settings, and the plan as a tag next to
+    their name in Settings → Account.
 - **Feature switches.** These are API access, own storage, and connecting
   LinkedIn, Instagram and YouTube.
   - Everything is on by default.

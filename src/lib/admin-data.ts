@@ -347,7 +347,7 @@ export async function listUsers(opts: { q?: string; status?: "banned"; page?: nu
         lastSeenAt: true,
         bannedAt: true,
         bannedReason: true,
-        workspace: { select: { id: true, name: true, suspendedAt: true, earlyFeatures: true } },
+        workspace: { select: { id: true, name: true, plan: true, suspendedAt: true, earlyFeatures: true } },
         _count: { select: { posts: true } },
       },
     }),

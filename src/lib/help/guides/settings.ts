@@ -57,16 +57,17 @@ export const planAndUsage: HelpGuide = {
       id: "plans",
       title: "What each plan includes",
       table: {
-        head: ["", "Free", "Pro", "Agency", "Unlimited"],
+        head: ["", "Free", "Pro", "Agency"],
         rows: [
-          ["Clients", "2", "10", "50", "No limit"],
-          ["Team members", "2", "5", "25", "No limit"],
-          ["Posts a month", "30", "300", "2,000", "No limit"],
-          ["API keys", "1", "5", "20", "No limit"],
-          ["Storage on Cue", "1 GB", "20 GB", "100 GB", "No limit"],
+          ["Clients", "2", "10", "50"],
+          ["Team members", "2", "5", "25"],
+          ["Posts a month", "30", "300", "2,000"],
+          ["API keys", "1", "5", "20"],
+          ["Storage on Cue", "1 GB", "20 GB", "100 GB"],
         ],
       },
       points: [
+        "The plan belongs to the workspace, so everyone in it shares the same limits. A new workspace starts on **Free**. Your plan is also shown next to your name in **Settings** → **Account**.",
         "**Posts a month** counts every post created since the 1st of the month, including drafts and copies.",
         "Files kept in your own storage (see [Use your own media storage](/help/use-your-own-storage)) don't count towards **Storage on Cue**.",
         "Videos are deleted 7 days after their post goes live, and stop counting then (see [Media files](/help/media-files)).",

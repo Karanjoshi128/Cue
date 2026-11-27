@@ -167,9 +167,23 @@ export function ActionButton({
   );
 }
 
-const PLAN_LABELS = { FREE: "Free", PRO: "Pro", AGENCY: "Agency", UNLIMITED: "Unlimited" };
+// Mirrors PLANS in src/lib/plans.ts, which this client file can't import (it
+// pulls in Prisma). Unlimited is internal: for Cue's own or comped workspaces.
+const PLAN_LABELS = { FREE: "Free", PRO: "Pro", AGENCY: "Agency", UNLIMITED: "Unlimited (internal)" };
 
-export function PlanSelect({ workspaceId, plan }: { workspaceId: string; plan: keyof typeof PLAN_LABELS }) {
+/** The workspace's tier. Changing it applies to everyone in the workspace. */
+export function PlanSelect({
+  workspaceId,
+  plan,
+  size = "default",
+  workspaceName,
+}: {
+  workspaceId: string;
+  plan: keyof typeof PLAN_LABELS;
+  size?: "sm" | "default";
+  /** For the label when the select sits in a list of several workspaces. */
+  workspaceName?: string;
+}) {
   const { pending, run } = useRun();
   return (
     <Select
@@ -177,7 +191,12 @@ export function PlanSelect({ workspaceId, plan }: { workspaceId: string; plan: k
       items={PLAN_LABELS}
       onValueChange={(v) => run(() => setWorkspacePlan(workspaceId, String(v)))}
     >
-      <SelectTrigger className="w-40" disabled={pending} aria-label="Plan">
+      <SelectTrigger
+        size={size}
+        className={size === "sm" ? "w-44" : "w-48"}
+        disabled={pending}
+        aria-label={workspaceName ? `Plan for ${workspaceName}` : "Plan"}
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

@@ -74,7 +74,8 @@ export default async function SettingsPage() {
     user && apiAllowed ? connectedApps(user.id) : [],
     requestOrigin(),
   ]);
-  const plan = PLANS[workspace?.plan ?? "UNLIMITED"];
+  // The tier belongs to the workspace in view, not to the person.
+  const plan = workspace ? PLANS[workspace.plan] : null;
 
   const sections = [
     { id: "account", label: "Account" },
@@ -124,6 +125,7 @@ export default async function SettingsPage() {
               name={user?.name ?? ""}
               email={user?.email ?? "-"}
               role={user?.role ?? "MANAGER"}
+              plan={plan?.label}
             />
             {/* Alerts go to admins, so only they see the switch. */}
             {isAdmin && (
@@ -175,9 +177,13 @@ export default async function SettingsPage() {
           <Section
             id="plan"
             title="Plan and usage"
-            description={`Your workspace is on the ${plan.label} plan. To change it, contact Cue support.`}
+            description={
+              plan
+                ? `Your workspace is on the ${plan.label} plan. To change it, contact Cue support.`
+                : "Your workspace's plan and how much of it is used."
+            }
           >
-            {usage && (
+            {usage && plan && (
               <dl className="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
                 {(Object.keys(LIMIT_LABELS) as LimitKey[]).map((key) => {
                   const limit = plan.limits[key];

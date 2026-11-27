@@ -11,10 +11,13 @@ export function ProfileForm({
   name,
   email,
   role,
+  plan,
 }: {
   name: string;
   email: string;
   role: string;
+  /** The workspace's tier label ("Pro"); the tier belongs to the workspace. */
+  plan?: string | null;
 }) {
   const router = useRouter();
   const [value, setValue] = useState(name);
@@ -56,6 +59,14 @@ export function ProfileForm({
             <span className="bg-muted text-foreground shrink-0 rounded-md px-1.5 py-0.5 text-[0.6875rem] font-medium capitalize">
               {role.toLowerCase()}
             </span>
+            {plan && (
+              <span
+                className="border-primary/25 bg-primary/8 text-primary shrink-0 rounded-md border px-1.5 py-px text-[0.6875rem] font-medium"
+                title="Your workspace's plan"
+              >
+                {plan} plan
+              </span>
+            )}
           </div>
         </div>
       </div>

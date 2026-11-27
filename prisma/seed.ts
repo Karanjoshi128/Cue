@@ -17,6 +17,9 @@ async function main() {
   await prisma.workspace.create({
     data: {
       name: "My workspace",
+      // The operator's own workspace: the internal tier, not a customer's
+      // Free plan (src/lib/plans.ts).
+      plan: "UNLIMITED",
       users: { create: { email, name: "Admin", role: "ADMIN" } },
     },
   });

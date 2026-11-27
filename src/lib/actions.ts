@@ -13,7 +13,7 @@ import { ApiError, generateApiKey } from "@/lib/api";
 import type { ActionResult } from "@/lib/action-result";
 import { toResult } from "@/lib/to-result";
 import { encrypt } from "@/lib/crypto";
-import { limitProblem, workspaceHasFeature } from "@/lib/plans";
+import { limitProblem, SIGNUP_PLAN, workspaceHasFeature } from "@/lib/plans";
 import { isPublishingPaused, PAUSED_MESSAGE } from "@/lib/platform-settings";
 import { deleteObject, makeTarget, settingsFromConfig } from "@/lib/storage";
 import { removeUnusedMedia } from "@/lib/media";
@@ -94,7 +94,8 @@ export async function createWorkspace(name: string) {
   }
 
   await prisma.$transaction(async (tx) => {
-    const ws = await tx.workspace.create({ data: { name: wsName } });
+    // A new workspace is a new account: it starts on the sign-up tier.
+    const ws = await tx.workspace.create({ data: { name: wsName, plan: SIGNUP_PLAN } });
     const existing = await tx.user.findUnique({ where: { email } });
     const user = existing
       ? await tx.user.update({

@@ -34,8 +34,12 @@ export interface AuditEntry {
   details?: Prisma.InputJsonValue;
 }
 
-export async function audit(entry: AuditEntry) {
-  await prisma.adminAuditLog.create({
+/**
+ * Records an admin action. Pass a transaction client to write the row in the
+ * same transaction as the change, so the change can't happen unlogged.
+ */
+export async function audit(entry: AuditEntry, db: Prisma.TransactionClient = prisma) {
+  await db.adminAuditLog.create({
     data: {
       actorEmail: entry.actor,
       action: entry.action,

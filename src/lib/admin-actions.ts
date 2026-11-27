@@ -13,7 +13,18 @@ import {
   VIEW_AS_COOKIE,
   VIEW_AS_MINUTES,
 } from "@/lib/platform-admin";
-import { FEATURES, isEarlyFeature, isFeatureKey, PLANS } from "@/lib/plans";
+import type { Plan } from "@prisma/client";
+import {
+  FEATURES,
+  formatBytes,
+  getWorkspaceUsage,
+  isEarlyFeature,
+  isFeatureKey,
+  LIMIT_LABELS,
+  overLimits,
+  PLAN_ORDER,
+  PLANS,
+} from "@/lib/plans";
 import { updatePlatformSettings } from "@/lib/platform-settings";
 import { SITE_THEME_KEYS, siteTheme } from "@/lib/site-themes";
 import { SITE_THEME_TAG } from "@/lib/site-theme-server";
@@ -88,15 +99,46 @@ export async function unsuspendWorkspace(workspaceId: string, reason?: string): 
   }
 }
 
+/**
+ * Moves a workspace (and so everyone in it) to another tier. Nothing already
+ * in the workspace is removed: past a lower plan's limits, adding more is
+ * refused until usage comes down, and the message says which limits.
+ */
 export async function setWorkspacePlan(workspaceId: string, plan: string, reason?: string): Promise<AdminResult> {
   const actor = await getPlatformAdminEmail();
   if (!actor) return NOT_ALLOWED;
   try {
-    const next = z.enum(["FREE", "PRO", "AGENCY", "UNLIMITED"]).parse(plan);
-    const before = await prisma.workspace.findUniqueOrThrow({ where: { id: id.parse(workspaceId) }, select: { plan: true } });
-    const ws = await prisma.workspace.update({ where: { id: workspaceId }, data: { plan: next }, select: { id: true, name: true } });
-    await audit({ actor, action: "workspace.plan", targetType: "workspace", targetId: ws.id, workspaceId: ws.id, reason: optionalReason.parse(reason), details: { from: before.plan, to: next } });
-    return done(`${ws.name} is on ${PLANS[next].label}.`);
+    const next = z.enum(PLAN_ORDER as [Plan, ...Plan[]]).parse(plan);
+    const why = optionalReason.parse(reason);
+    const before = await prisma.workspace.findUniqueOrThrow({
+      where: { id: id.parse(workspaceId) },
+      select: { id: true, name: true, plan: true },
+    });
+    if (before.plan === next) return done(`${before.name} is already on ${PLANS[next].label}.`);
+    // The change and its audit row commit together. The update is conditional
+    // on the plan read above, so two admins changing it at once can't both
+    // log a change from the same plan.
+    const changed = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.workspace.updateMany({
+        where: { id: before.id, plan: before.plan },
+        data: { plan: next },
+      });
+      if (count === 0) return false;
+      await audit({ actor, action: "workspace.plan", targetType: "workspace", targetId: before.id, workspaceId: before.id, reason: why, details: { from: before.plan, to: next } }, tx);
+      return true;
+    });
+    if (!changed) return { ok: false, error: "The plan changed meanwhile. Reload and try again." };
+
+    const over = overLimits(next, await getWorkspaceUsage(before.id));
+    const moved = `${before.name} is on ${PLANS[next].label}.`;
+    if (!over.length) return done(moved);
+    const list = over
+      .map((o) => {
+        const fmt = (n: number) => (o.key === "storageBytes" ? formatBytes(n) : String(n));
+        return `${LIMIT_LABELS[o.key]} ${fmt(o.used)} of ${fmt(o.limit)}`;
+      })
+      .join(", ");
+    return done(`${moved} Already over: ${list}. Nothing is removed; adding more is refused.`);
   } catch (e) {
     return fail(e);
   }

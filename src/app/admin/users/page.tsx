@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { listUsers } from "@/lib/admin-data";
 import { banUser, removeUser, unbanUser } from "@/lib/admin-actions";
-import { ActionButton, EarlySwitch, RoleSelect } from "@/components/admin/admin-controls";
+import { ActionButton, EarlySwitch, PlanSelect, RoleSelect } from "@/components/admin/admin-controls";
 import { EARLY_FEATURES, featureLaunched, FEATURES } from "@/lib/plans";
 import {
   AdminHeader,
@@ -37,7 +37,7 @@ export default async function AdminUsersPage({
       <AdminHeader
         eyebrow="People"
         title="Users"
-        description="Everyone with access to a workspace. Ban someone to lock them out without losing their posts. Early access unlocks Automations or the Reply Desk for a user's workspace before Meta approves them; their Instagram account must be an Instagram Tester on the Meta app."
+        description="Everyone with access to a workspace. Plan is the tier of the workspace they're working in (Free, Pro or Agency; Unlimited is internal), and changing it moves everyone in that workspace. Ban someone to lock them out without losing their posts. Early access unlocks Automations or the Reply Desk for a user's workspace before Meta approves them; their Instagram account must be an Instagram Tester on the Meta app."
       />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <FilterTabs
@@ -53,11 +53,12 @@ export default async function AdminUsersPage({
         {data.rows.length === 0 ? (
           <Empty>No users match.</Empty>
         ) : (
-          <Table className="min-w-[1080px]">
+          <Table className="min-w-310">
             <thead>
               <tr>
                 <Th>Person</Th>
                 <Th>Workspace</Th>
+                <Th>Plan</Th>
                 <Th>Role</Th>
                 {early.length > 0 && <Th>Early access</Th>}
                 <Th>Last active</Th>
@@ -78,6 +79,15 @@ export default async function AdminUsersPage({
                       {u.workspace.name}
                     </Link>
                     {u.workspace.suspendedAt && <Pill tone="bad" className="ml-2">Suspended</Pill>}
+                  </Td>
+                  <Td>
+                    {/* The tier is the workspace's: everyone in it moves together. */}
+                    <PlanSelect
+                      size="sm"
+                      workspaceId={u.workspace.id}
+                      workspaceName={u.workspace.name}
+                      plan={u.workspace.plan}
+                    />
                   </Td>
                   <Td><RoleSelect userId={u.id} role={u.role} /></Td>
                   {early.length > 0 && (

@@ -4,10 +4,16 @@ import { cueMediaBases } from "@/lib/storage";
 import { automationsEnabled } from "@/lib/automations/config";
 import { replyDeskEnabled } from "@/lib/reply-desk/config";
 
-// Plans, limits and per-workspace feature switches. The platform admin panel
-// assigns a plan and switches features off; everything else in the app asks
-// this module whether something is allowed. Every workspace starts on
-// UNLIMITED with every feature on, so nothing changes until an admin acts.
+// Plans, limits and per-workspace feature switches. The plan (tier) belongs to
+// the workspace, the account that pays, so everyone in a workspace shares it.
+// The platform admin panel assigns a plan and switches features off;
+// everything else in the app asks this module whether something is allowed.
+//
+// Customers are on one of three tiers: Free, Pro or Agency. A new workspace
+// starts on SIGNUP_PLAN. UNLIMITED is internal: never a default and never
+// offered to customers, only assigned by a platform admin (Cue's own or
+// comped workspaces). Workspaces that existed before tiers moved to Pro
+// (prisma/manual/2026-11-27-plan-tiers.sql).
 
 const GB = 1024 * 1024 * 1024;
 
@@ -22,7 +28,14 @@ export interface PlanLimits {
 
 export type LimitKey = keyof PlanLimits;
 
-export const PLANS: Record<Plan, { label: string; limits: PlanLimits }> = {
+export interface PlanInfo {
+  label: string;
+  limits: PlanLimits;
+  /** Assigned by a platform admin only; not one of the customer tiers. */
+  internal?: true;
+}
+
+export const PLANS: Record<Plan, PlanInfo> = {
   FREE: {
     label: "Free",
     limits: { clients: 2, members: 2, postsPerMonth: 30, apiKeys: 1, storageBytes: 1 * GB },
@@ -38,10 +51,20 @@ export const PLANS: Record<Plan, { label: string; limits: PlanLimits }> = {
   UNLIMITED: {
     label: "Unlimited",
     limits: { clients: null, members: null, postsPerMonth: null, apiKeys: null, storageBytes: null },
+    internal: true,
   },
 };
 
 export const PLAN_ORDER: Plan[] = ["FREE", "PRO", "AGENCY", "UNLIMITED"];
+
+/** The tiers customers can be on. */
+export const CUSTOMER_PLANS = PLAN_ORDER.filter((p) => !PLANS[p].internal);
+
+/**
+ * The plan every new workspace starts on. Set explicitly when a workspace is
+ * created, not left to the column default, so the rule lives in one place.
+ */
+export const SIGNUP_PLAN: Plan = "FREE";
 
 export const LIMIT_LABELS: Record<LimitKey, string> = {
   clients: "Clients",
@@ -254,6 +277,24 @@ export async function getWorkspaceUsage(workspaceId: string): Promise<WorkspaceU
     storageBytes,
     apiCalls: calls._sum.useCount ?? 0,
   };
+}
+
+export interface LimitOverage {
+  key: LimitKey;
+  used: number;
+  limit: number;
+}
+
+/**
+ * The limits a plan sets that current usage is already past: what a
+ * downgrade would leave over. Nothing is removed; adding more is refused.
+ */
+export function overLimits(plan: Plan, usage: Record<LimitKey, number>): LimitOverage[] {
+  const limits = PLANS[plan].limits;
+  return (Object.keys(limits) as LimitKey[]).flatMap((key) => {
+    const limit = limits[key];
+    return limit !== null && usage[key] > limit ? [{ key, used: usage[key], limit }] : [];
+  });
 }
 
 const LIMIT_NOUNS: Record<LimitKey, (n: number) => string> = {

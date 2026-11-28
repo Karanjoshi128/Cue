@@ -1,31 +1,30 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Fraunces } from "next/font/google";
+import { Bricolage_Grotesque, DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TimezoneSync } from "@/components/timezone-sync";
-import { SiteThemeDecor } from "@/components/fx/site-theme-decor";
 import { WebAnalytics } from "@/components/web-analytics";
 import { getSiteTheme } from "@/lib/site-theme-server";
 import { siteTheme } from "@/lib/site-themes";
 
-const geistSans = Geist({
+// The Soft type: Bricolage Grotesque for headlines and big figures, DM Sans
+// for text, JetBrains Mono for times and labels (mapped in globals.css).
+const display = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin"],
+  // Optical size: big headlines get the tighter display cut, as in the designs.
+  axes: ["opsz"],
+});
+
+const text = DM_Sans({
   variable: "--font-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const mono = JetBrains_Mono({
+  variable: "--font-jetbrains",
   subsets: ["latin"],
-});
-
-// Display serif for headlines. The SOFT/WONK axes give it the warm,
-// playbill feel the "cue" theme leans on; opsz keeps it crisp at every size.
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  style: ["normal", "italic"],
-  axes: ["SOFT", "WONK", "opsz"],
 });
 
 export const metadata: Metadata = {
@@ -60,7 +59,7 @@ export default async function RootLayout({
       lang="en"
       suppressHydrationWarning
       data-skin={skin === "default" ? undefined : skin}
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${display.variable} ${text.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground min-h-full">
         <ThemeProvider
@@ -69,7 +68,6 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SiteThemeDecor theme={skin} />
           {children}
           <TimezoneSync />
           <Toaster position="bottom-right" />

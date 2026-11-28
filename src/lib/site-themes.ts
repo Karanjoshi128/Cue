@@ -21,27 +21,16 @@ export interface SiteTheme {
   dark: ThemeSwatch;
   /** The browser's toolbar colour (theme-color) in each mode. */
   chrome: { light: string; dark: string };
-  /** Draws a string of lamps in the preview, as the theme does across the site. */
-  lights?: string[];
 }
 
 export const SITE_THEMES = [
   {
     key: "default",
     name: "Cue",
-    description: "Paper and ink by day, the control room by night. The everyday look.",
-    light: { canvas: "#edece6", panel: "#f9f8f5", line: "#e4e2db", ink: "#121420", soft: "#efeee9", accent: "#196bf5" },
-    dark: { canvas: "#060709", panel: "#0c0e12", line: "#22262e", ink: "#edeef0", soft: "#1a1e25", accent: "#1f6ff9" },
-    chrome: { light: "#f4f3ee", dark: "#060709" },
-  },
-  {
-    key: "diwali",
-    name: "Diwali",
-    description: "Marigold and diya light, a string of lamps across the top of every page, and jaali patterns behind empty states.",
-    light: { canvas: "#f6ecdc", panel: "#fdf7ee", line: "#ecdcc4", ink: "#2a1216", soft: "#f7e8d2", accent: "#c2410c" },
-    dark: { canvas: "#0b0610", panel: "#120a17", line: "#2a1c2c", ink: "#f6eadb", soft: "#24152b", accent: "#ffa83d" },
-    chrome: { light: "#f6ecdc", dark: "#0b0610" },
-    lights: ["#ffb02e", "#ff5fa2", "#ffd166", "#ff7a1a"],
+    description: "Soft: a lavender canvas and white cards by day, deep violet by night. The everyday look.",
+    light: { canvas: "#f7f5fc", panel: "#ffffff", line: "#e6e2ef", ink: "#1f1b2d", soft: "#f1eef8", accent: "#6d5bff" },
+    dark: { canvas: "#110f1a", panel: "#1a1726", line: "#2c2740", ink: "#f1eefa", soft: "#221e31", accent: "#7563ff" },
+    chrome: { light: "#f7f5fc", dark: "#110f1a" },
   },
 ] as const satisfies readonly SiteTheme[];
 

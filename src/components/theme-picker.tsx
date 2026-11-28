@@ -9,7 +9,7 @@ import { ThemeMiniature } from "@/components/theme-miniature";
 
 const subscribe = () => () => {};
 
-// The person's own light/dark choice. The site theme (Diwali and so on) is set
+// The person's own light/dark choice. A site theme, if one is ever on, is set
 // for everyone in the admin panel; these previews show the everyday palette.
 const { light, dark } = siteTheme(DEFAULT_SITE_THEME);
 

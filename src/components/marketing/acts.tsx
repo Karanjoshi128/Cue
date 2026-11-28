@@ -126,7 +126,7 @@ function Marker({
   return (
     <motion.span
       style={{ backgroundColor: bg, color }}
-      className="relative z-10 grid size-9 place-items-center rounded-full font-serif text-sm italic shadow-[0_0_0_1px_var(--border),0_0_0_6px_var(--background)] transition-colors"
+      className="relative z-10 grid size-9 place-items-center rounded-full font-display text-sm font-bold shadow-[0_0_0_1px_var(--border),0_0_0_6px_var(--background)] transition-colors"
     >
       {n}
     </motion.span>

@@ -18,6 +18,11 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   // Isolated verification builds must not replace the running dev server output.
   distDir: process.env.CUE_NEXT_DIST_DIR || ".next",
+  experimental: {
+    // `next dev` / `next build` remind us when the installed Next.js has a
+    // published security advisory (see `next upgrade --agent=security`).
+    agentUpgrade: "security",
+  },
   images: {
     // Only the hosts we actually serve media from (see src/lib/media-hosts.ts),
     // and only their upload folder. The only remote images are uploads:

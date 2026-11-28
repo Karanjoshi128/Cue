@@ -1,8 +1,8 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The editorial header every app page opens with: a mono eyebrow, a serif
- * headline, an optional line of context, and the page's primary actions.
+ * The header every app page opens with: a mono eyebrow, the headline, an
+ * optional line of context, and the page's primary actions.
  */
 export function PageHeader({
   eyebrow,
@@ -28,7 +28,7 @@ export function PageHeader({
         {eyebrow && (
           <div className="label-caps flex items-center gap-2">{eyebrow}</div>
         )}
-        <h1 className="headline text-[2rem] sm:text-[2.6rem]">{title}</h1>
+        <h1 className="headline text-[1.75rem] sm:text-[1.875rem]">{title}</h1>
         {description && (
           <p className="text-muted-foreground max-w-2xl text-[0.9375rem] leading-relaxed text-pretty">
             {description}

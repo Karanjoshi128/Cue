@@ -1,20 +1,9 @@
 import type { ThemeSwatch } from "@/lib/site-themes";
 
 /** A miniature of the app shell, drawn in the given palette. */
-export function ThemeMiniature({ colors: c, lights }: { colors: ThemeSwatch; lights?: readonly string[] }) {
+export function ThemeMiniature({ colors: c }: { colors: ThemeSwatch }) {
   return (
-    <div className="relative flex h-full gap-1.5 p-2" style={{ background: c.canvas }}>
-      {lights && (
-        <div className="absolute inset-x-0 top-0 flex justify-around px-1" aria-hidden>
-          {Array.from({ length: 9 }, (_, i) => (
-            <span
-              key={i}
-              className="mt-0.5 size-1 rounded-full"
-              style={{ background: lights[i % lights.length], boxShadow: `0 0 4px 1px ${lights[i % lights.length]}` }}
-            />
-          ))}
-        </div>
-      )}
+    <div className="flex h-full gap-1.5 p-2" style={{ background: c.canvas }}>
       <div className="flex w-1/4 flex-col gap-1 pt-1">
         <span className="h-1.5 w-3/4 rounded-full" style={{ background: c.accent }} />
         <span className="mt-1 h-1 w-full rounded-full" style={{ background: c.soft }} />

@@ -122,14 +122,14 @@ export function NavList({
                       "group/nav relative flex h-9 items-center gap-3 rounded-lg px-3 text-[0.8125rem] font-medium transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
                       compact && "justify-center px-0 xl:justify-start xl:px-3",
                       active
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground",
+                        ? "text-sidebar-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
                     )}
                   >
                     {active && (
                       <motion.span
                         layoutId={`${layoutGroup}-active`}
-                        className="bg-sidebar-accent absolute inset-0 rounded-lg shadow-[0_0_0_1px_var(--sidebar-border),0_1px_3px_0_rgb(20_20_40/0.06)]"
+                        className="bg-sidebar-accent absolute inset-0 rounded-lg"
                         transition={{ type: "spring", stiffness: 520, damping: 42 }}
                       />
                     )}
@@ -205,7 +205,7 @@ export function NextCueCard({
       href={`/composer?edit=${cue.id}`}
       onClick={onNavigate}
       className={cn(
-        "border-beam bg-card hover:bg-accent/60 block rounded-xl border p-3.5 shadow-[0_1px_2px_0_rgb(20_20_40/0.04)] transition-colors",
+        "border-beam bg-surface hover:bg-accent block rounded-xl p-3.5 transition-colors",
         className,
       )}
     >
@@ -259,7 +259,7 @@ export function UserMenu({
         )}
         aria-label="Account menu"
       >
-        <span className="bg-foreground text-background grid size-8 shrink-0 place-items-center rounded-lg font-mono text-[0.6875rem] font-semibold tracking-wider">
+        <span className="bg-primary text-primary-foreground grid size-8 shrink-0 place-items-center rounded-full text-[0.6875rem] font-bold tracking-wide">
           {initialsOf(user)}
         </span>
         <span className={cn("min-w-0 flex-1", compact && "hidden xl:block")}>
@@ -369,8 +369,10 @@ export function AppSidebar({
   const pathname = usePathname();
   // sticky + an explicit height pins the rail to the viewport; without the
   // height, align-items:stretch grows it with the page and it scrolls along.
+  // The rail is a card floating on the canvas, like the top bar beside it.
   return (
-    <aside className="sticky top-0 hidden h-dvh shrink-0 flex-col py-3 pr-2 pl-3 shell:flex shell:w-[76px] shell-xl:w-[248px]">
+    <aside className="sticky top-0 hidden h-dvh shrink-0 py-2 pl-2 shell:flex shell:w-21 shell-xl:w-64">
+      <div className="bg-sidebar flex min-h-0 flex-1 flex-col rounded-2xl border px-2.5 py-3 xl:px-3.5">
       <div className="flex h-10 items-center justify-center px-2 xl:justify-start">
         <Link href="/dashboard" aria-label="Cue dashboard" className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/30">
           <span className="xl:hidden">
@@ -406,6 +408,7 @@ export function AppSidebar({
       )}
 
       <UserMenu user={user} workspaceName={workspaceName} compact />
+      </div>
     </aside>
   );
 }

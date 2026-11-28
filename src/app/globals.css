@@ -8,15 +8,21 @@
 @custom-variant shell (@media (min-width: 48rem) and (min-height: 30rem));
 /* Declared after `shell` so the expanded sidebar width wins from 1280px. */
 @custom-variant shell-xl (@media (min-width: 80rem) and (min-height: 30rem));
+/* A wide screen with height to spare: the landing hero's floating cards.
+   (Defined after shell-xl so it can override xl rules.) */
+@custom-variant tall (@media (min-width: 80rem) and (min-height: 50rem));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-canvas: var(--canvas);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-fraunces);
+  --font-mono: var(--font-jetbrains);
   --font-heading: var(--font-sans);
+  /* Headings and big figures (Bricolage Grotesque). */
+  --font-display: var(--font-bricolage);
+  /* Rows and wells set into a card. */
+  --color-surface: var(--surface);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -138,210 +144,119 @@
 }
 
 /*
- * Cue design system.
- * Light: warm paper and ink, with the logo's own blue as the only loud colour.
- * Dark: a control room, near-black with the same blue as the signal.
+ * Cue design system, "Soft": a lavender canvas, white cards and one violet
+ * as the signal; Bricolage Grotesque headings, DM Sans text, JetBrains Mono
+ * for times and labels (fonts in src/app/layout.tsx). Dark is a deep violet
+ * night with the same violet, lifted. Status colours are the cue lights:
+ * standby amber, live green, fault red.
  */
 :root {
-  --canvas: #edece6;
-  --background: #f9f8f5;
-  --foreground: #121420;
+  --canvas: #f7f5fc;
+  --background: #f7f5fc;
+  --foreground: #1f1b2d;
   --card: #ffffff;
-  --card-foreground: #121420;
+  --card-foreground: #1f1b2d;
   --popover: #ffffff;
-  --popover-foreground: #121420;
-  --primary: #196bf5;
+  --popover-foreground: #1f1b2d;
+  --primary: #6d5bff;
   --primary-foreground: #ffffff;
-  --brand: #196bf5;
+  --brand: #6d5bff;
   --brand-foreground: #ffffff;
-  --secondary: #eaf1ff;
-  --secondary-foreground: #0d4fc4;
-  --muted: #f1f0eb;
-  --muted-foreground: #686a73;
-  --accent: #efeee9;
-  --accent-foreground: #121420;
-  --destructive: #d23439;
-  --border: #e4e2db;
-  --input: #d9d7cf;
-  --ring: #196bf5;
+  --secondary: #edeaff;
+  --secondary-foreground: #5b4bdb;
+  --muted: #f1eef8;
+  --muted-foreground: #6b6680;
+  --surface: #f7f5fc;
+  --accent: #f1eef8;
+  --accent-foreground: #1f1b2d;
+  --destructive: #d6405d;
+  --border: #e6e2ef;
+  --input: #dcd7e8;
+  --ring: #6d5bff;
 
-  --standby: #f2a01f;
-  --standby-ink: #965a00;
-  --live: #14b26a;
-  --live-ink: #0b7c45;
-  --fault: #e5484d;
-  --fault-ink: #c22d33;
+  --standby: #e0a100;
+  --standby-ink: #a86400;
+  --live: #1e9e72;
+  --live-ink: #13784f;
+  --fault: #f25f7a;
+  --fault-ink: #d6405d;
 
-  --chart-1: #196bf5;
-  --chart-2: #14b26a;
-  --chart-3: #f2a01f;
-  --chart-4: #9db9f7;
-  --chart-5: #e5484d;
-  --radius: 0.7rem;
-  --sidebar: transparent;
-  --sidebar-foreground: #121420;
-  --sidebar-primary: #196bf5;
+  --chart-1: #6d5bff;
+  --chart-2: #1e9e72;
+  --chart-3: #e0a100;
+  --chart-4: #b8aeff;
+  --chart-5: #f25f7a;
+  --radius: 0.5rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1f1b2d;
+  --sidebar-primary: #6d5bff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #121420;
-  --sidebar-border: #e0ded6;
-  --sidebar-ring: #196bf5;
+  --sidebar-accent: #edeaff;
+  --sidebar-accent-foreground: #5b4bdb;
+  --sidebar-border: #e6e2ef;
+  --sidebar-ring: #6d5bff;
 
-  --grid-line: oklch(0.2 0.02 270 / 0.06);
+  --grid-line: oklch(0.25 0.04 290 / 0.07);
   --grain-opacity: 0.35;
-  --glow: #196bf5;
-  --glow-soft: #4c8dff;
-  --glow-text: #7aa8ff; /* accent text on the always-dark panels */
-  /* The hairline round primary buttons. */
-  --primary-edge: rgb(10 40 140 / 0.25);
+  /* Decorative glows (landing, sign-in): the brand violet. */
+  --glow: #6d5bff;
+  --glow-soft: #8f80ff;
+  --glow-text: #b8aeff; /* accent text on the always-dark panels */
+  /* Soft buttons are flat: no hairline round the primary. */
+  --primary-edge: transparent;
 }
 
 .dark {
-  --canvas: #060709;
-  --background: #0c0e12;
-  --foreground: #edeef0;
-  --card: #12151a;
-  --card-foreground: #edeef0;
-  --popover: #15181e;
-  --popover-foreground: #edeef0;
-  --primary: #1f6ff9;
+  --canvas: #110f1a;
+  --background: #110f1a;
+  --foreground: #f1eefa;
+  --card: #1a1726;
+  --card-foreground: #f1eefa;
+  --popover: #1e1a2c;
+  --popover-foreground: #f1eefa;
+  --primary: #7563ff;
   --primary-foreground: #ffffff;
-  --brand: #1f6ff9;
+  --brand: #7563ff;
   --brand-foreground: #ffffff;
-  --secondary: #13223f;
-  --secondary-foreground: #a9c6ff;
-  --muted: #161920;
-  --muted-foreground: #8d919b;
-  --accent: #1a1e25;
-  --accent-foreground: #edeef0;
-  --destructive: #f05358;
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 13%);
-  --ring: #4c8dff;
+  --secondary: #2b2550;
+  --secondary-foreground: #c9c0ff;
+  --muted: #2a2638;
+  --muted-foreground: #a39db8;
+  --surface: #221e31;
+  --accent: #221e31;
+  --accent-foreground: #f1eefa;
+  --destructive: #ff8099;
+  --border: #2c2740;
+  --input: #3a3452;
+  --ring: #a397ff;
 
-  --standby: #f5a524;
-  --standby-ink: #ffc266;
-  --live: #1fc677;
-  --live-ink: #5ee09e;
-  --fault: #f05358;
-  --fault-ink: #ff8a8e;
+  --standby: #f5c24a;
+  --standby-ink: #f5c24a;
+  --live: #3ccb9a;
+  --live-ink: #4fe0ae;
+  --fault: #f25f7a;
+  --fault-ink: #ff8099;
 
-  --chart-1: #4c8dff;
-  --chart-2: #1fc677;
-  --chart-3: #f5a524;
-  --chart-4: #3a4f7a;
-  --chart-5: #f05358;
-  --sidebar: transparent;
-  --sidebar-foreground: #edeef0;
-  --sidebar-primary: #1f6ff9;
+  --chart-1: #a397ff;
+  --chart-2: #3ccb9a;
+  --chart-3: #f5c24a;
+  --chart-4: #4a4280;
+  --chart-5: #f25f7a;
+  --sidebar: #1a1726;
+  --sidebar-foreground: #f1eefa;
+  --sidebar-primary: #7563ff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #15181e;
-  --sidebar-accent-foreground: #edeef0;
-  --sidebar-border: oklch(1 0 0 / 7%);
-  --sidebar-ring: #4c8dff;
+  --sidebar-accent: #2b2550;
+  --sidebar-accent-foreground: #c9c0ff;
+  --sidebar-border: #2c2740;
+  --sidebar-ring: #a397ff;
 
-  --grid-line: oklch(1 0 0 / 0.045);
+  --grid-line: oklch(1 0 0 / 0.05);
   --grain-opacity: 0.5;
-}
-
-/*
- * Site themes (src/lib/site-themes.ts), chosen in the admin panel and set as
- * `data-skin` on <html>. Each one restyles both modes; the cue lights
- * (standby/live/fault) keep their meaning, so they stay as they are.
- */
-
-/* Diwali, light: sandalwood paper, kumkum ink, saffron as the signal. */
-:root[data-skin="diwali"] {
-  --canvas: #f6ecdc;
-  --background: #fdf7ee;
-  --foreground: #2a1216;
-  --card: #fffdf9;
-  --card-foreground: #2a1216;
-  --popover: #fffdf9;
-  --popover-foreground: #2a1216;
-  --primary: #c2410c;
-  --primary-foreground: #ffffff;
-  --brand: #c2410c;
-  --brand-foreground: #ffffff;
-  --secondary: #fdebd3;
-  --secondary-foreground: #9a3412;
-  --muted: #f8eddd;
-  --muted-foreground: #7a5a4c;
-  --accent: #f7e8d2;
-  --accent-foreground: #2a1216;
-  --destructive: #c81e3a;
-  --border: #ecdcc4;
-  --input: #e2cfb2;
-  --ring: #c2410c;
-
-  --chart-1: #c2410c;
-  --chart-2: #b5179e;
-  --chart-3: #e8a317;
-  --chart-4: #7c3aed;
-  --chart-5: #14b26a;
-  --sidebar-foreground: #2a1216;
-  --sidebar-primary: #c2410c;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fffdf9;
-  --sidebar-accent-foreground: #2a1216;
-  --sidebar-border: #e8d6bb;
-  --sidebar-ring: #c2410c;
-
-  --grid-line: oklch(0.55 0.13 55 / 0.11);
-  --glow: #f59e0b;
-  --glow-soft: #fbbf24;
-  --glow-text: #ffc861;
-  --primary-edge: rgb(120 35 5 / 0.3);
-  --festive-wire: #7a4b2a;
-  --festive-gold: linear-gradient(100deg, #c2410c, #d97706 50%, #b5179e);
-}
-
-/* Diwali, dark: the new-moon night, lit by diyas. The second selector covers
-   panels that are always dark (sign-in, the landing's stage), whatever the mode. */
-:root.dark[data-skin="diwali"],
-:root[data-skin="diwali"] .dark {
-  --canvas: #0b0610;
-  --background: #120a17;
-  --foreground: #f6eadb;
-  --card: #1a0f20;
-  --card-foreground: #f6eadb;
-  --popover: #1e1225;
-  --popover-foreground: #f6eadb;
-  --primary: #ffa83d;
-  --primary-foreground: #2a1100;
-  --brand: #ffa83d;
-  --brand-foreground: #2a1100;
-  --secondary: #2c1630;
-  --secondary-foreground: #ffc98a;
-  --muted: #1d1123;
-  --muted-foreground: #b39a8f;
-  --accent: #24152b;
-  --accent-foreground: #f6eadb;
-  --destructive: #ff5a6e;
-  --border: oklch(0.9 0.08 60 / 10%);
-  --input: oklch(0.9 0.08 60 / 15%);
-  --ring: #ffb45c;
-
-  --chart-1: #ffa83d;
-  --chart-2: #ff5fa2;
-  --chart-3: #ffd166;
-  --chart-4: #9b7bff;
-  --chart-5: #1fc677;
-  --sidebar-foreground: #f6eadb;
-  --sidebar-primary: #ffa83d;
-  --sidebar-primary-foreground: #2a1100;
-  --sidebar-accent: #1e1225;
-  --sidebar-accent-foreground: #f6eadb;
-  --sidebar-border: oklch(0.9 0.08 60 / 9%);
-  --sidebar-ring: #ffb45c;
-
-  --grid-line: oklch(0.85 0.12 70 / 0.075);
-  --glow: #ff9f1c;
-  --glow-soft: #ffc861;
-  --glow-text: #ffc861;
-  --primary-edge: rgb(130 60 0 / 0.45);
-  --festive-wire: #6b5240;
-  --festive-gold: linear-gradient(100deg, #ffb347, #ffd166 50%, #ff7eb6);
+  --glow: #7563ff;
+  --glow-soft: #a397ff;
+  --glow-text: #c9c0ff;
+  --primary-edge: transparent;
 }
 
 @layer base {
@@ -350,7 +265,6 @@
   }
   html {
     @apply font-sans;
-    font-feature-settings: "ss01", "cv11";
   }
   body {
     @apply bg-background text-foreground;
@@ -384,7 +298,7 @@
 @layer components {
   /* Small mono field/section label: the "cue sheet" annotation style. */
   .label-caps {
-    font-family: var(--font-geist-mono);
+    font-family: var(--font-jetbrains);
     font-size: 0.6875rem;
     line-height: 1rem;
     font-weight: 500;
@@ -393,24 +307,19 @@
     color: var(--muted-foreground);
   }
 
-  /* Editorial serif headline. Italic <em> inside it gets the wonky cut. */
+  /* Display headline in Bricolage Grotesque. An <em> inside one reads as part
+     of the line, not as italic. */
   .headline {
-    font-family: var(--font-fraunces);
-    font-weight: 380;
-    font-variation-settings:
-      "SOFT" 30,
-      "WONK" 0;
-    letter-spacing: -0.025em;
-    line-height: 1.04;
+    font-family: var(--font-bricolage);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
     text-wrap: balance;
   }
   .headline em,
   .serif-em {
-    font-family: var(--font-fraunces);
-    font-style: italic;
-    font-variation-settings:
-      "SOFT" 100,
-      "WONK" 1;
+    font-family: inherit;
+    font-style: normal;
   }
 
   /* Hairline grid, used behind heroes and empty states. */
@@ -483,99 +392,38 @@
     animation: var(--animate-tally);
   }
 
-  /* ---- Diwali ------------------------------------------------------- */
-
-  /* Lamp light pooling from the top of the page. */
-  :root[data-skin="diwali"] body {
-    background-image: radial-gradient(
-      ellipse 70% 40% at 50% -8%,
-      color-mix(in oklch, var(--glow) 16%, transparent),
-      transparent 70%
-    );
-    background-repeat: no-repeat;
+  /* The landing footer's "cue" (src/components/landing/footer-wordmark.tsx).
+     3D: a lit violet face over a stacked-shadow extrusion. The letters start
+     hidden; script drops them in, or shows them at once with reduced motion. */
+  .wordmark-3d {
+    color: #4b4386;
+    text-shadow:
+      0.0018em 0.0030em 0 #3a3369,
+      0.0036em 0.0060em 0 #383165,
+      0.0054em 0.0090em 0 #352f60,
+      0.0072em 0.0120em 0 #332d5c,
+      0.0090em 0.0150em 0 #302a57,
+      0.0108em 0.0180em 0 #2e2853,
+      0.0126em 0.0210em 0 #2c264e,
+      0.0144em 0.0240em 0 #29244a,
+      0.0162em 0.0270em 0 #272245,
+      0.0180em 0.0300em 0 #252041,
+      0.0198em 0.0330em 0 #221d3c,
+      0.0216em 0.0360em 0 #201b38,
+      0.0234em 0.0390em 0 #1d1933,
+      0.0252em 0.0420em 0 #1b172f,
+      0.03em 0.07em 0.06em rgb(0 0 0 / 0.45);
   }
-
-  /* Headline accents in marigold gold. */
-  :root[data-skin="diwali"] .headline em,
-  :root[data-skin="diwali"] .serif-em {
-    background-image: var(--festive-gold);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    /* Room for the italic overhang, which background-clip would cut off. */
-    padding-right: 0.08em;
-    margin-right: -0.08em;
+  .wordmark-letter {
+    display: inline-block;
+    opacity: 0;
+    /* Tumble about the foot of the letter, where it lands. */
+    transform-origin: 50% 80%;
+    will-change: transform;
   }
-
-  /* The hairline grid becomes a jaali lattice; the dots become rangoli. */
-  :root[data-skin="diwali"] .bg-grid {
-    background-image:
-      repeating-linear-gradient(45deg, var(--grid-line) 0 1px, transparent 1px 22px),
-      repeating-linear-gradient(-45deg, var(--grid-line) 0 1px, transparent 1px 22px);
-    background-size: auto;
-  }
-  :root[data-skin="diwali"] .bg-dots {
-    background-image:
-      radial-gradient(color-mix(in oklch, var(--glow) 38%, transparent) 1.4px, transparent 1.6px),
-      radial-gradient(color-mix(in oklch, #e0218a 26%, transparent) 1px, transparent 1.2px);
-    background-size: 22px 22px;
-    background-position:
-      0 0,
-      11px 11px;
-  }
-
-  /* The string of lamps (src/components/fx/site-theme-decor.tsx). */
-  .festive-lights {
-    position: absolute;
-    inset: 0 0 auto;
-    z-index: 45;
-    height: 1.25rem;
-    overflow: hidden;
-    pointer-events: none;
-  }
-  /* The wire: one 64px scallop, repeated. */
-  .festive-lights::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto;
-    height: 12px;
-    background-color: var(--festive-wire);
-    --wire: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='12'%3E%3Cpath d='M0 1Q32 17 64 1' fill='none' stroke='%23000' stroke-width='1.2'/%3E%3C/svg%3E");
-    -webkit-mask: var(--wire) repeat-x 0 0 / 64px 12px;
-    mask: var(--wire) repeat-x 0 0 / 64px 12px;
-    opacity: 0.7;
-  }
-  .festive-bulb {
-    position: absolute;
-    top: 8px;
-    width: 7px;
-    height: 10px;
-    border-radius: 50% 50% 50% 50% / 38% 38% 62% 62%;
-    background: radial-gradient(circle at 50% 62%, #fff8e1 0 18%, var(--bulb) 62%);
-    box-shadow:
-      0 0 6px 1px color-mix(in oklch, var(--bulb) 75%, transparent),
-      0 2px 14px 3px color-mix(in oklch, var(--bulb) 35%, transparent);
-    animation: festive-twinkle 2s ease-in-out infinite alternate;
-  }
-  /* The little brass cap the bulb hangs from. */
-  .festive-bulb::before {
-    content: "";
-    position: absolute;
-    top: -2px;
-    left: 1.5px;
-    width: 4px;
-    height: 3px;
-    border-radius: 1px;
-    background: var(--festive-wire);
-  }
-  @keyframes festive-twinkle {
-    from {
-      opacity: 0.45;
-      filter: saturate(0.7);
-    }
-    to {
+  @media (prefers-reduced-motion: reduce) {
+    .wordmark-letter {
       opacity: 1;
-      filter: none;
     }
   }
 }

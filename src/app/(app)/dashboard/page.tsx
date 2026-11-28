@@ -41,6 +41,20 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** A network's mark on a soft tint of its own colour. */
+function PlatformBadge({ platform }: { platform: Platform }) {
+  const { label, color } = PLATFORM_META[platform];
+  return (
+    <span
+      title={label}
+      className="grid size-7 place-items-center rounded-lg"
+      style={{ backgroundColor: `color-mix(in oklch, ${color} 13%, transparent)` }}
+    >
+      <PlatformIcon platform={platform} brand className="size-3.5" />
+    </span>
+  );
+}
+
 export default async function DashboardPage() {
   const clientId = await getScopeClientId();
   const [user, stats, timeZone] = await Promise.all([
@@ -115,28 +129,28 @@ export default async function DashboardPage() {
       caption: "Scheduled to publish",
       value: scheduled,
       href: "/queue?status=SCHEDULED",
-      tone: "text-standby",
+      tone: "bg-primary",
     },
     {
       label: "Gone live",
       caption: "Published, all time",
       value: published,
       href: "/queue?status=PUBLISHED",
-      tone: "text-live",
+      tone: "bg-live",
     },
     {
       label: "Faults",
       caption: failed ? "Need a retry" : "Nothing failed",
       value: failed,
       href: "/queue?status=FAILED",
-      tone: "text-fault",
+      tone: "bg-fault",
     },
     {
       label: clientId ? "Client" : "Clients",
       caption: `${accounts} account${accounts === 1 ? "" : "s"} connected`,
       value: clients,
       href: "/clients",
-      tone: "text-primary",
+      tone: "bg-standby",
     },
   ];
 
@@ -147,7 +161,7 @@ export default async function DashboardPage() {
       value: failed,
       href: "/queue?status=FAILED",
       icon: AlertTriangle,
-      tone: "text-fault-ink bg-fault/10",
+      tone: "text-fault-ink bg-fault/12",
     },
     expiring > 0 && {
       label: "Accounts to reconnect",
@@ -155,7 +169,7 @@ export default async function DashboardPage() {
       value: expiring,
       href: "/clients",
       icon: Unplug,
-      tone: "text-standby-ink bg-standby/12",
+      tone: "text-standby-ink bg-standby/14",
     },
     pending > 0 && {
       label: "Awaiting approval",
@@ -163,7 +177,7 @@ export default async function DashboardPage() {
       value: pending,
       href: "/queue",
       icon: Clock,
-      tone: "text-primary bg-primary/10",
+      tone: "text-primary bg-secondary",
     },
     drafts > 0 && {
       label: "Drafts",
@@ -315,7 +329,7 @@ export default async function DashboardPage() {
                   <span
                     key={p}
                     title={PLATFORM_META[p as Platform].label}
-                    className="bg-background grid size-7 place-items-center rounded-lg shadow-[0_0_0_1px_var(--border)]"
+                    className="bg-card shadow-hairline grid size-7 place-items-center rounded-lg"
                   >
                     <PlatformIcon platform={p as Platform} brand className="size-3.5" />
                   </span>
@@ -325,7 +339,7 @@ export default async function DashboardPage() {
 
             <Countdown
               to={next.scheduledAt}
-              className="mt-6 block text-5xl leading-none font-medium tracking-[-0.04em] sm:text-6xl"
+              className="font-display mt-6 block text-5xl leading-none font-bold tracking-[-0.04em] sm:text-6xl"
             />
             <div className="text-muted-foreground mt-3 font-mono text-xs tracking-wide uppercase">
               {whenLabel(next.scheduledAt)}
@@ -375,18 +389,18 @@ export default async function DashboardPage() {
                 className="bg-card group flex h-full min-h-34 flex-col justify-between rounded-2xl border p-5"
               >
                 <div className="flex items-center justify-between">
-                  <span className="label-caps flex items-center gap-1.5">
-                    <span className={cn("tally size-1.5", t.tone)} />
+                  <span className="text-muted-foreground flex items-center gap-2 text-sm font-medium">
+                    <span className={cn("size-2.5 rounded-full", t.tone)} />
                     {t.label}
                   </span>
-                  <ArrowUpRight className="text-muted-foreground size-3.5 opacity-0 transition-opacity group-hover:opacity-100" />
+                  <ArrowUpRight className="text-muted-foreground/50 group-hover:text-foreground size-3.5 transition-colors" />
                 </div>
                 <div>
                   <NumberTicker
                     value={t.value}
-                    className="headline block text-[2.75rem] leading-none"
+                    className="font-display block text-[2.5rem] leading-none font-bold tracking-[-0.03em]"
                   />
-                  <div className="text-muted-foreground mt-1.5 text-xs">
+                  <div className="text-muted-foreground mt-1.5 text-xs font-medium">
                     {t.caption}
                   </div>
                 </div>
@@ -400,10 +414,10 @@ export default async function DashboardPage() {
       <section className="bg-card rounded-2xl border p-5 sm:p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <div>
-            <h2 className="text-[0.9375rem] font-semibold tracking-tight">
+            <h2 className="font-display text-[1.1875rem] font-semibold tracking-tight">
               The next two weeks
             </h2>
-            <p className="text-muted-foreground text-xs">
+            <p className="text-muted-foreground mt-0.5 text-[0.8125rem]">
               Each mark is a post, in its client&apos;s colour. Click a day to
               open that week.
             </p>
@@ -429,17 +443,17 @@ export default async function DashboardPage() {
                     }
                     title={`${format(day, "EEEE d MMMM", ctx)}: ${posts.length} post${posts.length === 1 ? "" : "s"}`}
                     className={cn(
-                      "group hover:border-primary/40 flex h-24 flex-col rounded-lg border p-1.5 transition-colors sm:h-28 sm:rounded-xl sm:p-2 lg:h-36",
+                      "group hover:border-primary/40 flex h-24 flex-col rounded-lg border p-1.5 transition-colors sm:h-28 sm:rounded-xl sm:p-2.5 lg:h-33",
                       i === 0
-                        ? "border-primary/50 bg-primary/[0.04]"
+                        ? "border-primary/45 bg-secondary"
                         : weekend
-                          ? "bg-muted/50"
-                          : "bg-background",
+                          ? "bg-muted border-transparent"
+                          : "bg-surface border-transparent",
                     )}
                   >
                     <span
                       className={cn(
-                        "font-mono text-[0.625rem] tracking-wider uppercase",
+                        "text-[0.6875rem] font-medium tracking-wider uppercase",
                         i === 0 ? "text-primary" : "text-muted-foreground",
                       )}
                     >
@@ -448,15 +462,20 @@ export default async function DashboardPage() {
                         {i === 0 ? "Today" : format(day, "EEE", ctx)}
                       </span>
                     </span>
-                    <span className="mt-0.5 text-sm font-semibold tabular-nums">
+                    <span
+                      className={cn(
+                        "mt-0.5 text-[0.9375rem] font-bold tabular-nums",
+                        i === 0 && "text-primary",
+                      )}
+                    >
                       {format(day, "d", ctx)}
                     </span>
-                    <span className="mt-auto flex flex-col-reverse gap-[3px]">
+                    <span className="mt-auto flex flex-col-reverse gap-0.75">
                       {posts.slice(0, 6).map((p) => (
                         <span
                           key={p.id}
                           className={cn(
-                            "h-[5px] rounded-full",
+                            "h-1.25 rounded-full",
                             p.status !== "SCHEDULED" && "opacity-40",
                           )}
                           style={{
@@ -482,27 +501,29 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* grid-cols-1 (minmax(0,1fr)) so long one-line titles truncate on phones
+          instead of widening the column past the screen. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Run of show */}
-        <section className="bg-card rounded-2xl border lg:col-span-2">
-          <div className="flex items-center justify-between px-5 pt-5 sm:px-6">
+        <section className="bg-card rounded-2xl border p-5 sm:p-6 lg:col-span-2">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-[0.9375rem] font-semibold tracking-tight">
+              <h2 className="font-display text-[1.1875rem] font-semibold tracking-tight">
                 Run of show
               </h2>
-              <p className="text-muted-foreground text-xs">
+              <p className="text-muted-foreground mt-0.5 text-[0.8125rem]">
                 What&apos;s scheduled after the next cue, in order.
               </p>
             </div>
             <Link
               href="/calendar?view=list"
-              className="text-muted-foreground hover:text-foreground -my-1.5 inline-flex items-center gap-1 py-1.5 text-xs font-medium"
+              className="text-primary -my-1.5 inline-flex shrink-0 items-center gap-1 py-1.5 text-[0.8125rem] font-bold hover:underline"
             >
               Full schedule <ArrowUpRight className="size-3.5" />
             </Link>
           </div>
           {rest.length === 0 ? (
-            <div className="text-muted-foreground px-6 py-14 text-center text-sm">
+            <div className="text-muted-foreground px-6 py-12 text-center text-sm">
               {next
                 ? "Only the next cue is scheduled so far."
                 : "Nothing scheduled yet."}{" "}
@@ -511,54 +532,41 @@ export default async function DashboardPage() {
               </Link>
             </div>
           ) : (
-            <ol className="relative mt-3 pb-3">
+            <ol className="mt-4 space-y-2">
               {rest.map((post) => {
                 const platforms = [
                   ...new Set(post.targets.map((t) => t.platform)),
                 ] as Platform[];
                 return (
-                  <li key={post.id} className="group/item">
+                  <li key={post.id}>
                     <Link
                       href={`/composer?edit=${post.id}`}
-                      className="hover:bg-accent/60 group grid grid-cols-[4.5rem_1rem_1fr] items-start gap-x-3 px-5 py-3 transition-colors sm:grid-cols-[6.5rem_1rem_1fr_auto] sm:px-6"
+                      className="bg-surface hover:bg-accent group flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition-colors"
                     >
-                      <span className="pt-0.5 font-mono text-[0.6875rem] leading-tight tracking-wide uppercase">
-                        <span className="text-foreground block">
-                          {post.scheduledAt
-                            ? isToday(post.scheduledAt, ctx)
-                              ? "Today"
-                              : isTomorrow(post.scheduledAt, ctx)
-                                ? "Tomorrow"
-                                : format(post.scheduledAt, "EEE d MMM", ctx)
-                            : "-"}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {post.scheduledAt
+                      <span className="text-muted-foreground w-17 shrink-0 font-mono text-xs leading-tight sm:w-25 sm:whitespace-nowrap">
+                        {post.scheduledAt
+                          ? isToday(post.scheduledAt, ctx)
                             ? format(post.scheduledAt, "h:mm a", ctx)
-                            : ""}
-                        </span>
+                            : isTomorrow(post.scheduledAt, ctx)
+                              ? `Tmrw ${format(post.scheduledAt, "h:mm a", ctx)}`
+                              : format(post.scheduledAt, "EEE h:mm a", ctx)
+                          : "-"}
                       </span>
-                      <span className="relative flex h-full justify-center">
-                        <span className="bg-border absolute -top-3 -bottom-3 w-px group-first/item:top-2 group-last/item:bottom-auto group-last/item:h-5" />
-                        <ClientDot
-                          color={post.client.color}
-                          className="ring-card relative mt-1 ring-4"
-                        />
+                      <span className="flex shrink-0 items-center gap-1">
+                        {platforms.map((p) => (
+                          <PlatformBadge key={p} platform={p} />
+                        ))}
                       </span>
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-2 text-sm font-medium">
-                          <span className="truncate">{post.client.name}</span>
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            {platforms.map((p) => (
-                              <PlatformIcon key={p} platform={p} className="size-3" />
-                            ))}
-                          </span>
-                        </span>
-                        <span className="text-muted-foreground mt-0.5 line-clamp-1 text-sm">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-bold">
                           {post.title || post.body}
                         </span>
+                        <span className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-xs">
+                          <ClientDot color={post.client.color} className="size-1.5" />
+                          <span className="truncate">{post.client.name}</span>
+                        </span>
                       </span>
-                      <ArrowRight className="text-muted-foreground mt-1 hidden size-4 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100 sm:block" />
+                      <ArrowRight className="text-muted-foreground hidden size-4 shrink-0 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100 sm:block" />
                     </Link>
                   </li>
                 );
@@ -570,7 +578,7 @@ export default async function DashboardPage() {
         <div className="space-y-4">
           {/* Needs attention */}
           <section className="bg-card rounded-2xl border p-5">
-            <h2 className="text-[0.9375rem] font-semibold tracking-tight">
+            <h2 className="font-display text-[1.1875rem] font-semibold tracking-tight">
               Needs attention
             </h2>
             {attention.length === 0 ? (
@@ -589,25 +597,25 @@ export default async function DashboardPage() {
                   <li key={a.label}>
                     <Link
                       href={a.href}
-                      className="hover:bg-accent/60 -mx-2 flex items-center gap-3 rounded-xl px-2 py-2 transition-colors"
+                      className="hover:bg-accent -mx-2 flex items-center gap-3 rounded-[10px] px-2 py-2 transition-colors"
                     >
                       <span
                         className={cn(
-                          "grid size-9 shrink-0 place-items-center rounded-lg",
+                          "grid size-9 shrink-0 place-items-center rounded-[10px]",
                           a.tone,
                         )}
                       >
                         <a.icon className="size-4" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-medium">
+                        <span className="block text-sm font-bold">
                           {a.label}
                         </span>
                         <span className="text-muted-foreground block text-xs">
                           {a.hint}
                         </span>
                       </span>
-                      <span className="font-mono text-sm font-medium tabular-nums">
+                      <span className="font-display text-lg font-bold tabular-nums">
                         {a.value}
                       </span>
                     </Link>
@@ -620,12 +628,12 @@ export default async function DashboardPage() {
           {/* Roster */}
           <section className="bg-card rounded-2xl border p-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-[0.9375rem] font-semibold tracking-tight">
+              <h2 className="font-display text-[1.1875rem] font-semibold tracking-tight">
                 {clientId ? "This client" : "Roster"}
               </h2>
               <Link
                 href="/clients"
-                className="text-muted-foreground hover:text-foreground -my-1.5 inline-flex items-center gap-1 py-1.5 text-xs font-medium"
+                className="text-primary -my-1.5 inline-flex items-center gap-1 py-1.5 text-[0.8125rem] font-bold hover:underline"
               >
                 Manage <ArrowUpRight className="size-3.5" />
               </Link>
@@ -638,7 +646,7 @@ export default async function DashboardPage() {
                 </Link>
               </p>
             ) : (
-              <ul className="mt-3 space-y-2.5">
+              <ul className="mt-4 space-y-3">
                 {clientList.map((c) => {
                   const max = Math.max(1, ...clientList.map((x) => x.scheduled));
                   return (
@@ -646,11 +654,11 @@ export default async function DashboardPage() {
                       <ClientMonogram
                         name={c.name}
                         color={c.color}
-                        className="size-7 rounded-lg text-[0.625rem]"
+                        className="size-7.5 rounded-lg text-[0.625rem]"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline justify-between gap-2 text-sm">
-                          <span className="truncate font-medium">{c.name}</span>
+                          <span className="truncate font-bold">{c.name}</span>
                           <span className="text-muted-foreground shrink-0 font-mono text-[0.6875rem]">
                             {c.scheduled} queued
                           </span>

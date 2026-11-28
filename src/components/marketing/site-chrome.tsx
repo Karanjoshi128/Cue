@@ -6,10 +6,9 @@ import { HeaderAccount } from "@/components/marketing/account-links";
 export const CONTACT_EMAIL = "karan@trycue.space";
 
 const NAV = [
-  { href: "/#product", label: "Product" },
   { href: "/#how", label: "How it works" },
-  { href: "/#platforms", label: "Platforms" },
-  { href: "/#trust", label: "Trust" },
+  { href: "/#demo", label: "Demo" },
+  { href: "/#pricing", label: "Pricing" },
   { href: "/help", label: "Help" },
 ];
 
@@ -56,9 +55,9 @@ export function SiteFooter() {
         <FooterCol
           title="Product"
           links={[
-            { href: "/#product", label: "Features" },
             { href: "/#how", label: "How it works" },
-            { href: "/#platforms", label: "Platforms" },
+            { href: "/#demo", label: "Demo" },
+            { href: "/#pricing", label: "Pricing" },
             { href: "/help", label: "Help centre" },
             { href: "/login", label: "Sign in" },
           ]}

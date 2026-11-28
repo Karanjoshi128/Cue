@@ -16,7 +16,7 @@ const SESSION_COOKIE = /(?:^|;\s*)sb-[^=]+-auth-token(?:\.\d+)?=/;
 
 const subscribe = () => () => {};
 
-function useSignedIn() {
+export function useSignedIn() {
   // Signed out during prerender and hydration, then the real state.
   return useSyncExternalStore(
     subscribe,

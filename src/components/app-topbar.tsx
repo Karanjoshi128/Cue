@@ -101,7 +101,8 @@ export function AppTopbar({
   const page = navItems.find((i) => isActive(pathname, i.href));
 
   return (
-    <header className="bg-background/75 supports-backdrop-filter:bg-background/65 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur-xl shell:px-6">
+    // A card on md+ (floating on the canvas beside the rail), a bar on phones.
+    <header className="bg-card/80 supports-backdrop-filter:bg-card/70 sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b px-3 backdrop-blur-xl shell:h-[3.75rem] shell:rounded-2xl shell:border shell:px-4">
       <MobileNav nextCue={nextCue} user={user} workspaceName={workspaceName} />
       <Link
         href="/dashboard"

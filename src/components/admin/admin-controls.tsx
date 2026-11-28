@@ -506,7 +506,6 @@ export function SiteThemeSelector({ current }: { current: SiteThemeKey }) {
       <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Site theme">
         {SITE_THEMES.map((t) => {
           const live = t.key === current;
-          const lights = "lights" in t ? t.lights : undefined;
           return (
             <button
               key={t.key}
@@ -523,8 +522,8 @@ export function SiteThemeSelector({ current }: { current: SiteThemeKey }) {
               )}
             >
               <div className="grid h-24 grid-cols-2 overflow-hidden border-b">
-                <ThemeMiniature colors={t.light} lights={lights} />
-                <ThemeMiniature colors={t.dark} lights={lights} />
+                <ThemeMiniature colors={t.light} />
+                <ThemeMiniature colors={t.dark} />
               </div>
               <div className="flex items-start gap-3 px-3.5 py-3">
                 <div className="min-w-0 flex-1">
